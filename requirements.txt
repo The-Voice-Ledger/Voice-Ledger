@@ -1,0 +1,2 @@
+# Lab 1: GS1 & EPCIS base requirements
+pytest==7.4.3

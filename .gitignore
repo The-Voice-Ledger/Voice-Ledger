@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# API Keys (if stored in files)
+*api_key*
+*secret*
+credentials.json
+
+# Generated EPCIS events (keep directory structure, ignore generated files)
+epcis/events/*.json
+!epcis/events/.gitkeep
+
+# Audio samples for testing
+tests/samples/*.wav
+tests/samples/*.mp3
+tests/samples/*.m4a
+!tests/samples/.gitkeep
+
+# Blockchain artifacts
+blockchain/out/
+blockchain/cache/
+blockchain/broadcast/
+*.abi
+*.bin
+
+# Digital twin data (generated at runtime)
+twin/digital_twin.json
+
+# DPP outputs
+dpp/output.json
+dpp/*.png
+dpp/qr_*.png
+
+# Docker volumes and logs
+docker/volumes/
+*.log
+
+# Node modules (if we add any JS tooling)
+node_modules/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Documentation builds (keep source, ignore builds)
+docs/_build/
+site/
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+tmp/
+temp/
