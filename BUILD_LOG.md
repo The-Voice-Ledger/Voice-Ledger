@@ -345,6 +345,45 @@ Batch ID → GS1 Identifiers → EPCIS Event → Canonicalize → Hash
 
 ---
 
+### Step 5: Initialize Git Repository
+
+**Commands:**
+```bash
+git init
+git add .
+git commit -m "Initial commit: Lab 1 complete - GS1 identifiers and EPCIS events"
+```
+
+**Why:** Version control is essential for:
+- Tracking changes across all labs
+- Reverting if something breaks
+- Documenting progress with meaningful commits
+- Eventually pushing to GitHub for backup/sharing
+
+**What's in `.gitignore`:**
+- Python artifacts (`__pycache__`, `*.pyc`, `venv/`)
+- Generated files (EPCIS events, digital twins, DPP outputs)
+- API keys and secrets (`.env` files)
+- Blockchain build artifacts
+- Audio test samples
+- IDE configurations
+
+**What's tracked:**
+- All source code (`*.py`)
+- Documentation (`*.md`)
+- Configuration files (`requirements.txt`)
+- Directory structure (`.gitkeep` files)
+
+**Actual Result:**
+```
+[main (root-commit) 634feae] Initial commit: Lab 1 complete - GS1 identifiers and EPCIS events
+13 files changed, 2306 insertions(+)
+```
+
+✅ Git repository initialized and Lab 1 committed!
+
+---
+
 ## Lab 2: Voice & AI Layer - Prerequisites
 
 ### API Keys and Setup Options
