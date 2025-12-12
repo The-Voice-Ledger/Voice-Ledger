@@ -2689,22 +2689,403 @@ app.add_middleware(HTTPSRedirectMiddleware)
 
 **File Created:** `voice/asr/asr_infer.py`
 
-**Why:** Converts audio files to text transcriptions using OpenAI's Whisper API. This is the first stage of the voice pipeline.
+#### 📚 Background: Automatic Speech Recognition (ASR)
 
-**What it does:**
-- Accepts audio file path (WAV, MP3, M4A formats supported)
-- Sends audio to OpenAI Whisper API
-- Returns clean text transcript
-- Handles errors gracefully
+**What is ASR?**
+Automatic Speech Recognition (ASR), also called Speech-to-Text (STT), converts spoken words into written text. It's the foundation of voice interfaces like Siri, Alexa, and Google Assistant.
 
-**Dependencies Resolved:**
-- Installed `openai==1.12.0` (compatible with Python 3.9)
-- Installed `httpx==0.26.0` (compatible version)
-- Installed `python-dotenv==1.0.0` for environment variable loading
+**Evolution of ASR:**
+1. **1950s-1980s**: Rule-based systems (limited vocabulary, speaker-dependent)
+2. **1990s-2010s**: Hidden Markov Models + Gaussian Mixture Models
+3. **2010s**: Deep Neural Networks (Google, Baidu speech)
+4. **2020s**: Transformer models (Whisper, Wav2Vec 2.0)
 
-**API Key:** Stored securely in `.env` file (git-ignored)
+**Why Whisper?**
+Released by OpenAI in September 2022, Whisper is currently one of the best open-source ASR models:
+- ✅ Trained on 680,000 hours of multilingual data
+- ✅ Robust to accents, noise, technical language
+- ✅ Supports 99 languages (including Amharic for Ethiopia!)
+- ✅ Multiple model sizes (tiny → large)
+- ✅ Available as API or local inference
 
-**Test:** Module loads successfully ✅
+**Whisper Model Sizes:**
+| Model  | Parameters | Speed      | Accuracy | Use Case           |
+|--------|------------|------------|----------|--------------------|
+| tiny   | 39M        | ~32x faster| Good     | Real-time, mobile  |
+| base   | 74M        | ~16x faster| Better   | Edge devices       |
+| small  | 244M       | ~6x faster | Great    | General purpose    |
+| medium | 769M       | ~2x faster | Excellent| High accuracy needs|
+| large  | 1550M      | Baseline   | Best     | Research, offline  |
+
+**API vs Local Inference:**
+- **API (what we use)**: Send audio → OpenAI → Get transcription
+  - Pros: No GPU needed, always latest model, simple
+  - Cons: Internet required, cost ($0.006/min), privacy concerns
+- **Local**: Run Whisper on your machine
+  - Pros: Free, offline, private
+  - Cons: Need GPU for speed, ~1-3GB disk space
+
+---
+
+#### 💻 Complete Implementation
+
+**File:** `voice/asr/asr_infer.py`
+
+```python
+"""
+Automatic Speech Recognition (ASR) Module
+
+This module handles audio-to-text transcription using OpenAI's Whisper API.
+It processes audio files and returns transcribed text.
+
+Supported Audio Formats:
+- WAV (Waveform Audio File Format)
+- MP3 (MPEG-1 Audio Layer 3)
+- M4A (MPEG-4 Audio)
+- FLAC (Free Lossless Audio Codec)
+- OGG (Ogg Vorbis)
+- WebM (WebM Audio)
+
+File Size Limit: 25 MB (OpenAI API constraint)
+
+Audio Quality Recommendations:
+- Sample rate: 16 kHz or higher (Whisper resamples to 16 kHz internally)
+- Bit depth: 16-bit minimum
+- Channels: Mono preferred (stereo works but uses more bandwidth)
+- Codec: Lossless (WAV, FLAC) or high-bitrate lossy (MP3 @ 128+ kbps)
+
+Why 16 kHz?
+Human speech typically ranges 80 Hz - 8 kHz (formants)
+Nyquist theorem: Need 2x sampling rate → 16 kHz is sufficient
+Higher rates don't improve speech recognition accuracy
+"""
+
+import os
+from pathlib import Path
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# This must happen before creating OpenAI client
+load_dotenv()
+
+# Initialize OpenAI client
+# API key loaded from OPENAI_API_KEY environment variable
+# The client handles:
+# - Authentication (Bearer token in HTTP headers)
+# - Retries (automatic retry on transient failures)
+# - Timeout management (default 600 seconds)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def run_asr(audio_file_path: str) -> str:
+    """
+    Transcribe audio file to text using OpenAI Whisper API.
+    
+    Process Flow:
+    1. Validate audio file exists
+    2. Open file in binary mode
+    3. Send to Whisper API
+    4. Receive and return transcription
+    
+    Args:
+        audio_file_path: Path to the audio file (supports WAV, MP3, M4A, etc.)
+        
+    Returns:
+        Transcribed text from the audio (stripped of leading/trailing whitespace)
+        
+    Raises:
+        FileNotFoundError: If audio file doesn't exist at specified path
+        Exception: If API call fails (network error, invalid API key, etc.)
+        
+    Example:
+        >>> transcript = run_asr("tests/samples/coffee_delivery.wav")
+        >>> print(transcript)
+        "Deliver 50 bags of washed coffee from station Abebe to Addis"
+    
+    API Behavior:
+    - Language: Auto-detected (supports 99 languages)
+    - Model: "whisper-1" (OpenAI's latest production model)
+    - Response format: Plain text (alternatives: json, srt, vtt)
+    - Timing: ~0.1-0.5 seconds per second of audio
+    - Cost: $0.006 per minute of audio
+    
+    Technical Details:
+    - Whisper uses transformer architecture (encoder-decoder)
+    - Processes audio in 30-second chunks
+    - Uses beam search for decoding
+    - Includes built-in VAD (Voice Activity Detection)
+    - Handles background noise and music reasonably well
+    
+    Limitations:
+    - Max file size: 25 MB
+    - Very noisy audio may produce hallucinations
+    - Heavily accented speech may have lower accuracy
+    - Technical jargon may be mis-transcribed (trainable with fine-tuning)
+    """
+    
+    # Step 1: Validate file exists
+    audio_path = Path(audio_file_path)
+    
+    if not audio_path.exists():
+        raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+    
+    try:
+        # Step 2: Open audio file in binary mode
+        # Context manager ensures file is closed even if exception occurs
+        with open(audio_path, "rb") as audio_file:
+            
+            # Step 3: Call Whisper API
+            # client.audio.transcriptions.create() sends multipart/form-data
+            # Similar to: curl -F "file=@audio.wav" https://api.openai.com/v1/audio/transcriptions
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",           # OpenAI's production Whisper model
+                file=audio_file,              # Binary file object
+                response_format="text"        # Plain text (vs json, srt, vtt)
+                # Optional parameters:
+                # language="en",              # Force specific language
+                # prompt="Coffee, batch, delivery"  # Provide context for better accuracy
+                # temperature=0               # Lower = more deterministic
+            )
+        
+        # Step 4: Return cleaned transcript
+        # .strip() removes leading/trailing whitespace
+        return transcript.strip()
+        
+    except Exception as e:
+        # Wrap all exceptions with descriptive message
+        # This helps debugging by providing context
+        raise Exception(f"ASR failed: {str(e)}")
+
+
+# Command-line interface for standalone testing
+if __name__ == "__main__":
+    import sys
+    
+    # Check for required command-line argument
+    if len(sys.argv) < 2:
+        print("Usage: python -m voice.asr.asr_infer <audio-file-path>")
+        print("\nExample:")
+        print("  python -m voice.asr.asr_infer tests/samples/audio.wav")
+        print("\nSupported formats: WAV, MP3, M4A, FLAC, OGG, WebM")
+        sys.exit(1)
+    
+    audio_path = sys.argv[1]
+    
+    try:
+        # Run transcription
+        result = run_asr(audio_path)
+        print(f"Transcript: {result}")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+```
+
+---
+
+#### 🔍 Deep Dive: How Whisper Works
+
+**Architecture:**
+
+```
+Audio Input (PCM waveform)
+          ↓
+┌─────────────────────┐
+│   Feature Extraction│  Convert to 80-dimensional log-Mel spectrogram
+│   (Every 10ms)      │  Similar to how human ear perceives sound
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│   Encoder           │  12-24 transformer layers
+│   (Self-Attention)  │  Learns audio patterns
+└──────────┬──────────┘
+           ↓
+┌─────────────────────┐
+│   Decoder           │  12-24 transformer layers
+│   (Cross-Attention) │  Generates text tokens
+└──────────┬──────────┘
+           ↓
+    Text Output
+```
+
+**Mel Spectrogram:**
+- Converts time-domain audio → frequency-domain representation
+- "Mel" scale mimics human hearing (logarithmic frequency perception)
+- 80 bins covering 0-8 kHz (speech range)
+- Window: 25ms with 10ms stride
+- Output: 2D image (time × frequency) that CNNs/Transformers can process
+
+**Why Transformers?**
+- Captures long-range dependencies (sentence context)
+- Self-attention allows parallel processing (faster than RNNs)
+- Pre-trained on massive dataset (transfer learning)
+
+---
+
+#### 🎯 Design Decisions Explained
+
+**Q: Why use API instead of running locally?**
+A: Trade-offs:
+- API: Simple, no GPU needed, always latest model
+- Local: Free, offline, full control
+- Prototype: API (speed of development)
+- Production: Local (cost savings, privacy)
+
+**Q: Why `response_format="text"` instead of JSON?**
+A: We only need the transcript:
+- `"text"`: Returns plain string
+- `"json"`: Returns `{"text": "..."}`
+- `"srt"/"vtt"`: Returns subtitles with timestamps (for video)
+
+For advanced use cases (word-level timestamps), use JSON format.
+
+**Q: Why not specify language explicitly?**
+A: Auto-detection works well:
+- Whisper detects language from first 30 seconds
+- Accuracy: 99%+ for common languages
+- Useful for multilingual deployments (Ethiopia has 80+ languages!)
+- Can override with `language="en"` if needed
+
+**Q: What about the `prompt` parameter?**
+A: Context for better accuracy:
+```python
+transcript = client.audio.transcriptions.create(
+    model="whisper-1",
+    file=audio_file,
+    prompt="Coffee batch delivery from cooperative to warehouse"
+)
+# Whisper uses this context to:
+# - Improve accuracy for domain-specific terms
+# - Maintain consistency in terminology
+# - Reduce hallucinations
+```
+
+Example: Without prompt, "Abebe" might be transcribed as "a baby". With prompt mentioning names, it's more accurate.
+
+---
+
+#### ✅ Testing the Implementation
+
+**Test 1: Module Import**
+```bash
+python3 -c "from voice.asr.asr_infer import run_asr; print('✅ Import successful')"
+```
+
+**Test 2: Synthesize Test Audio (macOS)**
+```bash
+# Create sample audio using text-to-speech
+say "Deliver 50 bags of washed coffee from Abebe station to Addis warehouse" -o tests/samples/test_audio.wav
+
+# Verify file created
+ls -lh tests/samples/test_audio.wav
+```
+
+**Test 3: Run ASR on Test Audio**
+```bash
+python -m voice.asr.asr_infer tests/samples/test_audio.wav
+```
+
+**Expected Output:**
+```
+Transcript: Deliver 50 bags of washed coffee from Abebe station to Addis warehouse
+```
+
+**Test 4: Error Handling**
+```bash
+# Test with missing file
+python -m voice.asr.asr_infer nonexistent.wav
+
+# Expected: FileNotFoundError with clear message
+```
+
+---
+
+#### ⚠️ Common Pitfalls
+
+**Pitfall 1: File not opened in binary mode**
+```python
+# Wrong:
+with open(audio_path, "r") as f:  # Text mode ❌
+    transcript = client.audio.transcriptions.create(...)
+
+# Right:
+with open(audio_path, "rb") as f:  # Binary mode ✅
+```
+
+**Pitfall 2: Forgetting to load environment variables**
+```python
+# Wrong:
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Returns None if .env not loaded ❌
+
+# Right:
+load_dotenv()  # Load first ✅
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+```
+
+**Pitfall 3: File size exceeds 25 MB**
+```python
+# Check file size before sending:
+if audio_path.stat().st_size > 25 * 1024 * 1024:
+    raise ValueError("Audio file exceeds 25 MB limit")
+```
+
+**Pitfall 4: Not handling API errors**
+```python
+# Wrong:
+transcript = client.audio.transcriptions.create(...)
+# Crashes on network error, rate limit, invalid key ❌
+
+# Right:
+try:
+    transcript = client.audio.transcriptions.create(...)
+except Exception as e:
+    raise Exception(f"ASR failed: {str(e)}")  # Provide context ✅
+```
+
+---
+
+#### 🔧 Advanced: Local Whisper Inference
+
+For production or offline use:
+
+```python
+import whisper
+
+# Load model (downloads on first run)
+model = whisper.load_model("base")  # or "small", "medium", "large"
+
+# Transcribe
+result = model.transcribe("audio.wav")
+transcript = result["text"]
+
+# With word-level timestamps:
+result = model.transcribe("audio.wav", word_timestamps=True)
+for segment in result["segments"]:
+    print(f"{segment['start']:.2f}s - {segment['end']:.2f}s: {segment['text']}")
+```
+
+**Performance Comparison:**
+```
+Model: base (74M parameters)
+Hardware: M1 MacBook Pro
+Audio: 1 minute of speech
+
+API: ~2 seconds (0.03x realtime)
+Local (CPU): ~30 seconds (0.5x realtime)
+Local (GPU): ~5 seconds (0.08x realtime)
+```
+
+---
+
+#### 📖 Further Reading
+
+- **Whisper Paper**: "Robust Speech Recognition via Large-Scale Weak Supervision"
+- **OpenAI Whisper GitHub**: https://github.com/openai/whisper
+- **Audio Processing**: librosa library for audio manipulation
+- **Mel Spectrograms**: https://en.wikipedia.org/wiki/Mel-frequency_cepstrum
+- **Transformer Architecture**: "Attention Is All You Need" paper
+
+✅ **Step 3 Complete!** Audio transcription implemented with Whisper API.
 
 ---
 
@@ -2712,22 +3093,414 @@ app.add_middleware(HTTPSRedirectMiddleware)
 
 **File Created:** `voice/nlu/nlu_infer.py`
 
-**Why:** Extracts structured information from transcripts. Identifies what action is being described (intent) and key details (entities) like quantity, product, locations.
+#### 📚 Background: Natural Language Understanding (NLU)
 
-**What it does:**
-- Takes text transcript from ASR
-- Uses GPT-3.5-turbo to extract:
-  - **Intent**: `record_shipment`, `record_commission`, `record_receipt`, etc.
-  - **Entities**: quantity, unit, product, origin, destination, batch_id
-- Returns structured JSON
-- Falls back gracefully if extraction fails
+**What is NLU?**
+Natural Language Understanding (NLU) extracts structured meaning from unstructured text. It answers:
+- **Intent**: What does the user want to do?
+- **Entities**: What are the key details?
 
-**Test Command:**
+**NLU vs NLP:**
+- **NLP (Natural Language Processing)**: Umbrella term (includes parsing, generation, translation)
+- **NLU (Understanding)**: Subset focused on extracting meaning
+- **NLG (Generation)**: Creating text from structured data
+
+**Traditional NLU Approaches:**
+
+1. **Rule-Based (1960s-1980s)**
+   - Pattern matching with regex
+   - Example: `if "deliver" in text: intent = "shipment"`
+   - Pros: Fast, interpretable
+   - Cons: Brittle, doesn't generalize
+
+2. **Statistical (1990s-2010s)**
+   - Train classifiers on labeled data
+   - Features: bag-of-words, n-grams, POS tags
+   - Algorithms: SVM, CRF, Naive Bayes
+   - Pros: More robust than rules
+   - Cons: Needs lots of labeled training data
+
+3. **Neural (2010s)**
+   - RNNs, LSTMs, CNNs for sequence modeling
+   - Word embeddings (Word2Vec, GloVe)
+   - Pros: Better accuracy, learns features automatically
+   - Cons: Still needs domain-specific training data
+
+4. **LLM-Based (2020s)** ← What we're using
+   - Large Language Models (GPT, BERT, T5)
+   - Few-shot learning via prompting
+   - Pros: No training needed, generalizes well
+   - Cons: Requires API calls, higher latency
+
+**Why GPT-3.5 for NLU?**
+- ✅ No training data needed (zero-shot learning)
+- ✅ Handles variation naturally ("deliver" = "ship" = "send")
+- ✅ Understands context and domain terminology
+- ✅ Easy to update (change prompt vs retrain model)
+- ✅ Cost-effective ($0.0015 per 1K input tokens)
+
+---
+
+#### 💻 Complete Implementation
+
+**File:** `voice/nlu/nlu_infer.py`
+
+```python
+"""
+Natural Language Understanding (NLU) Module
+
+This module extracts intents and entities from transcribed text using OpenAI's GPT API.
+It identifies supply chain actions (intents) and key information (entities) from voice commands.
+
+Intent Classification:
+Define what action the user wants to perform:
+- record_commission: Create/register a new batch
+- record_shipment: Move goods from A to B
+- record_receipt: Accept delivered goods
+- record_transformation: Process/modify goods (e.g., roasting)
+
+Entity Extraction:
+Identify key details from the utterance:
+- quantity: How many units (integer)
+- unit: Unit of measurement (bags, kg, pallets)
+- product: Type of product (washed coffee, natural coffee)
+- origin: Source location (farm, station, warehouse)
+- destination: Target location (warehouse, port, roaster)
+- batch_id: Existing batch identifier (if mentioned)
+
+NLU Pipeline:
+Transcript → GPT Prompt → JSON Parsing → Structured Output
+
+Prompt Engineering:
+The system prompt is carefully crafted to:
+1. Define the task clearly
+2. Specify output format (JSON schema)
+3. Provide intent and entity definitions
+4. Handle missing values (null)
+5. Use low temperature for consistency
+"""
+
+import os
+import json
+from openai import OpenAI
+from dotenv import load_dotenv
+
+# Load environment variables (OPENAI_API_KEY)
+load_dotenv()
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def infer_nlu_json(transcript: str) -> dict:
+    """
+    Extract intent and entities from a transcript using GPT.
+    
+    This function uses GPT-3.5-turbo in a zero-shot setting:
+    - No fine-tuning required
+    - No training examples needed
+    - Works via carefully designed system prompt
+    
+    Process:
+    1. Construct prompt with instructions and schema
+    2. Send transcript as user message
+    3. Parse GPT's JSON response
+    4. Return structured dictionary
+    
+    Args:
+        transcript: Text transcription from ASR (string)
+        
+    Returns:
+        Dictionary with structure:
+        {
+            "transcript": str,           # Original input
+            "intent": str,                # Detected action
+            "entities": {                 # Extracted details
+                "quantity": int | null,
+                "unit": str | null,
+                "product": str | null,
+                "origin": str | null,
+                "destination": str | null,
+                "batch_id": str | null
+            }
+        }
+        
+    Example:
+        >>> result = infer_nlu_json("Deliver 50 bags of washed coffee from station Abebe to Addis")
+        >>> print(result["intent"])
+        "record_shipment"
+        >>> print(result["entities"]["quantity"])
+        50
+    
+    GPT Parameters:
+    - model: gpt-3.5-turbo (fast, cheap, accurate for this task)
+    - temperature: 0.1 (low = more deterministic, less creative)
+    - max_tokens: 300 (sufficient for our JSON output ~100-200 tokens)
+    
+    Cost Analysis:
+    - Input: ~200 tokens (system prompt) + ~20 tokens (transcript) = 220 tokens
+    - Output: ~100 tokens (JSON response)
+    - Cost: (220 * 0.0015 + 100 * 0.002) / 1000 = $0.00053 per request
+    - At 1000 requests/day: $0.53/day = $16/month
+    """
+    
+    # System prompt: Defines the AI's role and output format
+    # This is the most critical part of prompt engineering
+    system_prompt = """You are an AI assistant that extracts structured information from supply chain voice commands.
+
+Extract the following:
+1. Intent: The action being described (record_shipment, record_commission, record_receipt, record_transformation)
+2. Entities: Key information like quantity, unit, product, origin, destination, batch_id, etc.
+
+Return ONLY a JSON object with this structure:
+{
+  "intent": "intent_name",
+  "entities": {
+    "quantity": number or null,
+    "unit": "string or null",
+    "product": "string or null",
+    "origin": "string or null",
+    "destination": "string or null",
+    "batch_id": "string or null"
+  }
+}
+
+Intent Definitions:
+- record_commission: Creating/registering a new batch (keywords: commission, create, register, new batch)
+- record_shipment: Moving goods between locations (keywords: deliver, ship, send, transport)
+- record_receipt: Receiving/accepting goods (keywords: receive, accept, arrived)
+- record_transformation: Processing or modifying goods (keywords: roast, process, transform, wash)
+
+Entity Extraction Rules:
+- quantity: Extract the number (e.g., "50 bags" → 50)
+- unit: Extract unit of measurement (e.g., "50 bags" → "bags")
+- product: Extract product type (e.g., "washed coffee" → "washed coffee")
+- origin: Extract source location (e.g., "from Abebe" → "station Abebe", include prefixes like "station", "warehouse")
+- destination: Extract target location (e.g., "to Addis" → "Addis warehouse", include location types)
+- batch_id: Extract if mentioned explicitly (e.g., "batch ABC-123" → "ABC-123")
+
+If a field is not mentioned, set it to null.
+Be consistent with terminology (e.g., always lowercase for intents)."""
+
+    try:
+        # Make API call to GPT
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # Fast and cost-effective
+            
+            # Messages array: conversation history
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt  # AI's instructions
+                },
+                {
+                    "role": "user",
+                    "content": transcript  # User's voice command
+                }
+            ],
+            
+            # Temperature: Controls randomness
+            # 0.0 = deterministic (same input → same output)
+            # 1.0 = creative (more variation)
+            # 0.1 = mostly deterministic with slight variation
+            temperature=0.1,
+            
+            # Max tokens: Limit response length
+            # Prevents runaway generation
+            # 300 tokens ≈ 225 words (enough for our JSON)
+            max_tokens=300,
+            
+            # Optional parameters:
+            # top_p=1.0,              # Nucleus sampling (alternative to temperature)
+            # frequency_penalty=0.0,   # Reduce repetition
+            # presence_penalty=0.0,    # Encourage new topics
+        )
+        
+        # Extract the generated text
+        # response.choices is a list of completion options
+        # [0] gets the first (and only) choice
+        # .message.content contains the actual text
+        content = response.choices[0].message.content.strip()
+        
+        # Parse JSON from GPT's response
+        # GPT might add markdown code blocks: ```json\n{...}\n```
+        # So we clean it first
+        if content.startswith("```"):
+            # Remove markdown code block markers
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]  # Remove "json" language identifier
+            content = content.strip()
+        
+        # Parse the JSON string into Python dict
+        nlu_data = json.loads(content)
+        
+        # Return complete structure with original transcript
+        return {
+            "transcript": transcript,
+            "intent": nlu_data.get("intent", "unknown"),
+            "entities": nlu_data.get("entities", {})
+        }
+        
+    except json.JSONDecodeError as e:
+        # GPT returned invalid JSON
+        return {
+            "transcript": transcript,
+            "intent": "unknown",
+            "entities": {},
+            "error": f"JSON parsing failed: {str(e)}",
+            "raw_response": content if 'content' in locals() else None
+        }
+    except Exception as e:
+        # API call failed or other error
+        return {
+            "transcript": transcript,
+            "intent": "unknown",
+            "entities": {},
+            "error": str(e)
+        }
+
+
+# Command-line interface for testing
+if __name__ == "__main__":
+    import sys
+    
+    # Check for transcript argument
+    if len(sys.argv) < 2:
+        print("Usage: python -m voice.nlu.nlu_infer '<transcript text>'")
+        print("\nExamples:")
+        print('  python -m voice.nlu.nlu_infer "Deliver 50 bags of coffee"')
+        print('  python -m voice.nlu.nlu_infer "Commission new batch ABC-001 with 100 bags"')
+        print('  python -m voice.nlu.nlu_infer "Received shipment at Addis warehouse"')
+        sys.exit(1)
+    
+    # Join all arguments (handles multi-word transcripts)
+    text = " ".join(sys.argv[1:])
+    
+    # Run NLU
+    result = infer_nlu_json(text)
+    
+    # Pretty-print JSON result
+    print(json.dumps(result, indent=2))
+```
+
+---
+
+#### 🔍 Deep Dive: Prompt Engineering
+
+**What is Prompt Engineering?**
+The art of crafting inputs to LLMs to get desired outputs. For NLU, this means:
+1. Clear task definition
+2. Output format specification
+3. Few-shot examples (optional)
+4. Error handling instructions
+
+**Our Prompt Structure:**
+
+```
+System Prompt (Instructions)
+├── Role Definition: "You are an AI assistant that..."
+├── Task Description: "Extract the following..."
+├── Output Format: "Return ONLY a JSON object..."
+├── Intent Definitions: "record_shipment means..."
+├── Entity Rules: "quantity: Extract the number..."
+└── Edge Cases: "If not mentioned, set to null"
+
+User Prompt (Data)
+└── Transcript: "Deliver 50 bags..."
+```
+
+**Why This Works:**
+- **Clear boundaries**: "Return ONLY JSON" prevents extra text
+- **Explicit schema**: Shows exact structure expected
+- **Definitions**: Removes ambiguity (what is "commission"?)
+- **Examples**: In-context learning (GPT understands format)
+
+**Prompt Optimization Techniques:**
+
+1. **Temperature Tuning:**
+   ```python
+   # Too high (creative but inconsistent):
+   temperature=1.0
+   "Deliver 50 bags" → sometimes "record_shipment", sometimes "record_delivery"
+   
+   # Too low (deterministic but rigid):
+   temperature=0.0
+   Might miss valid variations
+   
+   # Just right:
+   temperature=0.1  # Mostly consistent with slight flexibility
+   ```
+
+2. **Few-Shot Learning:**
+   ```python
+   system_prompt = """
+   Examples:
+   Input: "Deliver 50 bags to warehouse"
+   Output: {"intent": "record_shipment", "entities": {"quantity": 50, ...}}
+   
+   Input: "Commission batch ABC-001"
+   Output: {"intent": "record_commission", "entities": {"batch_id": "ABC-001", ...}}
+   
+   Now extract from this input:
+   """
+   ```
+   Pro: Higher accuracy
+   Con: Uses more tokens (cost)
+
+3. **Chain-of-Thought:**
+   ```python
+   "First, identify the action verb. Then extract numbers and locations. Finally, format as JSON."
+   ```
+   Pro: Better reasoning
+   Con: Slower, more tokens
+
+---
+
+#### 🎯 Design Decisions Explained
+
+**Q: Why GPT-3.5-turbo instead of GPT-4?**
+A: Cost-performance trade-off:
+- GPT-4: 10-20x more expensive, slightly better accuracy
+- GPT-3.5-turbo: Sufficient for structured extraction
+- Savings: ~$0.0005 vs ~$0.01 per request
+
+For production: Start with 3.5, upgrade to 4 only if accuracy issues arise.
+
+**Q: Why JSON output format?**
+A: Structured and parseable:
+- Alternative: Natural language ("The intent is shipment, quantity is 50...")
+  - Hard to parse reliably
+  - Ambiguous formatting
+- JSON: Machine-readable, well-defined schema
+
+**Q: Why low temperature (0.1)?**
+A: Consistency over creativity:
+- High temp: "record_shipment", "record_delivery", "shipment_event" (inconsistent)
+- Low temp: "record_shipment" (consistent)
+- For creative tasks (stories): Use high temperature
+- For structured extraction: Use low temperature
+
+**Q: What if GPT returns malformed JSON?**
+A: Graceful degradation:
+```python
+try:
+    nlu_data = json.loads(content)
+except json.JSONDecodeError:
+    # Return error structure instead of crashing
+    return {"intent": "unknown", "entities": {}, "error": "..."}
+```
+
+---
+
+#### ✅ Testing the Implementation
+
+**Test 1: Basic Shipment**
 ```bash
 python -m voice.nlu.nlu_infer "Deliver 50 bags of washed coffee from station Abebe to Addis warehouse"
 ```
 
-**Actual Result:**
+**Expected Output:**
 ```json
 {
   "transcript": "Deliver 50 bags of washed coffee from station Abebe to Addis warehouse",
@@ -2742,7 +3515,164 @@ python -m voice.nlu.nlu_infer "Deliver 50 bags of washed coffee from station Abe
   }
 }
 ```
-✅ NLU extraction working perfectly!
+
+**Test 2: Commissioning**
+```bash
+python -m voice.nlu.nlu_infer "Commission new batch ABC-001 with 100 bags of natural coffee"
+```
+
+**Expected Output:**
+```json
+{
+  "transcript": "Commission new batch ABC-001 with 100 bags of natural coffee",
+  "intent": "record_commission",
+  "entities": {
+    "quantity": 100,
+    "unit": "bags",
+    "product": "natural coffee",
+    "origin": null,
+    "destination": null,
+    "batch_id": "ABC-001"
+  }
+}
+```
+
+**Test 3: Receipt**
+```bash
+python -m voice.nlu.nlu_infer "Received shipment at Addis warehouse"
+```
+
+**Expected Output:**
+```json
+{
+  "transcript": "Received shipment at Addis warehouse",
+  "intent": "record_receipt",
+  "entities": {
+    "quantity": null,
+    "unit": null,
+    "product": null,
+    "origin": null,
+    "destination": "Addis warehouse",
+    "batch_id": null
+  }
+}
+```
+
+**Test 4: Variations (Robustness)**
+```bash
+# Different phrasing:
+python -m voice.nlu.nlu_infer "Ship 50 bags"                    # Should detect "record_shipment"
+python -m voice.nlu.nlu_infer "Transport fifty sacks"           # Should handle "fifty" → 50
+python -m voice.nlu.nlu_infer "Send coffee to warehouse"        # Implicit quantity (null)
+```
+
+---
+
+#### ⚠️ Common Pitfalls
+
+**Pitfall 1: Not handling JSON parsing errors**
+```python
+# Wrong:
+nlu_data = json.loads(content)  # Crashes if GPT returns text ❌
+
+# Right:
+try:
+    nlu_data = json.loads(content)
+except json.JSONDecodeError:
+    return fallback_response  # Graceful degradation ✅
+```
+
+**Pitfall 2: Vague system prompts**
+```python
+# Wrong:
+"Extract intent and entities from the text"  # Too vague ❌
+
+# Right:
+"Return ONLY a JSON object with this exact structure: {...}"  # Specific ✅
+```
+
+**Pitfall 3: Not cleaning GPT output**
+```python
+# GPT might return:
+"```json\n{...}\n```"
+
+# Must strip markdown:
+if content.startswith("```"):
+    content = content.split("```")[1].strip()
+```
+
+**Pitfall 4: High temperature causing inconsistency**
+```python
+# Wrong:
+temperature=1.0  # Same input → different outputs ❌
+
+# Right:
+temperature=0.1  # Consistent outputs ✅
+```
+
+---
+
+#### 🚀 Production Enhancements
+
+**1. Caching Common Utterances:**
+```python
+cache = {
+    "deliver 50 bags": {"intent": "record_shipment", ...},
+    # ... more common phrases
+}
+
+if transcript.lower() in cache:
+    return cache[transcript.lower()]  # Skip API call
+else:
+    return infer_nlu_json(transcript)  # Call GPT
+```
+
+**2. Confidence Scores:**
+```python
+# Ask GPT to include confidence:
+system_prompt += """
+Also include a confidence score (0-1) for the intent:
+{"intent": "record_shipment", "confidence": 0.95, ...}
+"""
+
+# Filter low-confidence results:
+if result["confidence"] < 0.7:
+    ask_user_to_clarify()
+```
+
+**3. Multi-Language Support:**
+```python
+# Detect language first, then extract:
+system_prompt = """
+The input may be in English, Amharic, or other languages.
+First detect the language, then extract intent/entities.
+"""
+```
+
+**4. Fine-Tuning for Domain:**
+```python
+# For repeated patterns, fine-tune GPT-3.5:
+# Collect 50-100 examples:
+training_data = [
+    {"prompt": "Deliver 50 bags", "completion": '{"intent":"record_shipment",...}'},
+    # ... more examples
+]
+
+# Fine-tune via OpenAI API
+# Result: Custom model with better accuracy + lower cost
+```
+
+---
+
+#### 📖 Further Reading
+
+- **Prompt Engineering Guide**: https://www.promptingguide.ai/
+- **OpenAI Best Practices**: https://platform.openai.com/docs/guides/prompt-engineering
+- **Few-Shot Learning**: Brown et al., "Language Models are Few-Shot Learners"
+- **Chain-of-Thought Prompting**: Wei et al., 2022
+- **Intent Classification**: Rasa NLU, Dialogflow alternatives
+
+✅ **Step 4 Complete!** NLU extraction working with GPT-3.5!
 
 ---
 
