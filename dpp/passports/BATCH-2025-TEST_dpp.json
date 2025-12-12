@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-2025-TEST",
   "batchId": "BATCH-2025-TEST",
   "version": "1.0.0",
-  "issuedAt": "2025-12-12T19:52:23.585302+00:00",
+  "issuedAt": "2025-12-12T20:04:09.790336+00:00",
   "productInformation": {
     "productName": "Ethiopian Yirgacheffe - Test Batch",
     "quantity": 100,
@@ -20,12 +20,42 @@
     "events": [
       {
         "eventType": "commissioning",
-        "timestamp": "2025-12-12T19:52:23.585302+00:00",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
         "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
       },
       {
         "eventType": "commissioning",
-        "timestamp": "2025-12-12T19:52:23.585302+00:00",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.790336+00:00",
         "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082"
       }
     ]
@@ -44,6 +74,30 @@
     "network": "local",
     "eventAnchorContract": "0x0000000000000000000000000000000000000000",
     "anchors": [
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
+      {
+        "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+        "transactionHash": "0xabc123..."
+      },
       {
         "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
         "transactionHash": "0xabc123..."

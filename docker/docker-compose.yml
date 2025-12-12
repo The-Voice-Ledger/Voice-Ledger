@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # Blockchain Node (Anvil)
+  blockchain:
+    build:
+      context: ..
+      dockerfile: docker/blockchain.Dockerfile
+    container_name: voiceledger-blockchain
+    ports:
+      - "8545:8545"
+    networks:
+      - voiceledger-network
+    healthcheck:
+      test: ["CMD", "cast", "client", "--rpc-url", "http://localhost:8545"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Voice API Service
+  voice-api:
+    build:
+      context: ..
+      dockerfile: docker/voice.Dockerfile
+    container_name: voiceledger-voice-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VOICE_LEDGER_API_KEY=${VOICE_LEDGER_API_KEY}
+    volumes:
+      - voice-uploads:/app/voice/uploads
+      - epcis-events:/app/epcis/events
+    networks:
+      - voiceledger-network
+    depends_on:
+      blockchain:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # DPP Resolver Service
+  dpp-resolver:
+    build:
+      context: ..
+      dockerfile: docker/dpp.Dockerfile
+    container_name: voiceledger-dpp-resolver
+    ports:
+      - "8001:8001"
+    volumes:
+      - twin-data:/app/twin
+      - dpp-passports:/app/dpp/passports
+      - dpp-qrcodes:/app/dpp/qrcodes
+    networks:
+      - voiceledger-network
+    depends_on:
+      blockchain:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8001/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  voiceledger-network:
+    driver: bridge
+    name: voiceledger-network
+
+volumes:
+  voice-uploads:
+    name: voiceledger-voice-uploads
+  epcis-events:
+    name: voiceledger-epcis-events
+  twin-data:
+    name: voiceledger-twin-data
+  dpp-passports:
+    name: voiceledger-dpp-passports
+  dpp-qrcodes:
+    name: voiceledger-dpp-qrcodes

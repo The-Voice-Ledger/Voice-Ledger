@@ -1,0 +1,93 @@
+{
+  "passportId": "DPP-BATCH-DPP-TEST-004",
+  "batchId": "BATCH-DPP-TEST-004",
+  "version": "1.0.0",
+  "issuedAt": "2025-12-12T20:04:09.787739+00:00",
+  "productInformation": {
+    "productName": "Persistence Test Coffee",
+    "quantity": 60,
+    "unit": "bags",
+    "variety": "Arabica",
+    "processMethod": "Washed"
+  },
+  "traceability": {
+    "origin": {
+      "country": "ET",
+      "region": "Test Region",
+      "cooperative": "Test Coop"
+    },
+    "supplyChainActors": [],
+    "events": [
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T20:04:09.787739+00:00",
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    ]
+  },
+  "sustainability": {},
+  "dueDiligence": {
+    "eudrCompliant": true,
+    "riskAssessment": {
+      "deforestationRisk": "none",
+      "assessmentDate": "2025-12-12",
+      "assessor": "Voice Ledger Platform",
+      "methodology": "Satellite imagery + blockchain traceability"
+    }
+  },
+  "blockchain": {
+    "network": "local",
+    "eventAnchorContract": "0x0000000000000000000000000000000000000000",
+    "anchors": [
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    ],
+    "tokenContract": "0x0000000000000000000000000000000000000000",
+    "tokenId": 203,
+    "settlementContract": "0x0000000000000000000000000000000000000000"
+  },
+  "qrCode": {
+    "url": "https://dpp.voiceledger.io/dpp/BATCH-DPP-TEST-004"
+  }
+}

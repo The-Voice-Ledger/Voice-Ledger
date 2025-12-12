@@ -67,6 +67,11 @@ def build_dpp(
     if not twin:
         raise ValueError(f"Batch {batch_id} not found in digital twin")
     
+    # Reload twin to ensure fresh data
+    twin = load_twin_data(batch_id)
+    if not twin:
+        raise ValueError(f"Batch {batch_id} data corrupted")
+    
     # Generate passport ID
     passport_id = f"DPP-{batch_id}"
     issued_at = datetime.now(timezone.utc).isoformat()
@@ -174,16 +179,16 @@ def build_dpp(
     }
     
     # Add token information if available
-    if "tokenId" in twin:
+    if twin and "tokenId" in twin:
         blockchain["tokenContract"] = "0x0000000000000000000000000000000000000000"
         blockchain["tokenId"] = twin["tokenId"]
     
     # Add settlement contract if settled
-    if twin.get("settlement", {}).get("settled"):
+    if twin and twin.get("settlement", {}).get("settled"):
         blockchain["settlementContract"] = "0x0000000000000000000000000000000000000000"
     
     # Format anchors for blockchain section
-    for anchor in twin.get("anchors", []):
+    for anchor in (twin.get("anchors", []) if twin else []):
         blockchain_anchor = {
             "eventHash": anchor.get("eventHash", "")
         }
