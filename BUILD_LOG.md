@@ -685,3 +685,220 @@ curl -X POST "http://localhost:8000/asr-nlu" \
 **Note:** For full testing, you'll need an actual audio file. The pipeline is ready and waiting for audio input.
 
 ---
+
+## 🎉 Lab 2 Complete Summary
+
+**What we built:**
+1. ✅ API authentication with API key validation
+2. ✅ ASR module with OpenAI Whisper integration
+3. ✅ NLU module with GPT-3.5 for intent/entity extraction
+4. ✅ FastAPI service exposing `/asr-nlu` endpoint
+
+**Pipeline flow:**
+```
+Audio File → ASR (Whisper) → Transcript → NLU (GPT) → {intent, entities}
+```
+
+**Deliverables:**
+- `voice/asr/asr_infer.py` - Speech recognition
+- `voice/nlu/nlu_infer.py` - Intent & entity extraction
+- `voice/service/api.py` - REST API service
+- `voice/service/auth.py` - API key authentication
+- `.env` - Secure API key storage (git-ignored)
+
+**Ready for:** Lab 3 (Self-Sovereign Identity)
+
+---
+
+## Lab 3: Self-Sovereign Identity & Access Control
+
+### Step 1: Install Lab 3 Dependencies
+
+**Command:**
+```bash
+pip install PyNaCl==1.5.0
+```
+
+**Package Added:**
+- `PyNaCl==1.5.0` - Python binding to libsodium for Ed25519 cryptography
+
+**Why:** 
+- Ed25519 is a modern, secure signature algorithm
+- Used for DID keypair generation
+- Used for signing and verifying credentials
+- Fast and secure on all platforms
+
+**Actual Result:** PyNaCl installed successfully ✅
+
+---
+
+### Step 2: Create DID Generation Module
+
+**File Created:** `ssi/did/did_key.py`
+
+**Why:** Decentralized Identifiers (DIDs) provide self-sovereign identity without centralized registries. Each actor (farmer, cooperative, facility) gets a cryptographically verifiable identity.
+
+**What it does:**
+- Generates Ed25519 keypair
+- Creates `did:key` identifier embedding the public key
+- Returns DID, public key, and private key
+- DIDs are self-verifiable (no external lookup needed)
+
+**Test Command:**
+```bash
+python -m ssi.did.did_key
+```
+
+**Actual Result:**
+```
+Generating new DID...
+DID: did:key:ztEv0yGkafcCHChC3snTlr0Unawz2aJAHBf2HWLhUAu0
+Public Key: b44bf4c8691a7dc0870a10b7b274e5af45276b0cf668900705fd8758b85402ed
+⚠️  Keep private key secure!
+Private Key: a6ca9765ebb9b6d653d7aa5377f5981510751c0ce38aec831cb73528086f2aaa
+```
+✅ DID generation working!
+
+---
+
+### Step 3: Create Credential Schemas
+
+**File Created:** `ssi/credentials/schemas.py`
+
+**Why:** Define standardized credential types for the coffee supply chain. Each credential type has specific claims that can be verified.
+
+**Schemas Defined:**
+- **FarmerCredential** - Verifies farmer identity (name, farm_id, country, DID)
+- **FacilityCredential** - Verifies facilities (name, type, GLN, DID)
+- **DueDiligenceCredential** - EUDR compliance data (batch, geolocation, timestamp)
+- **CooperativeCredential** - Cooperative identity and role
+
+**What it provides:**
+- Schema definitions with required and optional fields
+- Schema retrieval by credential type
+- Claim validation against schemas
+
+**Test Command:**
+```bash
+python -m ssi.credentials.schemas
+```
+
+**Actual Result:** All 4 credential schemas displayed with claims and requirements ✅
+
+---
+
+### Step 4: Create Credential Issuance Module
+
+**File Created:** `ssi/credentials/issue.py`
+
+**Why:** Issue verifiable credentials by signing claims with the issuer's private key. This creates W3C-compliant verifiable credentials.
+
+**What it does:**
+- Takes claims and issuer's private key
+- Constructs W3C Verifiable Credential structure
+- Canonicalizes credential for signing
+- Signs with Ed25519
+- Adds cryptographic proof
+
+**Credential Structure:**
+- `@context` - W3C standards context
+- `type` - Credential type
+- `issuer` - Issuer's public key
+- `issuanceDate` - ISO8601 timestamp
+- `credentialSubject` - The claims
+- `proof` - Ed25519 signature and metadata
+
+**Test Command:**
+```bash
+python -m ssi.credentials.issue
+```
+
+**Actual Result:**
+```json
+{
+  "@context": [...],
+  "type": ["VerifiableCredential", "FarmerCredential"],
+  "issuer": "88d78722ef412941b717c7b74dae3aafc6747b3014cc5fd80eba4a42c9fd34e3",
+  "issuanceDate": "2025-12-12T19:27:30.466373+00:00",
+  "credentialSubject": {
+    "name": "Abebe Fekadu",
+    "farm_id": "ETH-SID-001",
+    "country": "Ethiopia",
+    "did": "did:key:zY9AhakoK9kNzjU3qOYlSHCEupqEOXpR4gYtnJRhCdiE"
+  },
+  "proof": {
+    "type": "Ed25519Signature2020",
+    "signature": "e8eca1e1a480242c982d2e336ff0b5e4206a2849f64029d16863759b45006a17..."
+  }
+}
+```
+✅ Credential issuance working!
+
+---
+
+### Step 5: Create Credential Verification Module
+
+**File Created:** `ssi/credentials/verify.py`
+
+**Why:** Verify credentials are authentic and haven't been tampered with. This ensures only valid credentials are accepted.
+
+**What it verifies:**
+1. Required fields present
+2. Signature exists
+3. Issuer matches verification method
+4. Cryptographic signature is valid
+
+**Test Command:**
+```bash
+python -m ssi.credentials.verify
+```
+
+**Actual Result:**
+```
+Issued credential for: Test Farmer
+✅ Credential signature is valid
+
+Testing tampering detection...
+✅ Tampering detected: Invalid signature - credential has been tampered with
+```
+✅ Verification working with tampering detection!
+
+---
+
+### Step 6: Create SSI Agent (Role-Based Access Control)
+
+**File Created:** `ssi/agent.py`
+
+**Why:** Enforce role-based access control for EPCIS event submission. Different roles (farmer, cooperative, facility) have different permissions.
+
+**What it does:**
+- Maintains DID → role registry
+- Maintains trusted issuer list
+- Verifies credentials before authorization
+- Enforces event submission permissions
+
+**Permission Model:**
+- **Commissioning events**: cooperative, facility
+- **Shipment events**: cooperative, facility, farmer
+- **Receipt events**: cooperative, facility
+- **Transformation events**: facility only
+
+**Test Command:**
+```bash
+python -m ssi.agent
+```
+
+**Actual Result:**
+```
+Test 1: Farmer submitting shipment event
+  ✅ Authorized to submit shipment event
+
+Test 2: Farmer trying to submit commissioning event
+  ❌ Role 'farmer' cannot submit 'commissioning' events
+
+Test 3: Cooperative submitting commissioning event
+  ✅ Authorized to submit commissioning event
+```
+✅ Role-based access control working perfectly!
+
+---
