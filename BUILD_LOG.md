@@ -4895,6 +4895,35 @@ Current system trusts any API key holder. With SSI:
 
 ## Lab 3: Self-Sovereign Identity & Access Control
 
+### 🎯 Lab Overview
+
+**Goal:** Build a decentralized identity system using Self-Sovereign Identity (SSI) principles to enable trustless authentication and role-based access control without centralized authorities.
+
+**The Problem We're Solving:**
+Traditional identity systems rely on centralized authorities (username/password databases, OAuth providers, certificate authorities). This creates:
+- **Single Points of Failure**: If the identity provider goes down, nobody can authenticate
+- **Privacy Concerns**: Central authority knows who accesses what and when
+- **Vendor Lock-in**: Changing identity providers requires migrating all users
+- **Trust Dependencies**: Must trust the central authority not to be malicious
+- **No Portability**: Identity doesn't work across systems without federation
+
+**The SSI Solution:**
+Self-Sovereign Identity gives individuals and organizations control over their own identities using cryptographic keypairs:
+- **Decentralized**: No central registry, identities are self-generated
+- **Verifiable**: Cryptographic proofs ensure authenticity
+- **Portable**: Same identity works everywhere
+- **Private**: Only reveal what's necessary
+- **Revocable**: Credentials can be revoked without affecting identity
+
+**Coffee Supply Chain Use Case:**
+- Farmer Abebe needs to prove he's authorized to create shipment events
+- Guzo Cooperative issues Abebe a "FarmerCredential"
+- Abebe uses his DID (Decentralized Identifier) + credential to sign events
+- Any auditor can verify Abebe's identity without contacting Guzo
+- If Abebe leaves the farm, Guzo can revoke credential without affecting other farmers
+
+---
+
 ### Step 1: Install Lab 3 Dependencies
 
 **Command:**
@@ -4902,16 +4931,227 @@ Current system trusts any API key holder. With SSI:
 pip install PyNaCl==1.5.0
 ```
 
-**Package Added:**
-- `PyNaCl==1.5.0` - Python binding to libsodium for Ed25519 cryptography
+#### 📚 Background: Ed25519 Cryptography
 
-**Why:** 
-- Ed25519 is a modern, secure signature algorithm
-- Used for DID keypair generation
-- Used for signing and verifying credentials
-- Fast and secure on all platforms
+**What is Ed25519?**
+Ed25519 is a modern elliptic curve signature algorithm designed by Daniel J. Bernstein. It's part of the EdDSA (Edwards-curve Digital Signature Algorithm) family.
 
-**Actual Result:** PyNaCl installed successfully ✅
+**Why Ed25519 for DIDs?**
+
+| Feature | RSA-2048 | ECDSA (P-256) | Ed25519 | Why it Matters |
+|---------|----------|---------------|---------|----------------|
+| Public key size | 256 bytes | 64 bytes | 32 bytes | Smaller DIDs |
+| Signature size | 256 bytes | 64 bytes | 64 bytes | Less data |
+| Signing speed | Slow (~1ms) | Fast (~0.5ms) | **Very fast (~0.08ms)** | High throughput |
+| Verification speed | Slow (~0.5ms) | Fast (~0.3ms) | **Very fast (~0.1ms)** | Faster checks |
+| Side-channel resistance | Poor | Poor | **Excellent** | Security |
+| Deterministic | No | Optional | **Yes** | Reproducible |
+
+**Key Properties:**
+1. **Deterministic**: Same message + key = same signature (no randomness needed)
+2. **Fast**: ~10x faster than RSA, ~3x faster than ECDSA
+3. **Small**: Keys and signatures are compact
+4. **Secure**: No known attacks, 128-bit security level
+5. **Side-channel resistant**: Constant-time operations prevent timing attacks
+
+**Mathematical Foundation:**
+Ed25519 uses Curve25519, defined by the equation:
+$$y^2 = x^3 + 486662x^2 + x \pmod{2^{255} - 19}$$
+
+Private key = 32 random bytes
+Public key = Scalar multiplication of base point by private key
+
+**PyNaCl Library:**
+- Python binding to libsodium (C library)
+- libsodium is audited, widely used (Signal, WireGuard, Tor)
+- Provides high-level API (no need to understand elliptic curves)
+- Handles all the complex cryptography correctly
+
+**Installation:**
+```bash
+pip install PyNaCl==1.5.0
+```
+
+**Why version 1.5.0?**
+- Stable release (May 2022)
+- Python 3.9+ compatible
+- No breaking changes in 1.5.x series
+- Widely tested in production
+
+**Dependencies:**
+PyNaCl depends on:
+- `cffi` - C Foreign Function Interface (to call libsodium)
+- `libsodium` - C library (automatically installed)
+- `pycparser` - Parse C code (used by cffi)
+
+**Troubleshooting:**
+
+If installation fails on macOS:
+```bash
+# Install libsodium via Homebrew first
+brew install libsodium
+pip install PyNaCl==1.5.0
+```
+
+If installation fails on Linux:
+```bash
+# Install libsodium-dev
+sudo apt-get install libsodium-dev  # Ubuntu/Debian
+sudo yum install libsodium-devel    # CentOS/RHEL
+pip install PyNaCl==1.5.0
+```
+
+**Verification:**
+```bash
+python -c "from nacl.signing import SigningKey; print('PyNaCl OK')"
+```
+
+Expected output: `PyNaCl OK`
+
+---
+
+#### 🔐 Cryptographic Primitives Provided
+
+PyNaCl provides several cryptographic operations:
+
+**Digital Signatures (what we use):**
+```python
+from nacl.signing import SigningKey, VerifyKey
+
+# Generate keypair
+sk = SigningKey.generate()  # 32-byte private key
+vk = sk.verify_key          # 32-byte public key
+
+# Sign message
+signature = sk.sign(b"Hello")  # 64-byte signature
+
+# Verify signature
+vk.verify(signature)  # Raises exception if invalid
+```
+
+**Other Operations (not used in this lab):**
+- `nacl.secret.SecretBox` - Symmetric encryption (like AES-GCM)
+- `nacl.public.Box` - Asymmetric encryption (like RSA encryption)
+- `nacl.pwhash` - Password hashing (like Argon2)
+- `nacl.hash` - Cryptographic hashing (like SHA-256)
+
+We only use **digital signatures** for SSI because:
+- Credentials need to be publicly verifiable (not encrypted)
+- Signatures prove authenticity without revealing private key
+- Anyone can verify, only holder can sign
+
+---
+
+#### 🎯 Design Decisions Explained
+
+**Q: Why Ed25519 instead of RSA?**
+A: Speed and size. Ed25519 signs in 0.08ms vs RSA's 1ms. In a supply chain with thousands of events per day, this adds up. Also, 32-byte keys vs 256-byte keys = smaller DIDs.
+
+**Q: Why PyNaCl instead of cryptography library?**
+A: Simplicity. PyNaCl's API is designed for correct usage by default. The `cryptography` library is more flexible but easier to misuse (wrong padding, wrong mode, etc.).
+
+**Q: Can we use this in production?**
+A: Yes! PyNaCl/libsodium is used by:
+- Signal (encrypted messaging)
+- WireGuard (VPN)
+- Tor Project (anonymity network)
+- GitHub (SSH key support)
+- Keybase (encrypted storage)
+
+**Q: What's the security level?**
+A: 128-bit security level (equivalent to AES-128). This means:
+- Breaking Ed25519 requires ~$2^{128}$ operations
+- At 1 trillion operations per second, would take $10^{22}$ years
+- RSA-2048 also provides ~112-bit security
+- Quantum computers reduce to ~64-bit (still impractical)
+
+**Q: What about quantum resistance?**
+A: Ed25519 is NOT quantum-resistant. Shor's algorithm can break it. For post-quantum cryptography, consider:
+- Dilithium (lattice-based signatures)
+- SPHINCS+ (hash-based signatures)
+- These are standardized but not yet widely adopted
+
+---
+
+#### ✅ Testing the Installation
+
+**Test 1: Basic Key Generation**
+```python
+from nacl.signing import SigningKey
+
+sk = SigningKey.generate()
+print(f"Private key: {sk.encode().hex()}")
+print(f"Public key: {sk.verify_key.encode().hex()}")
+```
+
+**Expected Output:**
+```
+Private key: a3f5...  (64 hex characters = 32 bytes)
+Public key: 8d2a...   (64 hex characters = 32 bytes)
+```
+
+**Test 2: Sign and Verify**
+```python
+from nacl.signing import SigningKey
+
+sk = SigningKey.generate()
+vk = sk.verify_key
+
+# Sign message
+message = b"Deliver 50 bags of coffee"
+signed = sk.sign(message)
+
+# Verify signature
+try:
+    vk.verify(signed)
+    print("✅ Signature valid!")
+except Exception as e:
+    print(f"❌ Signature invalid: {e}")
+```
+
+**Expected Output:**
+```
+✅ Signature valid!
+```
+
+**Test 3: Tampering Detection**
+```python
+from nacl.signing import SigningKey
+from nacl.exceptions import BadSignatureError
+
+sk = SigningKey.generate()
+vk = sk.verify_key
+
+# Sign message
+signed = sk.sign(b"Transfer $100")
+
+# Tamper with message
+tampered = signed[:-1] + b"X"  # Change last byte
+
+# Try to verify
+try:
+    vk.verify(tampered)
+    print("❌ Tampering not detected!")
+except BadSignatureError:
+    print("✅ Tampering detected!")
+```
+
+**Expected Output:**
+```
+✅ Tampering detected!
+```
+
+---
+
+#### 📖 Further Reading
+
+- **Ed25519 Paper**: "High-speed high-security signatures" by Bernstein et al. (https://ed25519.cr.yp.to/ed25519-20110926.pdf)
+- **PyNaCl Documentation**: https://pynacl.readthedocs.io/
+- **libsodium Documentation**: https://doc.libsodium.org/
+- **Curve25519**: "Curve25519: new Diffie-Hellman speed records" by Bernstein (https://cr.yp.to/ecdh/curve25519-20060209.pdf)
+- **Timing Attack Prevention**: "Timing Attacks on Implementations of Diffie-Hellman, RSA, DSS, and Other Systems" by Kocher (1996)
+
+✅ **Step 1 Complete!** PyNaCl installed and ready for DID generation.
 
 ---
 
