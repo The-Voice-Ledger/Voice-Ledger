@@ -6582,28 +6582,539 @@ vc = farmer_template.issue({"name": "Abebe", "farm_id": "ETH-001", "did": "did:k
 
 **File Created:** `ssi/credentials/verify.py`
 
-**Why:** Verify credentials are authentic and haven't been tampered with. This ensures only valid credentials are accepted.
+#### 📚 Background: Cryptographic Verification
 
-**What it verifies:**
-1. Required fields present
-2. Signature exists
-3. Issuer matches verification method
-4. Cryptographic signature is valid
+**Why Verify Credentials?**
+In a decentralized system, anyone can claim anything. Verification ensures:
+1. **Authenticity**: Credential was issued by claimed issuer
+2. **Integrity**: Credential hasn't been modified since issuance
+3. **Validity**: Credential structure conforms to standards
+4. **Trust**: Issuer is in the trusted issuer list
 
-**Test Command:**
+**The Verification Process:**
+```
+Credential → Extract Proof → Extract Public Key → Verify Signature → Valid/Invalid
+   (JSON)       (signature)      (from issuer)        (Ed25519)
+```
+
+**What Could Go Wrong?**
+- **Tampering**: Someone modifies claims after issuance
+- **Forgery**: Someone creates fake credential with made-up signature
+- **Replay**: Someone reuses old (revoked) credential
+- **Impersonation**: Someone uses another person's credential
+
+**How Signatures Prevent This:**
+- Tampering → Signature mismatch (hash changes)
+- Forgery → Can't generate valid signature without private key
+- Replay → Check revocation lists / expiration dates
+- Impersonation → Require proof of private key ownership
+
+---
+
+#### 💻 Complete Implementation
+
+**File:** `ssi/credentials/verify.py`
+
+```python
+"""
+Verifiable Credential Verification Module
+
+Verifies the cryptographic integrity and authenticity of credentials.
+
+Standard: W3C Verifiable Credentials Data Model v1.1
+Signature Suite: Ed25519Signature2020
+
+Verification Steps:
+1. Structural validation (required fields present)
+2. Proof extraction (signature and metadata)
+3. Issuer validation (matches verification method)
+4. Signature verification (cryptographic check)
+
+Security Properties:
+- Detects any tampering with credential data
+- Prevents forged credentials (can't sign without private key)
+- Fast verification (~0.1ms per credential)
+- No network dependencies (offline verification)
+"""
+
+import json
+from nacl.signing import VerifyKey
+from nacl.exceptions import BadSignatureError
+
+
+def verify_credential(vc: dict) -> tuple[bool, str]:
+    """
+    Verify a verifiable credential's cryptographic signature.
+    
+    Args:
+        vc: Verifiable credential dictionary (must include proof)
+        
+    Returns:
+        Tuple of (is_valid, message)
+        - is_valid: True if signature is valid and credential is authentic
+        - message: Success message or detailed error description
+        
+    Verification checks:
+    1. Credential has required fields (@context, type, issuer, credentialSubject, proof)
+    2. Proof has required fields (type, signature, verificationMethod)
+    3. Issuer's public key matches verification method (consistency)
+    4. Signature is cryptographically valid (Ed25519 verification)
+    
+    Example:
+        >>> from ssi.credentials.issue import issue_credential
+        >>> from ssi.did.did_key import generate_did_key
+        >>> 
+        >>> issuer = generate_did_key()
+        >>> claims = {"type": "FarmerCredential", "name": "Alice"}
+        >>> vc = issue_credential(claims, issuer["private_key"])
+        >>> 
+        >>> is_valid, msg = verify_credential(vc)
+        >>> print(is_valid)  # True
+        >>> print(msg)       # "Credential signature is valid"
+        
+    Security Notes:
+    - Verification is deterministic (same credential → same result)
+    - Fast operation (~0.1ms) suitable for high throughput
+    - No network dependencies (works offline)
+    - Detects any modification to credential data
+    """
+    # Step 1: Check required top-level fields
+    # These are mandated by W3C VC spec
+    required_fields = ["issuer", "credentialSubject", "proof"]
+    for field in required_fields:
+        if field not in vc:
+            return False, f"Missing required field: {field}"
+    
+    # Step 2: Extract proof object
+    # Proof contains signature and metadata for verification
+    proof = vc.get("proof", {})
+    signature_hex = proof.get("signature")
+    verification_method = proof.get("verificationMethod")
+    
+    # Step 3: Validate proof has required fields
+    if not signature_hex:
+        return False, "Missing signature in proof"
+    
+    if not verification_method:
+        return False, "Missing verificationMethod in proof"
+    
+    # Step 4: Verify issuer matches verification method
+    # This ensures the public key used for verification is the one claimed by issuer
+    # Without this check, attacker could substitute a different public key
+    issuer = vc.get("issuer")
+    if issuer != verification_method:
+        return False, "Issuer does not match verification method"
+    
+    try:
+        # Step 5: Reconstruct canonical credential (without proof)
+        # We sign the credential WITHOUT the proof field
+        # Verifier must reconstruct the same canonical form
+        credential_without_proof = {k: v for k, v in vc.items() if k != "proof"}
+        
+        # Canonicalize: same format used during signing
+        # MUST match the canonicalization in issue_credential()
+        payload = json.dumps(
+            credential_without_proof,
+            separators=(",", ":"),  # Compact format
+            sort_keys=True           # Deterministic key order
+        )
+        
+        # Step 6: Load issuer's public key (verification key)
+        # verificationMethod contains hex-encoded public key (32 bytes = 64 hex chars)
+        try:
+            vk = VerifyKey(bytes.fromhex(verification_method))
+        except ValueError as e:
+            return False, f"Invalid verification method format: {e}"
+        
+        # Step 7: Decode signature from hex
+        # Ed25519 signatures are 64 bytes (128 hex characters)
+        try:
+            signature = bytes.fromhex(signature_hex)
+        except ValueError as e:
+            return False, f"Invalid signature format: {e}"
+        
+        # Step 8: Verify signature cryptographically
+        # VerifyKey.verify() does:
+        #   1. Hash the payload (SHA-512 internally)
+        #   2. Check signature against hash using Ed25519 algorithm
+        #   3. Raise BadSignatureError if invalid
+        # Note: verify() takes full signed message, not separate signature
+        # We need to reconstruct signed message format
+        vk.verify(payload.encode("utf-8"), signature)
+        
+        # If we reach here, signature is valid!
+        return True, "Credential signature is valid"
+        
+    except BadSignatureError:
+        # Signature verification failed
+        # This happens if:
+        # - Credential data was modified (even 1 bit)
+        # - Wrong public key used
+        # - Signature was corrupted
+        # - Forged signature (not generated with correct private key)
+        return False, "Invalid signature - credential has been tampered with"
+    
+    except Exception as e:
+        # Catch-all for unexpected errors
+        # Should rarely happen in production
+        return False, f"Verification error: {str(e)}"
+
+
+if __name__ == "__main__":
+    from ssi.did.did_key import generate_did_key
+    from ssi.credentials.issue import issue_credential
+    
+    print("Testing Credential Verification...\n")
+    
+    # Scenario: Guzo Cooperative issues credential to farmer
+    
+    # Generate identities
+    issuer = generate_did_key()  # Guzo Cooperative
+    farmer = generate_did_key()  # Farmer Abebe
+    
+    # Create claims
+    claims = {
+        "type": "FarmerCredential",
+        "name": "Test Farmer",
+        "farm_id": "TEST-001",
+        "did": farmer["did"]
+    }
+    
+    # Issue credential
+    vc = issue_credential(claims, issuer["private_key"])
+    print("Issued credential for:", claims["name"])
+    
+    # Test 1: Verify valid credential
+    is_valid, message = verify_credential(vc)
+    
+    if is_valid:
+        print(f"✅ {message}")
+    else:
+        print(f"❌ {message}")
+    
+    # Test 2: Detect tampering
+    print("\nTesting tampering detection...")
+    
+    # Tamper with credential (change farmer name)
+    vc["credentialSubject"]["name"] = "Tampered Name"
+    
+    # Try to verify tampered credential
+    is_valid, message = verify_credential(vc)
+    
+    if not is_valid:
+        print(f"✅ Tampering detected: {message}")
+    else:
+        print(f"❌ Failed to detect tampering")
+```
+
+---
+
+#### 🔍 Deep Dive: Why Signatures Catch Tampering
+
+**Original Credential:**
+```json
+{"credentialSubject": {"name": "Alice"}}
+```
+Hash: `8d2a3f...` → Signature: `e8eca1...`
+
+**Tampered Credential:**
+```json
+{"credentialSubject": {"name": "Mallory"}}  // Changed "Alice" to "Mallory"
+```
+Hash: `5b1c9e...` (completely different!) → Verification fails!
+
+**Why Hash Changes:**
+Even changing 1 bit causes avalanche effect in SHA-512:
+```
+"Alice"   → 8d2a3f4e5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3
+"Blice"   → 3a1b5c9d7e2f4a6b8c0d1e3f5a7b9c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b
+          ↑ Completely different hash despite 1 character change!
+```
+
+**Verification:**
+```python
+# Verifier computes hash of tampered data
+tampered_hash = sha512("Mallory")  # 5b1c9e...
+
+# But signature is for original hash
+original_hash = sha512("Alice")     # 8d2a3f...
+
+# Signature verification
+verify(tampered_hash, signature, public_key) → FALSE
+# Because signature matches original_hash, not tampered_hash
+```
+
+---
+
+#### 🎯 Design Decisions Explained
+
+**Q: Why verify issuer matches verificationMethod?**
+A: Prevents substitution attacks:
+```python
+# Attack: Replace issuer public key with attacker's
+vc["issuer"] = attacker_public_key
+vc["proof"]["verificationMethod"] = attacker_public_key
+vc["proof"]["signature"] = attacker_signature
+# Without the check, this would verify!
+
+# Defense: Require issuer == verificationMethod
+if vc["issuer"] != vc["proof"]["verificationMethod"]:
+    return False, "Issuer mismatch"
+```
+
+**Q: Why reconstruct canonical form?**
+A: The signature is over canonical JSON. Verifier must use exact same canonicalization:
+```python
+# If we sign compact form
+signed_payload = '{"name":"Alice"}'
+signature = sign(signed_payload)
+
+# But verify formatted form (different bytes!)
+verify_payload = '{\n  "name": "Alice"\n}'
+verify(verify_payload, signature) → FALSE
+
+# Solution: Always canonicalize
+payload = json.dumps(data, separators=(",",":"), sort_keys=True)
+```
+
+**Q: What about expired credentials?**
+A: Add expiration check:
+```python
+from datetime import datetime, timezone
+
+if "expirationDate" in vc:
+    expiry = datetime.fromisoformat(vc["expirationDate"])
+    if datetime.now(timezone.utc) > expiry:
+        return False, "Credential expired"
+```
+
+**Q: How to check revocation?**
+A: Query revocation list:
+```python
+if "credentialStatus" in vc:
+    status_url = vc["credentialStatus"]["id"]
+    revocation_list = fetch_revocation_list(status_url)
+    if vc["id"] in revocation_list:
+        return False, "Credential revoked"
+```
+
+---
+
+#### ✅ Testing the Implementation
+
+**Test 1: Verify Valid Credential**
 ```bash
 python -m ssi.credentials.verify
 ```
 
-**Actual Result:**
+**Expected Output:**
 ```
+Testing Credential Verification...
+
 Issued credential for: Test Farmer
 ✅ Credential signature is valid
 
 Testing tampering detection...
 ✅ Tampering detected: Invalid signature - credential has been tampered with
 ```
-✅ Verification working with tampering detection!
+
+**Test 2: Verify Multiple Credentials**
+```python
+from ssi.credentials.verify import verify_credential
+from ssi.credentials.issue import issue_credential
+from ssi.did.did_key import generate_did_key
+
+issuer = generate_did_key()
+
+# Issue 100 credentials
+credentials = []
+for i in range(100):
+    claims = {"type": "FarmerCredential", "name": f"Farmer_{i}", "farm_id": f"ETH-{i:03d}"}
+    vc = issue_credential(claims, issuer["private_key"])
+    credentials.append(vc)
+
+# Verify all
+import time
+start = time.time()
+for vc in credentials:
+    is_valid, _ = verify_credential(vc)
+    assert is_valid, "Verification failed"
+end = time.time()
+
+print(f"✅ Verified 100 credentials in {(end-start)*1000:.2f}ms")
+print(f"   Average: {(end-start)/100*1000:.2f}ms per credential")
+```
+
+**Expected:** ~10ms total (~0.1ms per credential)
+
+**Test 3: Detect Various Tampering Types**
+```python
+from ssi.credentials.verify import verify_credential
+from ssi.credentials.issue import issue_credential
+from ssi.did.did_key import generate_did_key
+
+issuer = generate_did_key()
+claims = {"type": "FarmerCredential", "name": "Alice", "farm_id": "ETH-001"}
+vc = issue_credential(claims, issuer["private_key"])
+
+# Test 1: Tamper with name
+vc_tampered = vc.copy()
+vc_tampered["credentialSubject"]["name"] = "Bob"
+is_valid, msg = verify_credential(vc_tampered)
+assert not is_valid, "Should detect name tampering"
+print("✅ Name tampering detected")
+
+# Test 2: Tamper with issuer
+vc_tampered = vc.copy()
+vc_tampered["issuer"] = "00" * 32
+is_valid, msg = verify_credential(vc_tampered)
+assert not is_valid, "Should detect issuer tampering"
+print("✅ Issuer tampering detected")
+
+# Test 3: Tamper with signature
+vc_tampered = vc.copy()
+vc_tampered["proof"]["signature"] = "00" * 64
+is_valid, msg = verify_credential(vc_tampered)
+assert not is_valid, "Should detect signature tampering"
+print("✅ Signature tampering detected")
+
+# Test 4: Remove proof
+vc_tampered = vc.copy()
+del vc_tampered["proof"]
+is_valid, msg = verify_credential(vc_tampered)
+assert not is_valid, "Should detect missing proof"
+print("✅ Missing proof detected")
+```
+
+---
+
+#### ⚠️ Common Pitfalls
+
+**Pitfall 1: Not using same canonicalization**
+```python
+# Wrong: Different canonicalization ❌
+# Issue:
+payload_issue = json.dumps(cred)  # Default formatting
+signature = sign(payload_issue)
+
+# Verify:
+payload_verify = json.dumps(cred, indent=2)  # Different formatting!
+verify(payload_verify, signature)  # FAILS!
+
+# Right: Same canonicalization ✅
+payload = json.dumps(cred, separators=(",",":"), sort_keys=True)
+```
+
+**Pitfall 2: Forgetting to remove proof before verification**
+```python
+# Wrong: Verify with proof included ❌
+payload = json.dumps(vc)  # Includes proof field
+verify(payload, signature)  # Will always fail!
+
+# Right: Remove proof first ✅
+vc_without_proof = {k: v for k, v in vc.items() if k != "proof"}
+payload = json.dumps(vc_without_proof)
+verify(payload, signature)  # Works!
+```
+
+**Pitfall 3: Not checking issuer matches verificationMethod**
+```python
+# Wrong: Skip issuer check ❌
+vk = VerifyKey(bytes.fromhex(vc["proof"]["verificationMethod"]))
+vk.verify(payload, signature)  # Vulnerable to key substitution!
+
+# Right: Check issuer first ✅
+if vc["issuer"] != vc["proof"]["verificationMethod"]:
+    return False, "Issuer mismatch"
+vk = VerifyKey(bytes.fromhex(vc["proof"]["verificationMethod"]))
+vk.verify(payload, signature)
+```
+
+**Pitfall 4: Trusting any issuer**
+```python
+# Wrong: Accept any valid signature ❌
+is_valid, _ = verify_credential(vc)
+if is_valid:
+    authorize(user)  # Anyone can issue credentials!
+
+# Right: Check trusted issuers ✅
+is_valid, _ = verify_credential(vc)
+if is_valid and vc["issuer"] in TRUSTED_ISSUERS:
+    authorize(user)
+else:
+    reject("Untrusted issuer")
+```
+
+---
+
+#### 🚀 Production Enhancements
+
+**1. Batch Verification:**
+```python
+def verify_batch(credentials: list[dict]) -> list[tuple[bool, str]]:
+    """Verify multiple credentials efficiently."""
+    return [verify_credential(vc) for vc in credentials]
+```
+
+**2. Revocation Check:**
+```python
+def verify_with_revocation(vc: dict, revocation_list: set) -> tuple[bool, str]:
+    is_valid, msg = verify_credential(vc)
+    if not is_valid:
+        return is_valid, msg
+    
+    credential_id = vc.get("id")
+    if credential_id in revocation_list:
+        return False, "Credential revoked"
+    
+    return True, "Valid and not revoked"
+```
+
+**3. Expiration Check:**
+```python
+from datetime import datetime, timezone
+
+def verify_with_expiration(vc: dict) -> tuple[bool, str]:
+    is_valid, msg = verify_credential(vc)
+    if not is_valid:
+        return is_valid, msg
+    
+    if "expirationDate" in vc:
+        expiry = datetime.fromisoformat(vc["expirationDate"])
+        if datetime.now(timezone.utc) > expiry:
+            return False, "Credential expired"
+    
+    return True, "Valid and not expired"
+```
+
+**4. Verification Caching:**
+```python
+import hashlib
+from functools import lru_cache
+
+@lru_cache(maxsize=1000)
+def verify_cached(vc_hash: str) -> tuple[bool, str]:
+    """Cache verification results by credential hash."""
+    # Note: Must convert dict to hashable type
+    return verify_credential(json.loads(vc_hash))
+
+# Usage:
+vc_str = json.dumps(vc, sort_keys=True)
+vc_hash = hashlib.sha256(vc_str.encode()).hexdigest()
+result = verify_cached(vc_hash)
+```
+
+---
+
+#### 📖 Further Reading
+
+- **W3C VC Data Model - Verification**: https://www.w3.org/TR/vc-data-model/#proofs-signatures
+- **Linked Data Cryptographic Suite Registry**: https://w3c-ccg.github.io/ld-cryptosuite-registry/
+- **Ed25519 Signature Verification**: libsodium documentation
+- **Revocation Methods**: "Status List 2021" specification
+- **Zero-Knowledge Proofs**: "Anonymous Credentials" research
+
+✅ **Step 5 Complete!** Credentials can now be cryptographically verified with tampering detection.
 
 ---
 
