@@ -902,3 +902,227 @@ Test 3: Cooperative submitting commissioning event
 ✅ Role-based access control working perfectly!
 
 ---
+
+## 🎉 Lab 3 Complete Summary
+
+**What we built:**
+1. ✅ DID generation with Ed25519 keypairs
+2. ✅ Credential schemas (4 types)
+3. ✅ Credential issuance with W3C format
+4. ✅ Cryptographic verification with tampering detection
+5. ✅ SSI agent with role-based access control
+
+**Pipeline flow:**
+```
+Actor → DID → Credential → Verify → Check Role → Authorize Event
+```
+
+**Deliverables:**
+- `ssi/did/did_key.py` - DID generation
+- `ssi/credentials/schemas.py` - Credential definitions
+- `ssi/credentials/issue.py` - Credential issuance
+- `ssi/credentials/verify.py` - Signature verification
+- `ssi/agent.py` - Access control engine
+
+**Ready for:** Lab 4 (Blockchain & Tokenization)
+
+---
+
+## Lab 4: Blockchain Anchoring & Tokenization
+
+### Step 1: Verify Foundry Installation
+
+**Command:**
+```bash
+forge --version
+```
+
+**Why:** Foundry is the modern Solidity development toolchain providing:
+- **forge** - Build, test, and deploy contracts
+- **cast** - Interact with contracts via CLI
+- **anvil** - Local Ethereum node for testing
+- **chisel** - Solidity REPL for debugging
+
+**Actual Result:**
+```
+forge Version: 1.3.4-Homebrew
+```
+✅ Foundry already installed!
+
+---
+
+### Step 2: Initialize Foundry Project
+
+**Command:**
+```bash
+cd blockchain && forge init --no-git --force .
+```
+
+**Why:** Creates the standard Foundry project structure:
+- `src/` - Smart contracts
+- `script/` - Deployment scripts
+- `test/` - Contract tests
+- `lib/` - Dependencies (OpenZeppelin, etc.)
+- `foundry.toml` - Configuration
+
+**What it does:**
+- Installs forge-std (Foundry's standard library)
+- Creates directory structure
+- Sets up for Solidity 0.8.20+
+
+**Actual Result:** Foundry project initialized successfully ✅
+
+---
+
+### Step 3: Install OpenZeppelin Contracts
+
+**Command:**
+```bash
+forge install OpenZeppelin/openzeppelin-contracts
+```
+
+**Why:** OpenZeppelin provides battle-tested, audited implementations of:
+- ERC-1155 (multi-token standard)
+- Ownable (access control)
+- Other security primitives
+
+**Created:** `remappings.txt` for import paths
+
+**Actual Result:** OpenZeppelin v5.5.0 installed ✅
+
+---
+
+### Step 4: Create EPCIS Event Anchor Contract
+
+**File Created:** `blockchain/src/EPCISEventAnchor.sol`
+
+**Why:** Provides immutable on-chain anchoring of EPCIS event hashes. This creates an auditable, tamper-proof record without revealing sensitive supply chain data.
+
+**What it does:**
+- Stores SHA-256 hashes of EPCIS events
+- Records metadata (batch ID, event type, timestamp, submitter)
+- Prevents duplicate anchoring
+- Emits events for off-chain indexing
+
+**Modern Solidity Patterns:**
+- ✅ Custom errors (gas efficient)
+- ✅ Named imports
+- ✅ Clear error messages
+
+**Key Functions:**
+- `anchorEvent()` - Store event hash on-chain
+- `isAnchored()` - Check if event exists
+- `getEventMetadata()` - Retrieve event details
+
+**Compilation:** ✅ Compiles successfully
+
+---
+
+### Step 5: Create ERC-1155 Batch Token Contract
+
+**File Created:** `blockchain/src/CoffeeBatchToken.sol`
+
+**Why:** Tokenizes coffee batches as ERC-1155 tokens. Each token ID represents a unique batch with:
+- Quantity (number of bags)
+- Metadata (origin, cooperative, process)
+- Traceability link to EPCIS events
+
+**What it provides:**
+- Unique token ID per batch
+- Batch ID → Token ID mapping
+- Transfer functionality
+- Metadata storage
+
+**Modern Solidity Patterns:**
+- ✅ Custom errors with parameters
+- ✅ Named imports from OpenZeppelin
+- ✅ Clear access control (onlyOwner)
+
+**Key Functions:**
+- `mintBatch()` - Create new batch token
+- `transferBatch()` - Transfer ownership
+- `getBatchMetadata()` - Retrieve batch details
+- `getTokenIdByBatchId()` - Lookup by batch ID string
+
+**Compilation:** ✅ Compiles successfully
+
+---
+
+### Step 6: Create Settlement Contract
+
+**File Created:** `blockchain/src/SettlementContract.sol`
+
+**Why:** Automates settlement/rewards after valid commissioning events. In production, this would trigger payments to cooperatives.
+
+**What it does:**
+- Records settlement per batch
+- Prevents double-settlement
+- Tracks recipient and amount
+- Emits settlement events
+
+**Modern Solidity Patterns:**
+- ✅ Custom errors
+- ✅ Immutable settlement records
+- ✅ Clear validation logic
+
+**Key Functions:**
+- `settleCommissioning()` - Execute settlement
+- `isSettled()` - Check settlement status
+- `getSettlement()` - Retrieve settlement details
+
+**Compilation:** ✅ All three contracts compile successfully
+
+---
+
+### Step 7: Create Digital Twin Module
+
+**File Created:** `twin/twin_builder.py`
+
+**Why:** Maintains a unified digital twin combining on-chain and off-chain data. This provides a complete view of each batch's lifecycle.
+
+**What it tracks:**
+- **Anchors** - On-chain event hashes
+- **Tokens** - ERC-1155 token IDs and quantities
+- **Settlement** - Payment information
+- **Credentials** - Verifiable credentials
+- **Metadata** - Origin, cooperative, process details
+
+**Functions:**
+- `record_anchor()` - Add event anchor
+- `record_token()` - Add token minting
+- `record_settlement()` - Add settlement
+- `record_credential()` - Attach VC
+- `get_batch_twin()` - Retrieve complete twin
+- `list_all_batches()` - List all batches
+
+**Storage:** JSON file at `twin/digital_twin.json`
+
+**Test Command:**
+```bash
+python -m twin.twin_builder
+```
+
+**Actual Result:**
+```json
+{
+  "batchId": "BATCH-2025-001",
+  "anchors": [{
+    "eventHash": "bc1658...",
+    "eventType": "commissioning"
+  }],
+  "tokenId": 1,
+  "quantity": 50,
+  "metadata": {
+    "origin": "Ethiopia",
+    "cooperative": "Guzo"
+  },
+  "settlement": {
+    "amount": 1000000,
+    "recipient": "0x1234...",
+    "settled": true
+  }
+}
+```
+✅ Digital twin synchronization working!
+
+---
