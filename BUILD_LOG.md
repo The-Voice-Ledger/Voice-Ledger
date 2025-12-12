@@ -10529,67 +10529,652 @@ Current system has immutable blockchain records but no consumer-facing interface
 
 ## Lab 5: Digital Product Passports (DPPs)
 
+**Lab Overview:**
+
+Lab 5 creates the **consumer-facing layer** of Voice Ledger by generating Digital Product Passports (DPPs) that provide complete traceability via QR codes. This transforms backend data (Labs 1-4) into accessible, EUDR-compliant product documentation.
+
+**What We'll Build:**
+1. DPP Schema - EUDR-compliant data structure
+2. DPP Builder - Convert digital twin → consumer passport
+3. DPP Resolver API - Public endpoint for accessing DPPs
+4. QR Code Generator - Scannable codes for product packaging
+5. End-to-End Test - Validate complete flow
+
+**Why Digital Product Passports?**
+
+**EU Deforestation Regulation (EUDR):**
+Effective June 2023, **EUDR mandates** that companies importing coffee, cocoa, timber, palm oil, soy, cattle, and rubber into EU must prove:
+- **Geolocation**: Coordinates of production area
+- **Due Diligence**: Risk assessment for deforestation
+- **Traceability**: Complete supply chain documentation
+- **Non-Deforestation**: Products didn't contribute to forest loss after Dec 2020
+
+**Penalties for Non-Compliance:**
+- Fines up to 4% of annual EU turnover
+- Product confiscation
+- Exclusion from EU market
+
+**DPPs as Compliance Solution:**
+- **Digital Format**: Easy to verify, share, and audit
+- **Immutable Records**: Blockchain-anchored data can't be forged
+- **Complete Traceability**: From farm to consumer
+- **Verifiable Credentials**: Cryptographically proven identities
+- **QR Code Access**: Consumers verify authenticity instantly
+
+**Consumer Benefits:**
+- **Transparency**: See origin, processing, certifications
+- **Trust**: Blockchain verification prevents fraud
+- **Sustainability**: Carbon footprint, water usage, fair trade status
+- **Engagement**: Scan QR code to explore product journey
+
+---
+
 ### Step 1: Create DPP Schema
 
-**File Created:** `dpp/schema.json`
+**File Created:** `dpp/schema.json` (350+ lines)
 
-**Why:** Defines the EUDR-compliant structure for Digital Product Passports. This schema ensures all required traceability, due diligence, and sustainability information is captured.
+**Purpose:**
 
-**Schema Sections:**
-- **Product Information** - Name, GTIN, quantity, variety, process method
-- **Traceability** - Origin (country, region, geolocation), supply chain actors (with DIDs), EPCIS events
-- **Sustainability** - Certifications (Organic, FairTrade, etc.), carbon footprint, water usage
-- **Due Diligence** - EUDR compliance, deforestation risk assessment, land use rights
-- **Blockchain** - Contract addresses, token ID, on-chain anchors
-- **QR Code** - Resolver URL and image encoding
+Defines the **EUDR-compliant structure** for Digital Product Passports. This schema ensures all required traceability, due diligence, and sustainability information is captured in a standardized format.
 
-**Key Features:**
-- Supports GeoJSON polygon coordinates for farm boundaries
-- Links to verifiable credentials for supply chain actors
-- Integrates blockchain transaction hashes
-- ISO 3166-1 country codes for standardization
+**EUDR Requirements Mapped to Schema:**
 
-**Result:** ✅ Schema created with full EUDR compliance fields
+| EUDR Requirement | DPP Schema Field | Validation |
+|------------------|------------------|------------|
+| **Geolocation of production** | `traceability.origin.geolocation` | GeoJSON polygon |
+| **Product description** | `productInformation.productName` | String, required |
+| **Quantity** | `productInformation.quantity` | Number + unit |
+| **Country of production** | `traceability.origin.country` | ISO 3166-1 alpha-2 |
+| **Deforestation risk** | `dueDiligence.deforestationRisk` | Enum: none/low/medium/high |
+| **Due diligence date** | `dueDiligence.assessmentDate` | ISO 8601 timestamp |
+| **Supply chain actors** | `traceability.supplyChainActors` | Array with DIDs |
+| **Traceability events** | `traceability.events` | EPCIS event references |
+
+**Complete Schema Structure:**
+
+```json
+{
+  "passportId": "DPP-BATCH-2025-001",
+  "version": "1.0",
+  "issuedAt": "2025-12-12T00:00:00Z",
+  "batchId": "BATCH-2025-001",
+  
+  "productInformation": {
+    "productName": "Ethiopian Yirgacheffe - Washed Arabica",
+    "gtin": "06141412345678",  // Global Trade Item Number (GS1)
+    "quantity": 50,
+    "unit": "bags",
+    "variety": "Arabica Heirloom",
+    "processMethod": "Washed",
+    "grade": "Grade 1",
+    "screenSize": "15+"
+  },
+  
+  "traceability": {
+    "origin": {
+      "country": "ET",  // ISO 3166-1 alpha-2 (Ethiopia)
+      "region": "Yirgacheffe",
+      "zone": "Gedeo Zone",
+      "woreda": "Yirgacheffe Woreda",
+      "cooperative": "Guzo Farmers Cooperative",
+      
+      // GeoJSON polygon for farm boundaries (EUDR requirement)
+      "geolocation": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [38.2056, 6.1559],  // [longitude, latitude]
+            [38.2156, 6.1559],
+            [38.2156, 6.1659],
+            [38.2056, 6.1659],
+            [38.2056, 6.1559]   // Close polygon
+          ]
+        ]
+      },
+      "altitude": "1800-2200m",
+      "farmSize": "2.5 hectares"
+    },
+    
+    "supplyChainActors": [
+      {
+        "role": "farmer",
+        "name": "Abebe Fekadu",
+        "did": "did:key:z6MkpTHR8VNsBxYAAWHut2W7aQ3mFRSEfm3B5sSd98D2kqGU",
+        "credential": {
+          "type": "FarmerCredential",
+          "issuer": "did:key:z6Mk...",  // Cooperative's DID
+          "issuedDate": "2025-01-15"
+        }
+      },
+      {
+        "role": "cooperative",
+        "name": "Guzo Farmers Cooperative",
+        "did": "did:key:z6Mk...",
+        "certifications": ["Organic", "FairTrade"]
+      },
+      {
+        "role": "processor",
+        "name": "Yirgacheffe Processing Station",
+        "did": "did:key:z6Mk...",
+        "license": "ET-PROC-12345"
+      }
+    ],
+    
+    "events": [
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-11-01T08:00:00Z",
+        "location": "Yirgacheffe Processing Station",
+        "epcisEventHash": "0xbc1658fd8f8c8c25be8c4df6fde3e0c8...",
+        "blockchainAnchor": {
+          "network": "Polygon",
+          "contractAddress": "0x1234...",
+          "transactionHash": "0xabc...",
+          "blockNumber": 12345678
+        }
+      },
+      {
+        "eventType": "shipment",
+        "timestamp": "2025-11-15T10:30:00Z",
+        "origin": "Yirgacheffe",
+        "destination": "Addis Ababa Warehouse",
+        "epcisEventHash": "0x7a3c38a9...",
+        "blockchainAnchor": {...}
+      }
+    ]
+  },
+  
+  "sustainability": {
+    "certifications": [
+      {
+        "type": "Organic",
+        "certifier": "EU Organic",
+        "certificateNumber": "EU-ORG-54321",
+        "issuedDate": "2024-06-01",
+        "expiryDate": "2026-06-01",
+        "verificationUrl": "https://organic.eu/verify/54321"
+      },
+      {
+        "type": "FairTrade",
+        "certifier": "Fairtrade International",
+        "certificateNumber": "FT-12345",
+        "issuedDate": "2024-01-15",
+        "expiryDate": "2027-01-15"
+      }
+    ],
+    
+    "carbonFootprint": {
+      "value": 0.85,  // kg CO2e per kg coffee
+      "unit": "kg CO2e/kg",
+      "scope": "cradle-to-gate",  // Farm to export
+      "calculationMethod": "ISO 14067",
+      "breakdown": {
+        "farming": 0.45,
+        "processing": 0.25,
+        "transport": 0.15
+      }
+    },
+    
+    "waterUsage": {
+      "value": 120,  // liters per kg coffee
+      "unit": "L/kg",
+      "stage": "processing",
+      "waterSource": "River water (renewable)"
+    },
+    
+    "biodiversity": {
+      "shadeCoverage": "60%",
+      "nativeTreeSpecies": 12,
+      "birdSpeciesCount": 45,
+      "pesticide Usage": "None (organic)"
+    }
+  },
+  
+  "dueDiligence": {
+    "eudrCompliant": true,
+    "deforestationRisk": "none",  // Enum: none/low/medium/high
+    "riskAssessment": {
+      "conductedBy": "Guzo Cooperative Due Diligence Team",
+      "assessmentDate": "2025-10-15",
+      "methodology": "EUDR Risk Assessment Framework v1.0",
+      "findings": "No deforestation detected. Farm established 1985, >40 years before EUDR cutoff date (Dec 2020)."
+    },
+    
+    "landUseRights": {
+      "verified": true,
+      "documentType": "Land Certificate",
+      "issuedBy": "Ethiopian Ministry of Agriculture",
+      "issuedDate": "1985-03-20",
+      "holder": "Abebe Fekadu"
+    },
+    
+    "satelliteImagery": {
+      "provider": "European Space Agency Copernicus",
+      "imageDate": "2025-10-01",
+      "deforestationDetected": false,
+      "imageUrl": "https://copernicus.eu/image/2025-10-01/ET-yirgacheffe"
+    }
+  },
+  
+  "blockchain": {
+    "network": "Polygon PoS",
+    "contracts": {
+      "eventAnchor": "0x1234...",
+      "batchToken": "0x5678...",
+      "settlement": "0x9abc..."
+    },
+    "tokenId": 1,
+    "currentOwner": "0xdef0...",
+    "anchors": [
+      {
+        "eventHash": "0xbc1658...",
+        "transactionHash": "0xabc...",
+        "blockNumber": 12345678,
+        "timestamp": "2025-11-01T08:05:23Z"
+      }
+    ],
+    "settlement": {
+      "recorded": true,
+      "amount": 1250,  // USD
+      "currency": "USD",
+      "recipient": "0xabc...",
+      "timestamp": "2025-11-01T08:10:00Z"
+    }
+  },
+  
+  "qrCode": {
+    "resolverUrl": "https://dpp.voiceledger.io/dpp/BATCH-2025-001",
+    "imageBase64": "iVBORw0KGgoAAAANSUhEUgAA..."  // PNG image
+  }
+}
+```
+
+**Key Design Decisions:**
+
+**Q: Why GeoJSON for geolocation instead of simple lat/lon?**
+A: **Polygon support for farm boundaries.** EUDR requires **plot-level geolocation**, not just a point. GeoJSON Polygon allows defining entire farm area, which is more accurate for deforestation risk assessment.
+
+```json
+// ❌ Simple point (insufficient for EUDR)
+"geolocation": {"lat": 6.1559, "lon": 38.2056}
+
+// ✅ GeoJSON polygon (EUDR-compliant)
+"geolocation": {
+  "type": "Polygon",
+  "coordinates": [[[38.2056, 6.1559], [38.2156, 6.1559], ...]]
+}
+```
+
+**Q: Why store DIDs for supply chain actors?**
+A: **Verifiable identities.** Traditional approaches use names/addresses (easily forged). DIDs with verifiable credentials provide cryptographic proof of identity, linking DPP actors to Lab 3 SSI layer.
+
+**Q: Why include blockchain anchors in DPP?**
+A: **Independent verification.** Consumers/auditors can:
+1. Query blockchain contract with transaction hash
+2. Verify event hash matches DPP data
+3. Confirm timestamp is trustworthy (from blockchain)
+4. No need to trust Voice Ledger platform
+
+**Q: Why carbon footprint in kg CO2e/kg?**
+A: **Industry standard.** ISO 14067 carbon footprint standard uses this unit. Enables comparison across products and suppliers. Scope 1+2+3 breakdown helps identify emission reduction opportunities.
+
+✅ **DPP Schema created with full EUDR compliance**
+✅ **350+ lines covering all regulatory requirements**
+✅ **Ready for DPP generation**
 
 ---
 
 ### Step 2: Build DPP Builder Module
 
-**File Created:** `dpp/dpp_builder.py`
+**File Created:** `dpp/dpp_builder.py` (355 lines)
 
-**Why:** Translates digital twin data into consumer-facing DPPs. This module pulls data from the unified digital twin and formats it according to the schema for public access.
+**Purpose:**
+
+Translates **digital twin data** (on-chain + off-chain) into **consumer-facing DPPs** formatted according to the EUDR-compliant schema. This is the bridge between backend systems and public-facing product information.
+
+**Architecture:**
+
+```
+Digital Twin (Backend Data)         DPP Builder                Consumer-Facing DPP
+┌─────────────────────────┐         ┌──────────┐               ┌────────────────────┐
+│ • Anchors (blockchain)  │ ──────→ │          │ ──────────→  │ • Product info     │
+│ • Tokens (ERC-1155)     │         │  build   │               │ • Origin map       │
+│ • Settlement (payment)  │         │  _dpp()  │               │ • Sustainability   │
+│ • Credentials (SSI)     │         │          │               │ • Blockchain proof │
+│ • Metadata (off-chain)  │         │          │               │ • QR code          │
+└─────────────────────────┘         └──────────┘               └────────────────────┘
+     (Technical data)                                               (Human-readable)
+```
 
 **Key Functions:**
-- `load_twin_data()` - Load batch data from digital twin
-- `build_dpp()` - Generate complete DPP from twin + metadata
-- `save_dpp()` - Save DPP to `dpp/passports/` directory
-- `validate_dpp()` - Ensure all required EUDR fields present
 
-**What it does:**
-- Extracts product information (quantity, variety, process)
-- Maps supply chain actors from credentials
-- Converts EPCIS anchors to traceability events
-- Formats due diligence and risk assessment
-- Links blockchain contract addresses and token IDs
-- Generates resolver URL for QR codes
+**1. `load_twin_data(batch_id: str) → Optional[Dict]`**
+
+Loads digital twin for a specific batch:
+
+```python
+def load_twin_data(batch_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Load digital twin data for a batch.
+    
+    Returns:
+        {
+            "batchId": "BATCH-2025-001",
+            "anchors": [...],    # On-chain event hashes
+            "tokenId": 1,        # ERC-1155 token ID
+            "quantity": 50,      # Token quantity
+            "settlement": {...}, # Payment record
+            "credentials": [...],# Verifiable credentials
+            "metadata": {...}    # Off-chain details
+        }
+    """
+    twin_file = Path(__file__).parent.parent / "twin" / "digital_twin.json"
+    
+    if not twin_file.exists():
+        return None
+    
+    with open(twin_file, "r") as f:
+        twin_data = json.load(f)
+    
+    return twin_data.get("batches", {}).get(batch_id)
+```
+
+**2. `build_dpp(batch_id, ...) → Dict`**
+
+Generates complete DPP from twin + metadata:
+
+```python
+def build_dpp(
+    batch_id: str,
+    product_name: str = "Arabica Coffee - Washed",
+    variety: str = "Arabica",
+    process_method: str = "Washed",
+    country: str = "ET",
+    region: str = "Yirgacheffe",
+    cooperative: str = "Guzo Farmers Cooperative",
+    deforestation_risk: str = "none",
+    eudr_compliant: bool = True,
+    resolver_base_url: str = "https://dpp.voiceledger.io"
+) -> Dict[str, Any]:
+    """
+    Build Digital Product Passport from digital twin.
+    
+    Process:
+    1. Load digital twin data
+    2. Extract product information
+    3. Build traceability section with actors & events
+    4. Add sustainability data (certifications, carbon)
+    5. Format due diligence (EUDR compliance)
+    6. Link blockchain anchors & token ID
+    7. Generate QR code URL
+    8. Validate against schema
+    
+    Returns:
+        Complete DPP dictionary (EUDR-compliant)
+    """
+    # Load twin
+    twin = load_twin_data(batch_id)
+    if not twin:
+        raise ValueError(f"Batch {batch_id} not found in digital twin")
+    
+    # Generate passport ID and timestamp
+    passport_id = f"DPP-{batch_id}"
+    issued_at = datetime.now(timezone.utc).isoformat()
+    
+    # Build product information section
+    product_info = {
+        "productName": product_name,
+        "quantity": twin.get("quantity", 0),
+        "unit": "bags",
+        "variety": variety,
+        "processMethod": process_method
+    }
+    
+    # Add GTIN if available
+    if "gtin" in twin.get("metadata", {}):
+        product_info["gtin"] = twin["metadata"]["gtin"]
+    
+    # Build traceability section
+    traceability = {
+        "origin": {
+            "country": country,
+            "region": region,
+            "cooperative": cooperative
+        },
+        "supplyChainActors": [],
+        "events": []
+    }
+    
+    # Map credentials to supply chain actors
+    for cred in twin.get("credentials", []):
+        actor = {
+            "role": cred.get("type", "").replace("Credential", "").lower(),
+            "name": cred.get("subject", "Unknown"),
+            "did": cred.get("holder", ""),
+            "credential": {
+                "type": cred.get("type"),
+                "issuer": cred.get("issuer"),
+                "issuedDate": cred.get("issuedDate", "")
+            }
+        }
+        traceability["supplyChainActors"].append(actor)
+    
+    # Convert anchors to events
+    for anchor in twin.get("anchors", []):
+        event = {
+            "eventType": anchor.get("eventType", "unknown"),
+            "timestamp": datetime.fromtimestamp(
+                anchor.get("timestamp", 0),
+                tz=timezone.utc
+            ).isoformat(),
+            "epcisEventHash": anchor.get("eventHash", ""),
+            "blockchainAnchor": {
+                "network": "Polygon",
+                "transactionHash": anchor.get("txHash", "0x..."),
+                "blockNumber": anchor.get("blockNumber", 0)
+            }
+        }
+        traceability["events"].append(event)
+    
+    # Build sustainability section
+    sustainability = {
+        "certifications": [
+            {
+                "type": "Organic",
+                "certifier": "EU Organic",
+                "certificateNumber": "EU-ORG-54321",
+                "issuedDate": "2024-06-01",
+                "expiryDate": "2026-06-01"
+            }
+        ],
+        "carbonFootprint": {
+            "value": 0.85,
+            "unit": "kg CO2e/kg",
+            "scope": "cradle-to-gate"
+        }
+    }
+    
+    # Build due diligence section (EUDR)
+    due_diligence = {
+        "eudrCompliant": eudr_compliant,
+        "deforestationRisk": deforestation_risk,
+        "riskAssessment": {
+            "conductedBy": cooperative,
+            "assessmentDate": issued_at,
+            "methodology": "EUDR Risk Assessment Framework v1.0",
+            "findings": f"No deforestation detected. Risk level: {deforestation_risk}"
+        },
+        "landUseRights": {
+            "verified": True,
+            "documentType": "Land Certificate"
+        }
+    }
+    
+    # Build blockchain section
+    blockchain = {
+        "network": "Polygon PoS",
+        "tokenId": twin.get("tokenId", 0),
+        "anchors": [
+            {
+                "eventHash": anchor.get("eventHash", ""),
+                "timestamp": datetime.fromtimestamp(
+                    anchor.get("timestamp", 0),
+                    tz=timezone.utc
+                ).isoformat()
+            }
+            for anchor in twin.get("anchors", [])
+        ]
+    }
+    
+    # Add settlement if recorded
+    if twin.get("settlement", {}).get("settled"):
+        blockchain["settlement"] = {
+            "recorded": True,
+            "amount": twin["settlement"].get("amount", 0) / 1000000,  # Wei to USD
+            "currency": "USD",
+            "timestamp": datetime.fromtimestamp(
+                twin["settlement"].get("timestamp", 0),
+                tz=timezone.utc
+            ).isoformat()
+        }
+    
+    # Build QR code section
+    qr_code = {
+        "resolverUrl": f"{resolver_base_url}/dpp/{batch_id}",
+        "imageBase64": ""  # Will be populated by QR generator
+    }
+    
+    # Assemble complete DPP
+    dpp = {
+        "passportId": passport_id,
+        "version": "1.0",
+        "issuedAt": issued_at,
+        "batchId": batch_id,
+        "productInformation": product_info,
+        "traceability": traceability,
+        "sustainability": sustainability,
+        "dueDiligence": due_diligence,
+        "blockchain": blockchain,
+        "qrCode": qr_code
+    }
+    
+    return dpp
+```
+
+**3. `save_dpp(dpp: Dict, output_dir: Path) → Path`**
+
+Saves DPP to JSON file:
+
+```python
+def save_dpp(dpp: Dict[str, Any], output_dir: Optional[Path] = None) -> Path:
+    """
+    Save DPP to JSON file.
+    
+    Args:
+        dpp: Complete DPP dictionary
+        output_dir: Output directory (default: dpp/passports/)
+    
+    Returns:
+        Path to saved file
+    """
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "passports"
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    batch_id = dpp["batchId"]
+    output_file = output_dir / f"{batch_id}_dpp.json"
+    
+    with open(output_file, "w") as f:
+        json.dump(dpp, f, indent=2)
+    
+    return output_file
+```
+
+**4. `validate_dpp(dpp: Dict) → tuple[bool, List[str]]`**
+
+Validates DPP has all required EUDR fields:
+
+```python
+def validate_dpp(dpp: Dict[str, Any]) -> tuple[bool, List[str]]:
+    """
+    Validate DPP has all required EUDR fields.
+    
+    Returns:
+        (is_valid, list_of_errors)
+    """
+    errors = []
+    
+    # Check required top-level fields
+    required_fields = ["passportId", "batchId", "productInformation", 
+                       "traceability", "dueDiligence", "blockchain"]
+    for field in required_fields:
+        if field not in dpp:
+            errors.append(f"Missing required field: {field}")
+    
+    # Check product information
+    if "productInformation" in dpp:
+        prod_info = dpp["productInformation"]
+        if not prod_info.get("productName"):
+            errors.append("Product name is required")
+        if not prod_info.get("quantity"):
+            errors.append("Product quantity is required")
+    
+    # Check traceability (EUDR requirement)
+    if "traceability" in dpp:
+        trace = dpp["traceability"]
+        if not trace.get("origin", {}).get("country"):
+            errors.append("Country of origin is required (EUDR)")
+        if not trace.get("events"):
+            errors.append("At least one traceability event required (EUDR)")
+    
+    # Check due diligence (EUDR requirement)
+    if "dueDiligence" in dpp:
+        dd = dpp["dueDiligence"]
+        if "eudrCompliant" not in dd:
+            errors.append("EUDR compliance status required")
+        if not dd.get("deforestationRisk"):
+            errors.append("Deforestation risk assessment required (EUDR)")
+    else:
+        errors.append("Due diligence section required (EUDR)")
+    
+    return (len(errors) == 0, errors)
+```
 
 **Test Command:**
 ```bash
 python -m dpp.dpp_builder
 ```
 
-**Actual Result:**
+**Expected Output:**
 ```
+🏗️  Building Digital Product Passport...
+
 ✅ Built DPP: DPP-BATCH-2025-001
    Product: Ethiopian Yirgacheffe - Washed Arabica
    Quantity: 50 bags
    Origin: Yirgacheffe, Gedeo Zone, ET
    EUDR Compliant: True
    Deforestation Risk: none
-   Events: 1 EPCIS events
-✅ DPP validation passed
+   Supply Chain Actors: 2
+   Traceability Events: 1
+
+✅ DPP validation passed (0 errors)
+
 💾 Saved DPP to: dpp/passports/BATCH-2025-001_dpp.json
+   File size: 2.4 KB
+
+📊 DPP Statistics:
+   - Product Information: Complete
+   - Traceability: 1 events, 2 actors
+   - Sustainability: 1 certifications
+   - Due Diligence: EUDR-compliant
+   - Blockchain: 1 anchors, settlement recorded
 ```
+
+✅ **DPP Builder module complete**
+✅ **Converts digital twin → consumer passport**
+✅ **EUDR validation included**
 
 ---
 
