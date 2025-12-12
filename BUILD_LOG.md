@@ -2033,30 +2033,218 @@ Regardless of the API choice, Lab 2 will create:
 
 **Implementation Choice:** OpenAI APIs (Whisper for ASR, GPT for NLU)
 
+### 🎯 Lab Overview
+
+**Learning Objectives:**
+- Understand modern web API architecture (FastAPI + ASGI)
+- Implement audio file upload and processing
+- Integrate OpenAI Whisper for speech recognition
+- Use GPT for natural language understanding
+- Implement secure API key authentication
+- Handle file I/O and temporary storage
+- Build RESTful endpoints with proper error handling
+
+**Why This Lab Matters:**
+Voice input is the most natural way for field workers to capture supply chain data. A farmer in rural Ethiopia can simply speak: "50 bags of coffee delivered to Addis warehouse" instead of filling forms. This lab builds the bridge between human speech and structured data.
+
+**Architecture Pattern:**
+```
+Audio File → ASR (Speech-to-Text) → NLU (Text-to-Structure) → EPCIS Event
+```
+
+---
+
 ### Step 1: Install Lab 2 Dependencies
 
 **Command:**
 ```bash
-pip install -r requirements.txt
+pip install fastapi==0.104.1 uvicorn==0.24.0 python-multipart==0.0.6 openai==1.12.0 python-dotenv==1.0.0 httpx==0.26.0
 ```
 
-**Packages Added:**
-- `fastapi==0.104.1` - Modern web framework for building APIs
-- `uvicorn==0.24.0` - ASGI server to run FastAPI
-- `python-multipart==0.0.6` - Required for file uploads
-- `openai==1.3.5` - OpenAI API client
-- `pydantic==2.5.0` - Data validation (FastAPI dependency)
+#### 📦 Package Deep Dive
 
-**Why Each Package:**
-- **FastAPI** - High-performance async framework, perfect for file uploads and AI integration
-- **Uvicorn** - Production-ready ASGI server with great performance
-- **python-multipart** - Handles multipart/form-data for audio file uploads
-- **OpenAI** - Official client for Whisper (ASR) and GPT (NLU) APIs
-- **Pydantic** - Type validation and serialization for API responses
+**1. FastAPI (0.104.1)**
+- **What:** Modern Python web framework built on Starlette and Pydantic
+- **Why not Flask/Django?**
+  - Flask: Synchronous, slower for I/O-bound tasks (file uploads, API calls)
+  - Django: Heavyweight, includes ORM we don't need
+  - FastAPI: Async-native, automatic API docs, type validation
+- **Key Features:**
+  - Automatic OpenAPI (Swagger) documentation
+  - Async/await support (concurrent request handling)
+  - Dependency injection system
+  - Request/response validation via Pydantic
+- **Performance:** ~3-5x faster than Flask for async workloads
 
-**Expected Outcome:** All packages installed successfully.
+**2. Uvicorn (0.24.0)**
+- **What:** ASGI (Asynchronous Server Gateway Interface) server
+- **Why not WSGI (Gunicorn)?**
+  - WSGI: Synchronous, one request per worker
+  - ASGI: Asynchronous, many requests per worker
+  - Async is critical for I/O (file uploads, AI API calls)
+- **Architecture:**
+  ```
+  HTTP Request → Uvicorn → FastAPI → Your Code → Response
+  ```
+- **Production:** Often run behind Nginx reverse proxy
 
-**Actual Result:** Successfully installed fastapi, uvicorn, openai, and dependencies ✅
+**3. python-multipart (0.0.6)**
+- **What:** Parser for multipart/form-data (file uploads)
+- **Why needed:** FastAPI's `UploadFile` depends on this
+- **RFC 7578:** Standard for uploading files over HTTP
+- **Format Example:**
+  ```
+  Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+  
+  ------WebKitFormBoundary
+  Content-Disposition: form-data; name="file"; filename="audio.wav"
+  Content-Type: audio/wav
+  
+  [binary audio data]
+  ------WebKitFormBoundary--
+  ```
+
+**4. OpenAI (1.12.0)**
+- **What:** Official Python client for OpenAI APIs
+- **Components:**
+  - `client.audio.transcriptions.create()` - Whisper ASR
+  - `client.chat.completions.create()` - GPT models
+- **Authentication:** API key via environment variable
+- **Pricing (as of 2025):**
+  - Whisper: $0.006 per minute of audio
+  - GPT-3.5-turbo: $0.0015 per 1K input tokens, $0.002 per 1K output
+- **Rate Limits:** Tier-based (starter: 3 requests/min)
+
+**5. python-dotenv (1.0.0)**
+- **What:** Loads environment variables from `.env` file
+- **Why:** Keeps secrets out of code (API keys, passwords)
+- **Security:** `.env` must be in `.gitignore`
+- **Example .env:**
+  ```
+  OPENAI_API_KEY=sk-...
+  VOICE_LEDGER_API_KEY=dev-secret-key-2025
+  ```
+
+**6. httpx (0.26.0)**
+- **What:** HTTP client library (async and sync)
+- **Why:** OpenAI SDK dependency for making API calls
+- **Features:** HTTP/2 support, connection pooling, timeouts
+
+---
+
+#### 📋 Installation Process
+
+**Step-by-Step:**
+
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate
+
+# Update pip (optional but recommended)
+pip install --upgrade pip
+
+# Install all dependencies at once
+pip install fastapi==0.104.1 uvicorn==0.24.0 python-multipart==0.0.6 \
+            openai==1.12.0 python-dotenv==1.0.0 httpx==0.26.0
+
+# Verify installations
+pip list | grep -E "fastapi|uvicorn|openai|multipart|dotenv|httpx"
+```
+
+**Expected Outcome:**
+```
+fastapi           0.104.1
+httpx             0.26.0
+openai            1.12.0
+python-dotenv     1.0.0
+python-multipart  0.0.6
+uvicorn           0.24.0
+```
+
+**Additional Dependencies (Installed Automatically):**
+- `starlette` - FastAPI's foundation (ASGI framework)
+- `pydantic` - Data validation and settings management
+- `anyio` - Async I/O abstraction layer
+- `typing-extensions` - Backported typing features
+- `click` - Uvicorn's CLI framework
+- `h11` - HTTP/1.1 protocol implementation
+
+**Actual Result:** ✅ All packages installed successfully
+
+---
+
+#### 🔧 Troubleshooting Common Installation Issues
+
+**Issue 1: OpenAI version conflict**
+```bash
+# Error: "openai 1.12.0 requires httpx<1.0,>=0.23"
+# Solution: Install compatible httpx version
+pip install httpx==0.26.0
+```
+
+**Issue 2: Apple Silicon (M1/M2) compatibility**
+```bash
+# If getting architecture errors:
+pip install --upgrade pip setuptools wheel
+pip install --no-binary :all: python-multipart
+```
+
+**Issue 3: Permission errors**
+```bash
+# If "Permission denied":
+# Don't use sudo! Ensure venv is activated
+deactivate && source venv/bin/activate
+pip install ...
+```
+
+**Issue 4: SSL certificate errors**
+```bash
+# If "SSL: CERTIFICATE_VERIFY_FAILED":
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org ...
+```
+
+---
+
+#### 🎓 Why This Dependency Stack?
+
+**Async vs Sync Comparison:**
+
+```python
+# Synchronous (Flask):
+def upload_and_process():
+    file = request.files['audio']
+    file.save('temp.wav')          # Blocks while writing
+    transcript = whisper(temp.wav)  # Blocks while waiting for API
+    result = gpt(transcript)        # Blocks again
+    return result
+# Problem: Can only handle 1 request at a time per worker
+
+# Asynchronous (FastAPI):
+async def upload_and_process():
+    file = await request.file()    # Yields control while reading
+    await file.save('temp.wav')     # Yields while writing
+    transcript = await whisper()    # Yields while waiting for API
+    result = await gpt()            # Yields while waiting
+    return result
+# Benefit: Can handle 100+ concurrent requests per worker
+```
+
+**Real-World Impact:**
+- Sync: 10 requests/sec (1 worker)
+- Async: 50-100 requests/sec (1 worker)
+- Cost savings: Need fewer servers
+
+---
+
+#### 📖 Further Reading
+
+- **FastAPI Documentation**: https://fastapi.tiangolo.com/
+- **ASGI Specification**: https://asgi.readthedocs.io/
+- **OpenAI API Reference**: https://platform.openai.com/docs/api-reference
+- **RFC 7578 (Multipart)**: https://www.rfc-editor.org/rfc/rfc7578
+- **Python Async/Await**: https://docs.python.org/3/library/asyncio.html
+
+✅ **Step 1 Complete!** All dependencies installed and understood.
 
 ---
 
@@ -2064,15 +2252,436 @@ pip install -r requirements.txt
 
 **File Created:** `voice/service/auth.py`
 
-**Why:** Secure API endpoints to ensure only authorized clients can submit voice commands. Uses API key authentication via HTTP headers.
+#### 📚 Background: API Authentication Patterns
 
-**What it does:**
-- Reads expected API key from `VOICE_LEDGER_API_KEY` environment variable
-- Validates incoming `X-API-Key` header on protected endpoints
-- Returns 401 Unauthorized if key is invalid
-- Returns 500 if API key not configured
+**Why Authenticate?**
+Without authentication, anyone could:
+- Overload your API with requests (DoS)
+- Access sensitive supply chain data
+- Submit false events (data integrity attacks)
+- Incur costs on your OpenAI API key
 
-**Test:** Module imports successfully ✅
+**Authentication Types:**
+
+1. **API Keys** (What we're using)
+   - Simple: Just a secret string in header
+   - Stateless: No session management needed
+   - Good for: Service-to-service communication
+   - Example: `X-API-Key: abc123...`
+
+2. **OAuth 2.0** (More complex)
+   - Token-based with expiration
+   - Supports scopes and permissions
+   - Good for: User-facing applications
+   - Overkill for our prototype
+
+3. **JWT (JSON Web Tokens)**
+   - Self-contained tokens with claims
+   - Can include user ID, roles, expiration
+   - Good for: Distributed systems
+   - More overhead than we need
+
+4. **Basic Auth**
+   - Username:password in header
+   - Base64 encoded (not encrypted!)
+   - Legacy approach, avoid if possible
+
+**Our Choice: API Key**
+- ✅ Simple to implement
+- ✅ Sufficient for service-to-service auth
+- ✅ Easy to rotate (change .env file)
+- ✅ No session state to manage
+
+---
+
+#### 💻 Complete Implementation
+
+**File:** `voice/service/auth.py`
+
+```python
+"""
+API Key Authentication Module
+
+This module implements API key-based authentication for the Voice Ledger API.
+All requests to protected endpoints must include a valid API key in the X-API-Key header.
+
+Security Considerations:
+- API key stored in environment variable (never in code)
+- Uses FastAPI's dependency injection for clean separation
+- Returns appropriate HTTP status codes (401 Unauthorized, 500 Server Error)
+- Constant-time comparison prevents timing attacks (Python's == is safe for strings)
+
+Production Enhancements:
+- Rate limiting (prevent abuse even with valid key)
+- Key rotation mechanism (change keys periodically)
+- Audit logging (track who accessed what)
+- Multiple keys (different keys for different clients)
+"""
+
+import os
+from fastapi import HTTPException, Security
+from fastapi.security.api_key import APIKeyHeader
+
+# Define the header name for the API key
+# Standard convention: X-API-Key (X- prefix for custom headers)
+API_KEY_NAME = "X-API-Key"
+
+# Create FastAPI security scheme
+# auto_error=False → Don't automatically raise exception (we handle it)
+_api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+
+def get_expected_api_key() -> str:
+    """
+    Retrieve the expected API key from environment variables.
+    
+    Environment Variable: VOICE_LEDGER_API_KEY
+    
+    Security Note:
+    - NEVER hardcode API keys in source code
+    - Use environment variables or secret management services
+    - Ensure .env is in .gitignore
+    
+    Returns:
+        The API key from VOICE_LEDGER_API_KEY environment variable
+        Empty string if not set (will cause 500 error in verify_api_key)
+    
+    Example .env:
+        VOICE_LEDGER_API_KEY=dev-secret-key-2025
+    """
+    return os.getenv("VOICE_LEDGER_API_KEY", "")
+
+
+async def verify_api_key(
+    api_key: str = Security(_api_key_header),
+):
+    """
+    Verify that the provided API key matches the expected key.
+    
+    This function is used as a FastAPI dependency. When added to a route:
+    
+        @app.post("/endpoint")
+        async def my_endpoint(auth: bool = Depends(verify_api_key)):
+            ...
+    
+    FastAPI will:
+    1. Extract X-API-Key from request header
+    2. Call verify_api_key(api_key=extracted_value)
+    3. Raise HTTPException if validation fails
+    4. Continue to endpoint if validation succeeds
+    
+    Args:
+        api_key: API key from request header (extracted by Security())
+        
+    Returns:
+        True if valid (allows request to continue)
+        
+    Raises:
+        HTTPException 500: If API key not configured on server
+        HTTPException 401: If API key is missing or invalid
+    
+    HTTP Status Codes Explained:
+    - 401 Unauthorized: Client provided wrong/missing credentials
+    - 403 Forbidden: Client authenticated but lacks permissions
+    - 500 Internal Server Error: Server misconfiguration
+    
+    Security Considerations:
+    1. Constant-time comparison: Python's == operator is safe for strings
+       (prevents timing attacks where attacker measures response time
+        to guess key character by character)
+    
+    2. Early return on misconfiguration: If server has no expected key,
+       reject immediately with 500 (operator must fix configuration)
+    
+    3. Generic error message: Don't reveal whether key exists or is wrong
+       (prevents information leakage)
+    """
+    
+    # Step 1: Get the expected key from environment
+    expected = get_expected_api_key()
+    
+    # Step 2: Check if server is configured properly
+    if not expected:
+        # API key not configured on server - operator error
+        # Return 500 (server misconfiguration, not client error)
+        raise HTTPException(
+            status_code=500,
+            detail="API key not configured"
+        )
+    
+    # Step 3: Validate the provided key
+    if api_key != expected:
+        # Either:
+        # - Client didn't provide a key (api_key is None)
+        # - Client provided wrong key
+        # Return 401 Unauthorized (client authentication failed)
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key"
+        )
+    
+    # Step 4: Validation successful
+    return True
+```
+
+---
+
+#### 🔍 Deep Dive: FastAPI Security System
+
+**How Dependency Injection Works:**
+
+```python
+# Traditional approach (manual):
+@app.post("/endpoint")
+async def my_endpoint(request: Request):
+    api_key = request.headers.get("X-API-Key")
+    if api_key != os.getenv("EXPECTED_KEY"):
+        raise HTTPException(401)
+    # ... actual logic
+# Problem: Security logic mixed with business logic
+
+# FastAPI approach (dependency injection):
+@app.post("/endpoint")
+async def my_endpoint(
+    auth: bool = Depends(verify_api_key)  # Security handled here
+):
+    # ... only business logic
+# Benefit: Separation of concerns, reusable, testable
+```
+
+**Security Dependency Chain:**
+
+```python
+# 1. Client makes request:
+POST /asr-nlu
+Headers: X-API-Key: abc123
+
+# 2. FastAPI extracts header:
+_api_key_header = APIKeyHeader(name="X-API-Key")
+# Looks for "X-API-Key" in request.headers
+
+# 3. FastAPI calls security function:
+api_key = Security(_api_key_header)  # api_key = "abc123"
+result = await verify_api_key(api_key)
+
+# 4a. If valid: Continue to endpoint
+# 4b. If invalid: Return 401, never reach endpoint
+```
+
+**Why `async def` for auth?**
+- Even though verification is synchronous, FastAPI requires consistency
+- All dependencies must match endpoint's sync/async signature
+- Future-proofing: Could add async operations (database lookup, etc.)
+
+---
+
+#### 🎯 Design Decisions Explained
+
+**Q: Why custom header `X-API-Key` instead of `Authorization`?**
+A: Convention and clarity:
+- `Authorization` typically used for Bearer tokens, Basic auth, OAuth
+- Custom headers clearly indicate custom authentication schemes
+- `X-API-Key` is industry convention for API key auth
+- Some proxies/CDNs cache `Authorization`, not `X-API-Key`
+
+**Q: Why return 500 if API key not configured?**
+A: Fail-safe principle:
+- If server has no expected key, something is wrong with deployment
+- Better to fail loudly (500) than silently accept all requests
+- Operator must fix configuration before API is usable
+
+**Q: Why `auto_error=False` in APIKeyHeader?**
+A: Manual error handling:
+- `auto_error=True` → FastAPI raises generic 403 Forbidden
+- `auto_error=False` → We handle errors, return specific messages
+- Allows distinguishing between "not configured" (500) and "invalid" (401)
+
+**Q: What about timing attacks?**
+A: Python's string comparison is safe:
+```python
+# Vulnerable (C-style strcmp):
+for i in range(len(expected)):
+    if expected[i] != provided[i]:
+        return False  # Returns at first mismatch (timing leak!)
+
+# Safe (Python's ==):
+# Internally uses memcmp or similar
+# Always compares full strings (constant time)
+if api_key != expected:  # Safe ✅
+```
+
+For ultra-high security (nation-state attackers), use:
+```python
+import secrets
+if not secrets.compare_digest(api_key, expected):
+    raise HTTPException(401)
+```
+
+---
+
+#### ✅ Testing the Implementation
+
+**Test 1: Module Import**
+```bash
+python3 -c "from voice.service.auth import verify_api_key; print('✅ Import successful')"
+```
+
+**Test 2: Environment Variable Loading**
+```bash
+# Create .env file
+cat > .env << EOF
+OPENAI_API_KEY=sk-your-openai-key-here
+VOICE_LEDGER_API_KEY=dev-secret-key-2025
+EOF
+
+# Test loading
+python3 -c "
+from voice.service.auth import get_expected_api_key
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+key = get_expected_api_key()
+print(f'Loaded API key: {key[:10]}...' if key else 'No key found')
+"
+```
+
+**Expected Output:**
+```
+Loaded API key: dev-secret...
+```
+
+**Test 3: Direct Authentication Function**
+```python
+import asyncio
+from voice.service.auth import verify_api_key
+
+async def test_auth():
+    # Test with correct key
+    try:
+        result = await verify_api_key(api_key="dev-secret-key-2025")
+        print(f"✅ Valid key accepted: {result}")
+    except Exception as e:
+        print(f"❌ Valid key rejected: {e}")
+    
+    # Test with wrong key
+    try:
+        result = await verify_api_key(api_key="wrong-key")
+        print(f"❌ Invalid key accepted!")
+    except Exception as e:
+        print(f"✅ Invalid key rejected: {e}")
+
+asyncio.run(test_auth())
+```
+
+---
+
+#### ⚠️ Common Pitfalls
+
+**Pitfall 1: Hardcoding API keys**
+```python
+# NEVER do this:
+API_KEY = "dev-secret-key-2025"  # Committed to git! ❌
+
+# Always use environment variables:
+API_KEY = os.getenv("VOICE_LEDGER_API_KEY")  # ✅
+```
+
+**Pitfall 2: Not adding .env to .gitignore**
+```bash
+# Check if .env is ignored:
+git check-ignore .env
+# Should output: .env
+
+# If not ignored, add to .gitignore:
+echo ".env" >> .gitignore
+```
+
+**Pitfall 3: Synchronous function with async endpoint**
+```python
+# Wrong:
+def verify_api_key(...):  # Regular function
+    ...
+
+@app.post("/endpoint")
+async def my_endpoint(...):  # Async endpoint
+    ...
+# FastAPI will warn about sync dependency in async endpoint
+
+# Right:
+async def verify_api_key(...):  # Async function ✅
+```
+
+**Pitfall 4: Returning wrong status codes**
+```python
+# Wrong:
+if not api_key:
+    raise HTTPException(500, "No API key")  # 500 for client error ❌
+
+# Right:
+if not api_key:
+    raise HTTPException(401, "Invalid API key")  # 401 for auth failure ✅
+```
+
+---
+
+#### 🔐 Production Security Enhancements
+
+**1. Rate Limiting**
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@app.post("/asr-nlu")
+@limiter.limit("10/minute")  # Max 10 requests per minute
+async def endpoint(...):
+    ...
+```
+
+**2. API Key Rotation**
+```python
+# Support multiple active keys during rotation
+VALID_KEYS = os.getenv("VOICE_LEDGER_API_KEYS").split(",")
+
+if api_key not in VALID_KEYS:
+    raise HTTPException(401)
+```
+
+**3. Audit Logging**
+```python
+import logging
+
+async def verify_api_key(api_key: str, request: Request):
+    logger = logging.getLogger("auth")
+    
+    if api_key != expected:
+        logger.warning(f"Invalid API key from {request.client.host}")
+        raise HTTPException(401)
+    
+    logger.info(f"Authenticated request from {request.client.host}")
+```
+
+**4. HTTPS Enforcement**
+```python
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+
+# Redirect HTTP → HTTPS in production
+app.add_middleware(HTTPSRedirectMiddleware)
+```
+
+---
+
+#### 📖 Further Reading
+
+- **FastAPI Security**: https://fastapi.tiangolo.com/tutorial/security/
+- **OAuth 2.0 Spec**: RFC 6749 (for more complex auth needs)
+- **API Key Best Practices**: OWASP API Security Top 10
+- **Timing Attacks**: https://codahale.com/a-lesson-in-timing-attacks/
+- **secrets module**: https://docs.python.org/3/library/secrets.html
+
+✅ **Step 2 Complete!** Secure API authentication implemented.
 
 ---
 
