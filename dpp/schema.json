@@ -1,0 +1,356 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Coffee Batch Digital Product Passport",
+  "description": "EUDR-compliant Digital Product Passport for coffee batches",
+  "type": "object",
+  "required": [
+    "passportId",
+    "batchId",
+    "productInformation",
+    "traceability",
+    "sustainability",
+    "dueDiligence",
+    "blockchain",
+    "version"
+  ],
+  "properties": {
+    "passportId": {
+      "type": "string",
+      "description": "Unique identifier for this DPP instance",
+      "pattern": "^DPP-[A-Z0-9-]+$"
+    },
+    "batchId": {
+      "type": "string",
+      "description": "GS1 SSCC or custom batch identifier"
+    },
+    "version": {
+      "type": "string",
+      "description": "DPP schema version",
+      "default": "1.0.0"
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of DPP issuance"
+    },
+    "productInformation": {
+      "type": "object",
+      "required": ["productName", "quantity", "unit"],
+      "properties": {
+        "productName": {
+          "type": "string",
+          "description": "Product name (e.g., 'Arabica Coffee - Washed')"
+        },
+        "gtin": {
+          "type": "string",
+          "description": "GS1 Global Trade Item Number",
+          "pattern": "^[0-9]{14}$"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Batch quantity"
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["bags", "kg", "tonnes"],
+          "description": "Unit of measurement"
+        },
+        "variety": {
+          "type": "string",
+          "description": "Coffee variety (e.g., 'Arabica', 'Robusta')"
+        },
+        "processMethod": {
+          "type": "string",
+          "description": "Processing method (e.g., 'Washed', 'Natural', 'Honey')"
+        }
+      }
+    },
+    "traceability": {
+      "type": "object",
+      "required": ["origin", "supplyChainActors"],
+      "properties": {
+        "origin": {
+          "type": "object",
+          "required": ["country", "region"],
+          "properties": {
+            "country": {
+              "type": "string",
+              "description": "ISO 3166-1 alpha-2 country code"
+            },
+            "region": {
+              "type": "string",
+              "description": "Region/province name"
+            },
+            "cooperative": {
+              "type": "string",
+              "description": "Farmer cooperative name"
+            },
+            "farmId": {
+              "type": "string",
+              "description": "Farm identifier"
+            },
+            "geolocation": {
+              "type": "object",
+              "properties": {
+                "latitude": {
+                  "type": "number",
+                  "minimum": -90,
+                  "maximum": 90
+                },
+                "longitude": {
+                  "type": "number",
+                  "minimum": -180,
+                  "maximum": 180
+                },
+                "polygon": {
+                  "type": "array",
+                  "description": "GeoJSON polygon coordinates for plot boundaries",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "supplyChainActors": {
+          "type": "array",
+          "description": "List of actors in the supply chain",
+          "items": {
+            "type": "object",
+            "required": ["role", "name", "did"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["farmer", "cooperative", "processor", "exporter", "importer", "roaster", "retailer"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "did": {
+                "type": "string",
+                "pattern": "^did:key:z[A-Za-z0-9]+$"
+              },
+              "gln": {
+                "type": "string",
+                "description": "GS1 Global Location Number",
+                "pattern": "^[0-9]{13}$"
+              },
+              "credential": {
+                "type": "object",
+                "description": "Reference to verifiable credential"
+              }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "description": "EPCIS events in the batch lifecycle",
+          "items": {
+            "type": "object",
+            "required": ["eventType", "timestamp", "eventHash"],
+            "properties": {
+              "eventType": {
+                "type": "string",
+                "enum": ["commissioning", "shipment", "receiving", "transformation", "aggregation"]
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "eventHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "SHA-256 hash of EPCIS event"
+              },
+              "location": {
+                "type": "string",
+                "description": "Location GLN or name"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sustainability": {
+      "type": "object",
+      "properties": {
+        "certifications": {
+          "type": "array",
+          "description": "Sustainability certifications",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["Organic", "FairTrade", "Rainforest Alliance", "UTZ", "Bird Friendly"]
+              },
+              "certificationBody": {
+                "type": "string"
+              },
+              "certificateId": {
+                "type": "string"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          }
+        },
+        "carbonFootprint": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number",
+              "description": "CO2 equivalent in kg"
+            },
+            "methodology": {
+              "type": "string"
+            }
+          }
+        },
+        "waterUsage": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number",
+              "description": "Water usage in liters"
+            },
+            "unit": {
+              "type": "string",
+              "default": "liters"
+            }
+          }
+        }
+      }
+    },
+    "dueDiligence": {
+      "type": "object",
+      "required": ["eudrCompliant", "riskAssessment"],
+      "properties": {
+        "eudrCompliant": {
+          "type": "boolean",
+          "description": "EUDR compliance status"
+        },
+        "riskAssessment": {
+          "type": "object",
+          "required": ["deforestationRisk", "assessmentDate"],
+          "properties": {
+            "deforestationRisk": {
+              "type": "string",
+              "enum": ["none", "low", "medium", "high"],
+              "description": "Deforestation risk level"
+            },
+            "assessmentDate": {
+              "type": "string",
+              "format": "date"
+            },
+            "assessor": {
+              "type": "string",
+              "description": "Organization that performed assessment"
+            },
+            "methodology": {
+              "type": "string"
+            },
+            "evidenceLinks": {
+              "type": "array",
+              "description": "Links to supporting documentation",
+              "items": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        },
+        "landUseRights": {
+          "type": "object",
+          "properties": {
+            "verified": {
+              "type": "boolean"
+            },
+            "verificationMethod": {
+              "type": "string"
+            },
+            "documentReference": {
+              "type": "string"
+            }
+          }
+        },
+        "dueDiligenceStatement": {
+          "type": "string",
+          "description": "Reference to due diligence credential or statement"
+        }
+      }
+    },
+    "blockchain": {
+      "type": "object",
+      "required": ["network", "eventAnchorContract"],
+      "properties": {
+        "network": {
+          "type": "string",
+          "description": "Blockchain network (e.g., 'ethereum', 'polygon', 'local')"
+        },
+        "eventAnchorContract": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$",
+          "description": "EPCISEventAnchor contract address"
+        },
+        "tokenContract": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$",
+          "description": "CoffeeBatchToken contract address"
+        },
+        "tokenId": {
+          "type": "number",
+          "description": "ERC-1155 token ID for this batch"
+        },
+        "settlementContract": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$",
+          "description": "Settlement contract address"
+        },
+        "anchors": {
+          "type": "array",
+          "description": "On-chain event anchors",
+          "items": {
+            "type": "object",
+            "properties": {
+              "eventHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "transactionHash": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]{64}$"
+              },
+              "blockNumber": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "qrCode": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "DPP resolver URL"
+        },
+        "image": {
+          "type": "string",
+          "description": "Base64-encoded QR code image"
+        }
+      }
+    }
+  }
+}

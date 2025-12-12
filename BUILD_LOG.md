@@ -1126,3 +1126,296 @@ python -m twin.twin_builder
 ✅ Digital twin synchronization working!
 
 ---
+
+## 🎉 Lab 4 Complete Summary
+
+**What we built:**
+1. ✅ EPCISEventAnchor.sol - On-chain event anchoring
+2. ✅ CoffeeBatchToken.sol - ERC-1155 batch tokenization
+3. ✅ SettlementContract.sol - Settlement record tracking
+4. ✅ Digital twin module - Unified data synchronization
+
+**Modern Solidity Patterns:**
+- Custom errors (gas efficient, clear messages)
+- Named imports from OpenZeppelin
+- Clear validation with if/revert pattern
+
+**Key Features:**
+- Immutable event anchoring (SHA-256 hashes)
+- ERC-1155 multi-token standard for batches
+- Settlement audit trail (record-only, not payment execution)
+- Digital twin bridges on-chain and off-chain data
+
+**Deliverables:**
+- `blockchain/src/EPCISEventAnchor.sol`
+- `blockchain/src/CoffeeBatchToken.sol`
+- `blockchain/src/SettlementContract.sol`
+- `twin/twin_builder.py`
+- All contracts compile successfully with Foundry
+
+**Ready for:** Lab 5 (Digital Product Passports)
+
+---
+
+## Lab 5: Digital Product Passports (DPPs)
+
+### Step 1: Create DPP Schema
+
+**File Created:** `dpp/schema.json`
+
+**Why:** Defines the EUDR-compliant structure for Digital Product Passports. This schema ensures all required traceability, due diligence, and sustainability information is captured.
+
+**Schema Sections:**
+- **Product Information** - Name, GTIN, quantity, variety, process method
+- **Traceability** - Origin (country, region, geolocation), supply chain actors (with DIDs), EPCIS events
+- **Sustainability** - Certifications (Organic, FairTrade, etc.), carbon footprint, water usage
+- **Due Diligence** - EUDR compliance, deforestation risk assessment, land use rights
+- **Blockchain** - Contract addresses, token ID, on-chain anchors
+- **QR Code** - Resolver URL and image encoding
+
+**Key Features:**
+- Supports GeoJSON polygon coordinates for farm boundaries
+- Links to verifiable credentials for supply chain actors
+- Integrates blockchain transaction hashes
+- ISO 3166-1 country codes for standardization
+
+**Result:** ✅ Schema created with full EUDR compliance fields
+
+---
+
+### Step 2: Build DPP Builder Module
+
+**File Created:** `dpp/dpp_builder.py`
+
+**Why:** Translates digital twin data into consumer-facing DPPs. This module pulls data from the unified digital twin and formats it according to the schema for public access.
+
+**Key Functions:**
+- `load_twin_data()` - Load batch data from digital twin
+- `build_dpp()` - Generate complete DPP from twin + metadata
+- `save_dpp()` - Save DPP to `dpp/passports/` directory
+- `validate_dpp()` - Ensure all required EUDR fields present
+
+**What it does:**
+- Extracts product information (quantity, variety, process)
+- Maps supply chain actors from credentials
+- Converts EPCIS anchors to traceability events
+- Formats due diligence and risk assessment
+- Links blockchain contract addresses and token IDs
+- Generates resolver URL for QR codes
+
+**Test Command:**
+```bash
+python -m dpp.dpp_builder
+```
+
+**Actual Result:**
+```
+✅ Built DPP: DPP-BATCH-2025-001
+   Product: Ethiopian Yirgacheffe - Washed Arabica
+   Quantity: 50 bags
+   Origin: Yirgacheffe, Gedeo Zone, ET
+   EUDR Compliant: True
+   Deforestation Risk: none
+   Events: 1 EPCIS events
+✅ DPP validation passed
+💾 Saved DPP to: dpp/passports/BATCH-2025-001_dpp.json
+```
+
+---
+
+### Step 3: Create DPP Resolver API
+
+**File Created:** `dpp/dpp_resolver.py`
+
+**Why:** Public-facing FastAPI service that resolves DPPs by batch ID. This is what consumers access when they scan QR codes on product packaging.
+
+**Endpoints:**
+- `GET /` - Health check
+- `GET /dpp/{batch_id}` - Resolve full DPP (supports ?format=full|summary|qr)
+- `GET /dpp/{batch_id}/verify` - Verify blockchain anchoring and credentials
+- `GET /batches` - List all available batches
+
+**Response Formats:**
+- **full** - Complete DPP with all sections
+- **summary** - Consumer-friendly overview (product, origin, EUDR status)
+- **qr** - QR code data only
+
+**Features:**
+- CORS enabled for public web access
+- Dynamic DPP building from digital twin
+- Validation before returning data
+- Blockchain verification status
+
+**Test Command:**
+```bash
+python -m dpp.dpp_resolver  # Starts on port 8001
+curl http://localhost:8001/dpp/BATCH-2025-001?format=summary
+```
+
+**Actual Result:**
+```json
+{
+  "passportId": "DPP-BATCH-2025-001",
+  "batchId": "BATCH-2025-001",
+  "product": "Ethiopian Yirgacheffe - Washed Arabica",
+  "quantity": "50 bags",
+  "origin": "Yirgacheffe, Gedeo Zone, ET",
+  "eudrCompliant": true,
+  "deforestationRisk": "none",
+  "qrUrl": "https://dpp.voiceledger.io/dpp/BATCH-2025-001"
+}
+```
+
+**Verification Endpoint Result:**
+```json
+{
+  "batchId": "BATCH-2025-001",
+  "verificationStatus": "partial",
+  "blockchain": {
+    "anchored": true,
+    "anchoredEvents": 1,
+    "totalAnchors": 1
+  },
+  "credentials": {
+    "verified": false,
+    "totalCredentials": 0
+  },
+  "settlement": {
+    "recorded": true,
+    "amount": 1000000,
+    "recipient": "0x1234..."
+  }
+}
+```
+
+✅ API running and responsive!
+
+---
+
+### Step 4: Build QR Code Generator
+
+**File Created:** `dpp/qrcode_gen.py`
+
+**Why:** Generates QR codes that consumers can scan to access DPPs. Supports PNG, SVG, and labeled formats for flexible packaging integration.
+
+**Dependencies Installed:**
+```bash
+pip install 'qrcode[pil]'  # QR code generation with PIL imaging
+```
+
+**Key Functions:**
+- `generate_qr_code()` - Basic QR code with base64 encoding
+- `generate_qr_code_svg()` - Scalable vector graphics version
+- `create_labeled_qr_code()` - QR code with product name and batch ID overlay
+- `generate_batch_qr_codes()` - Bulk generation for multiple batches
+
+**Features:**
+- High error correction (ERROR_CORRECT_H) for durability
+- Base64 encoding for embedding in DPPs
+- Labeled versions with product information
+- SVG output for print-ready graphics
+- Customizable size and border
+
+**Test Command:**
+```bash
+python -m dpp.qrcode_gen
+```
+
+**Actual Result:**
+```
+📱 Generating QR Codes for DPPs...
+✅ QR code saved to: dpp/qrcodes/BATCH-2025-001_qr.png
+   URL: https://dpp.voiceledger.io/dpp/BATCH-2025-001
+   Base64 length: 1588 characters
+✅ Labeled QR code generated: dpp/qrcodes/BATCH-2025-001_labeled_qr.png
+✅ SVG QR code saved to: dpp/qrcodes/BATCH-2025-001_qr.svg
+   SVG size: 13553 characters
+🎉 QR code generation complete!
+```
+
+**Generated Files:**
+- PNG QR code for digital use
+- Labeled PNG with product info for packaging
+- SVG for high-quality printing
+
+---
+
+### Step 5: Test Complete DPP Flow
+
+**File Created:** `tests/test_dpp_flow.py`
+
+**Why:** End-to-end integration test validating the complete workflow from EPCIS event creation to QR code generation.
+
+**Test Flow:**
+1. Create EPCIS commissioning event
+2. Hash event for blockchain anchoring
+3. Build digital twin (anchor, token, settlement)
+4. Generate DPP from digital twin
+5. Validate DPP against schema
+6. Save DPP to file
+7. Generate QR codes (plain and labeled)
+8. Verify all components working together
+
+**Test Command:**
+```bash
+python -m tests.test_dpp_flow
+```
+
+**Actual Result:**
+```
+============================================================
+🧪 TESTING COMPLETE DPP FLOW
+============================================================
+
+📝 Step 1: Creating EPCIS commissioning event...
+   ✅ Event created: epcis/events/BATCH-2025-TEST_commission.json
+
+🔐 Step 2: Hashing EPCIS event...
+   ✅ Event hash: a3aedade85dc4abb6de9443ed1cc2e73...
+
+🔗 Step 3: Building digital twin...
+   ✅ Recorded event anchor
+   ✅ Recorded token minting
+   ✅ Recorded settlement
+
+🔍 Step 4: Verifying digital twin...
+   ✅ Digital twin found
+      - Token ID: 42
+      - Quantity: 100 bags
+      - Anchors: 2 events
+      - Settlement: $25000.00
+
+📄 Step 5: Building Digital Product Passport...
+   ✅ DPP built: DPP-BATCH-2025-TEST
+      - Product: Ethiopian Yirgacheffe - Test Batch
+      - Quantity: 100 bags
+      - EUDR Compliant: True
+      - Events: 2
+
+✅ Step 6: Validating DPP...
+   ✅ DPP validation passed
+
+💾 Step 7: Saving DPP...
+   ✅ DPP saved to: dpp/passports/BATCH-2025-TEST_dpp.json
+
+📱 Step 8: Generating QR codes...
+   ✅ QR code generated
+   ✅ Labeled QR code generated
+
+============================================================
+✅ COMPLETE DPP FLOW TEST PASSED
+============================================================
+
+📊 Summary:
+   • Batch ID: BATCH-2025-TEST
+   • EPCIS Event: BATCH-2025-TEST_commission.json
+   • Event Hash: a3aedade85dc4abb...
+   • Token ID: 42
+   • DPP: BATCH-2025-TEST_dpp.json
+   • QR Code: BATCH-2025-TEST_qr.png
+   • Resolver URL: https://dpp.voiceledger.io/dpp/BATCH-2025-TEST
+```
+
+✅ **Complete end-to-end flow validated!**
+
+---

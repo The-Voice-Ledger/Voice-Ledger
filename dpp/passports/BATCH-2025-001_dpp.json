@@ -1,0 +1,53 @@
+{
+  "passportId": "DPP-BATCH-2025-001",
+  "batchId": "BATCH-2025-001",
+  "version": "1.0.0",
+  "issuedAt": "2025-12-12T19:48:29.061116+00:00",
+  "productInformation": {
+    "productName": "Ethiopian Yirgacheffe - Washed Arabica",
+    "quantity": 50,
+    "unit": "bags",
+    "variety": "Arabica",
+    "processMethod": "Washed"
+  },
+  "traceability": {
+    "origin": {
+      "country": "ET",
+      "region": "Yirgacheffe, Gedeo Zone",
+      "cooperative": "Guzo Farmers Cooperative"
+    },
+    "supplyChainActors": [],
+    "events": [
+      {
+        "eventType": "commissioning",
+        "timestamp": "2025-12-12T19:48:29.061116+00:00",
+        "eventHash": "bc16581a015e8d239723f41734f0847b8615dcae996f182491ddffc67017b3fc"
+      }
+    ]
+  },
+  "sustainability": {},
+  "dueDiligence": {
+    "eudrCompliant": true,
+    "riskAssessment": {
+      "deforestationRisk": "none",
+      "assessmentDate": "2025-12-12",
+      "assessor": "Voice Ledger Platform",
+      "methodology": "Satellite imagery + blockchain traceability"
+    }
+  },
+  "blockchain": {
+    "network": "local",
+    "eventAnchorContract": "0x0000000000000000000000000000000000000000",
+    "anchors": [
+      {
+        "eventHash": "bc16581a015e8d239723f41734f0847b8615dcae996f182491ddffc67017b3fc"
+      }
+    ],
+    "tokenContract": "0x0000000000000000000000000000000000000000",
+    "tokenId": 1,
+    "settlementContract": "0x0000000000000000000000000000000000000000"
+  },
+  "qrCode": {
+    "url": "https://dpp.voiceledger.io/dpp/BATCH-2025-001"
+  }
+}
