@@ -510,3 +510,178 @@ Regardless of the API choice, Lab 2 will create:
    - Secure endpoint protection
 
 ---
+
+## Lab 2: Voice & AI Layer - Implementation
+
+**Implementation Choice:** OpenAI APIs (Whisper for ASR, GPT for NLU)
+
+### Step 1: Install Lab 2 Dependencies
+
+**Command:**
+```bash
+pip install -r requirements.txt
+```
+
+**Packages Added:**
+- `fastapi==0.104.1` - Modern web framework for building APIs
+- `uvicorn==0.24.0` - ASGI server to run FastAPI
+- `python-multipart==0.0.6` - Required for file uploads
+- `openai==1.3.5` - OpenAI API client
+- `pydantic==2.5.0` - Data validation (FastAPI dependency)
+
+**Why Each Package:**
+- **FastAPI** - High-performance async framework, perfect for file uploads and AI integration
+- **Uvicorn** - Production-ready ASGI server with great performance
+- **python-multipart** - Handles multipart/form-data for audio file uploads
+- **OpenAI** - Official client for Whisper (ASR) and GPT (NLU) APIs
+- **Pydantic** - Type validation and serialization for API responses
+
+**Expected Outcome:** All packages installed successfully.
+
+**Actual Result:** Successfully installed fastapi, uvicorn, openai, and dependencies ✅
+
+---
+
+### Step 2: Create API Authentication Module
+
+**File Created:** `voice/service/auth.py`
+
+**Why:** Secure API endpoints to ensure only authorized clients can submit voice commands. Uses API key authentication via HTTP headers.
+
+**What it does:**
+- Reads expected API key from `VOICE_LEDGER_API_KEY` environment variable
+- Validates incoming `X-API-Key` header on protected endpoints
+- Returns 401 Unauthorized if key is invalid
+- Returns 500 if API key not configured
+
+**Test:** Module imports successfully ✅
+
+---
+
+### Step 3: Create ASR Module (Whisper Integration)
+
+**File Created:** `voice/asr/asr_infer.py`
+
+**Why:** Converts audio files to text transcriptions using OpenAI's Whisper API. This is the first stage of the voice pipeline.
+
+**What it does:**
+- Accepts audio file path (WAV, MP3, M4A formats supported)
+- Sends audio to OpenAI Whisper API
+- Returns clean text transcript
+- Handles errors gracefully
+
+**Dependencies Resolved:**
+- Installed `openai==1.12.0` (compatible with Python 3.9)
+- Installed `httpx==0.26.0` (compatible version)
+- Installed `python-dotenv==1.0.0` for environment variable loading
+
+**API Key:** Stored securely in `.env` file (git-ignored)
+
+**Test:** Module loads successfully ✅
+
+---
+
+### Step 4: Create NLU Module (Intent & Entity Extraction)
+
+**File Created:** `voice/nlu/nlu_infer.py`
+
+**Why:** Extracts structured information from transcripts. Identifies what action is being described (intent) and key details (entities) like quantity, product, locations.
+
+**What it does:**
+- Takes text transcript from ASR
+- Uses GPT-3.5-turbo to extract:
+  - **Intent**: `record_shipment`, `record_commission`, `record_receipt`, etc.
+  - **Entities**: quantity, unit, product, origin, destination, batch_id
+- Returns structured JSON
+- Falls back gracefully if extraction fails
+
+**Test Command:**
+```bash
+python -m voice.nlu.nlu_infer "Deliver 50 bags of washed coffee from station Abebe to Addis warehouse"
+```
+
+**Actual Result:**
+```json
+{
+  "transcript": "Deliver 50 bags of washed coffee from station Abebe to Addis warehouse",
+  "intent": "record_shipment",
+  "entities": {
+    "quantity": 50,
+    "unit": "bags",
+    "product": "washed coffee",
+    "origin": "station Abebe",
+    "destination": "Addis warehouse",
+    "batch_id": null
+  }
+}
+```
+✅ NLU extraction working perfectly!
+
+---
+
+### Step 5: Create FastAPI Service
+
+**File Created:** `voice/service/api.py`
+
+**Why:** Exposes the complete ASR → NLU pipeline as a REST API that can be called by mobile apps, web UIs, or other services.
+
+**What it provides:**
+- `GET /` - Health check endpoint
+- `POST /asr-nlu` - Main endpoint accepting audio files
+
+**How it works:**
+1. Accepts multipart/form-data file upload
+2. Validates API key via `X-API-Key` header
+3. Saves audio temporarily
+4. Runs ASR (audio → text)
+5. Runs NLU (text → intent + entities)
+6. Returns structured JSON
+7. Cleans up temp file
+
+**Start Server:**
+```bash
+uvicorn voice.service.api:app --host 127.0.0.1 --port 8000
+```
+
+**Test Health Endpoint:**
+```bash
+curl http://localhost:8000/
+```
+
+**Actual Result:**
+```json
+{"service":"Voice Ledger ASR-NLU API","status":"operational","version":"1.0.0"}
+```
+✅ API server running successfully!
+
+---
+
+### Step 6: Testing the Complete Voice Pipeline
+
+**To test with a real audio file:**
+
+1. Record or obtain an audio file (WAV, MP3, M4A)
+2. Place it in `tests/samples/test_audio.wav`
+3. Run:
+```bash
+curl -X POST "http://localhost:8000/asr-nlu" \
+  -H "X-API-Key: dev-secret-key-2025" \
+  -F "file=@tests/samples/test_audio.wav"
+```
+
+**Expected Response:**
+```json
+{
+  "transcript": "[transcribed text]",
+  "intent": "[detected intent]",
+  "entities": {
+    "quantity": number,
+    "unit": "string",
+    ...
+  }
+}
+```
+
+**Note:** For full testing, you'll need an actual audio file. The pipeline is ready and waiting for audio input.
+
+---

@@ -1,2 +1,10 @@
 # Lab 1: GS1 & EPCIS base requirements
 pytest==7.4.3
+
+# Lab 2: Voice & AI Layer
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+openai==1.54.0
+pydantic==2.5.0
+python-dotenv==1.0.0
