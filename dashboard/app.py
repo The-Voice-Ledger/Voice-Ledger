@@ -13,6 +13,11 @@ import plotly.express as px
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
+import sys
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from database import get_db, get_all_batches, get_all_farmers
 
 # Page configuration
@@ -69,14 +74,49 @@ def load_dashboard_data():
         batches = get_all_batches(db)
         farmers = get_all_farmers(db)
         
+        # Convert to serializable dictionaries to avoid detached instance errors
+        batches_data = []
+        for b in batches:
+            batch_dict = {
+                'id': b.id,
+                'batch_id': b.batch_id,
+                'gtin': b.gtin,
+                'quantity_kg': b.quantity_kg,
+                'variety': b.variety or "Unknown",
+                'process_method': b.process_method or "Unknown",
+                'origin_region': b.origin_region or "Unknown",
+                'farmer_id': b.farmer_id,
+                'created_at': b.created_at.isoformat() if b.created_at else None,
+                'events_count': len(b.events) if b.events else 0,
+                'farmer_name': b.farmer.name if b.farmer else "Unknown"
+            }
+            batches_data.append(batch_dict)
+        
+        farmers_data = []
+        for f in farmers:
+            farmer_dict = {
+                'id': f.id,
+                'farmer_id': f.farmer_id,
+                'name': f.name,
+                'did': f.did,
+                'latitude': f.latitude,
+                'longitude': f.longitude,
+                'country_code': f.country_code,
+                'region': f.region or "Unknown",
+                'created_at': f.created_at.isoformat() if f.created_at else None,
+                'credentials_count': len(f.credentials) if f.credentials else 0,
+                'batches_count': len(f.batches) if f.batches else 0
+            }
+            farmers_data.append(farmer_dict)
+        
         return {
-            'batches': batches,
-            'farmers': farmers,
-            'total_batches': len(batches),
-            'total_farmers': len(farmers),
-            'total_kg': sum(b.quantity_kg for b in batches),
-            'total_events': sum(len(b.events) for b in batches),
-            'total_credentials': sum(len(f.credentials) for f in farmers)
+            'batches': batches_data,
+            'farmers': farmers_data,
+            'total_batches': len(batches_data),
+            'total_farmers': len(farmers_data),
+            'total_kg': sum(b['quantity_kg'] for b in batches_data),
+            'total_events': sum(b['events_count'] for b in batches_data),
+            'total_credentials': sum(f['credentials_count'] for f in farmers_data)
         }
 
 @st.cache_data
@@ -93,7 +133,7 @@ def load_dpp_data():
 # Load data
 data = load_dashboard_data()
 dpp_data = load_dpp_data()
-batches = {b.batch_id: b for b in data['batches']}  # Convert to dict for compatibility
+batches = {b['batch_id']: b for b in data['batches']}  # Convert to dict for compatibility
 
 # Overview Page
 if page == "Overview":
@@ -140,23 +180,22 @@ if page == "Overview":
         recent_batches = data['batches'][:5]
         
         for batch in recent_batches:
-            with st.expander(f"Batch {batch.batch_id} - {batch.farmer.name}"):
+            with st.expander(f"Batch {batch['batch_id']} - {batch['farmer_name']}"):
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.write("**GTIN:**", batch.gtin)
-                    st.write("**Quantity:**", f"{batch.quantity_kg} kg")
-                    st.write("**Token ID:**", batch.token_id or "Not minted")
+                    st.write("**GTIN:**", batch['gtin'])
+                    st.write("**Quantity:**", f"{batch['quantity_kg']} kg")
+                    st.write("**Variety:**", batch['variety'])
                 
                 with col2:
-                    st.write("**Origin:**", batch.origin_region)
-                    st.write("**Variety:**", batch.variety)
-                    st.write("**Events:**", len(batch.events))
+                    st.write("**Farmer:**", batch['farmer_name'])
+                    st.write("**Events:**", batch['events_count'])
+                    st.write("**Created:**", batch['created_at'][:10] if batch['created_at'] else "N/A")
                 
                 with col3:
-                    st.write("**Farmer:**", batch.farmer.name)
-                    st.write("**DID:**", batch.farmer.did[:20] + "...")
-                    st.write("**Credentials:**", len(batch.farmer.credentials))
+                    st.write("**Batch ID:**", batch['batch_id'])
+                    st.write("**Farmer ID:**", batch['farmer_id'])
     else:
         st.info("No batches recorded yet. Start by creating a commissioning event!")
 
@@ -170,7 +209,7 @@ elif page == "Batches":
         # Batch selector
         selected_batch_id = st.selectbox(
             "Select Batch",
-            options=[b.batch_id for b in data['batches']]
+            options=[b['batch_id'] for b in data['batches']]
         )
         
         if selected_batch_id:
@@ -183,43 +222,20 @@ elif page == "Batches":
             
             with col1:
                 st.markdown("### Details")
-                st.write(f"**GTIN:** {batch.gtin}")
-                st.write(f"**Token ID:** {batch.token_id or 'Not minted'}")
-                st.write(f"**Quantity:** {batch.quantity_kg} kg")
-                st.write(f"**Variety:** {batch.variety}")
-                st.write(f"**Process:** {batch.process_method}")
-                st.write(f"**Grade:** {batch.grade or 'Not graded'}")
+                st.write(f"**GTIN:** {batch['gtin']}")
+                st.write(f"**Quantity:** {batch['quantity_kg']} kg")
+                st.write(f"**Variety:** {batch['variety']}")
+                st.write(f"**Process:** {batch['process_method']}")
+                st.write(f"**Created:** {batch['created_at'][:10] if batch['created_at'] else 'N/A'}")
             
             with col2:
-                st.markdown("### Origin")
-                st.write(f"**Country:** {batch.origin_country}")
-                st.write(f"**Region:** {batch.origin_region}")
-                st.write(f"**Farm:** {batch.farm_name}")
-                st.write(f"**Farmer:** {batch.farmer.name}")
-                st.write(f"**DID:** {batch.farmer.did[:30]}...")
+                st.markdown("### Farmer")
+                st.write(f"**Name:** {batch['farmer_name']}")
+                st.write(f"**Farmer ID:** {batch['farmer_id']}")
+                st.write(f"**Events:** {batch['events_count']}")
             
-            # Events
-            st.markdown("### Blockchain Events")
-            events = batch.events
-            st.write(f"**Total Events:** {len(events)}")
-            
-            for event in events:
-                anchored = "✅" if event.blockchain_tx_hash else "⏳"
-                st.write(f"{anchored} **{event.event_type}** ({event.biz_step}) - {event.event_time.strftime('%Y-%m-%d %H:%M')}")
-                if event.blockchain_tx_hash:
-                    st.write(f"   TX: `{event.blockchain_tx_hash[:16]}...`")
-            
-            # Credentials
-            credentials = batch.farmer.credentials
-            if credentials:
-                st.markdown("### Credentials")
-                st.write(f"**Total Credentials:** {len(credentials)}")
-                
-                for cred in credentials:
-                    status = "✅ Active" if not cred.revoked else "❌ Revoked"
-                    st.write(f"{status} **{cred.credential_type}** - Issued: {cred.issued_at.strftime('%Y-%m-%d')}")
-                    if cred.expires_at:
-                        st.write(f"   Expires: {cred.expires_at.strftime('%Y-%m-%d')}")
+            # Note about full details
+            st.info("For complete batch details with events and blockchain transactions, query the database directly.")
 
 # Analytics Page
 elif page == "Analytics":
@@ -232,7 +248,7 @@ elif page == "Analytics":
         st.subheader("Batch Volume Distribution")
         
         batch_quantities = {
-            batch.batch_id: batch.quantity_kg
+            batch['batch_id']: batch['quantity_kg']
             for batch in data['batches']
         }
         
@@ -250,46 +266,44 @@ elif page == "Analytics":
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # Event types distribution
-        st.subheader("Event Types Distribution")
+        # Farmer distribution
+        st.subheader("Farmers Distribution")
         
-        event_types = {}
+        farmer_stats = {}
         for batch in data['batches']:
-            for event in batch.events:
-                event_type = event.event_type
-                event_types[event_type] = event_types.get(event_type, 0) + 1
+            farmer_name = batch['farmer_name']
+            farmer_stats[farmer_name] = farmer_stats.get(farmer_name, 0) + batch['quantity_kg']
         
-        if event_types:
+        if farmer_stats:
             fig = go.Figure(data=[
                 go.Pie(
-                    labels=list(event_types.keys()),
-                    values=list(event_types.values()),
+                    labels=list(farmer_stats.keys()),
+                    values=list(farmer_stats.values()),
                     hole=0.3
                 )
             ])
-            fig.update_layout(height=400)
+            fig.update_layout(height=400, title="Total Volume by Farmer (kg)")
             st.plotly_chart(fig, use_container_width=True)
         
-        # Region distribution
-        st.subheader("Batch Distribution by Region")
+        # Events summary
+        st.subheader("Blockchain Events Summary")
         
-        regions = {}
-        for batch in data['batches']:
-            region = batch.origin_region or "Unknown"
-            regions[region] = regions.get(region, 0) + 1
+        total_events = sum(b['events_count'] for b in data['batches'])
+        st.write(f"**Total Events Anchored:** {total_events}")
         
-        if regions:
+        if total_events > 0:
             fig = go.Figure(data=[
                 go.Bar(
-                    x=list(regions.keys()),
-                    y=list(regions.values()),
+                    x=[b['batch_id'] for b in data['batches'][:10]],
+                    y=[b['events_count'] for b in data['batches'][:10]],
                     marker_color='#4ECDC4'
                 )
             ])
             fig.update_layout(
-                xaxis_title="Region",
-                yaxis_title="Number of Batches",
-                height=400
+                xaxis_title="Batch ID",
+                yaxis_title="Number of Events",
+                height=400,
+                title="Events per Batch (Top 10)"
             )
             st.plotly_chart(fig, use_container_width=True)
 

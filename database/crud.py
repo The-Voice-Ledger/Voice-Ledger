@@ -118,15 +118,21 @@ def update_event_blockchain_tx(db: Session, event_id: int, tx_hash: str) -> EPCI
     return event
 
 def get_all_batches(db: Session, limit: int = 100) -> List[CoffeeBatch]:
-    """Get all batches (for dashboard)."""
+    """Get all batches (for dashboard) with eagerly loaded relationships."""
+    from sqlalchemy.orm import joinedload
     return db.query(CoffeeBatch)\
+        .options(joinedload(CoffeeBatch.events))\
+        .options(joinedload(CoffeeBatch.farmer))\
         .order_by(CoffeeBatch.created_at.desc())\
         .limit(limit)\
         .all()
 
 def get_all_farmers(db: Session, limit: int = 100) -> List[FarmerIdentity]:
-    """Get all farmers (for dashboard)."""
+    """Get all farmers (for dashboard) with eagerly loaded relationships."""
+    from sqlalchemy.orm import joinedload
     return db.query(FarmerIdentity)\
+        .options(joinedload(FarmerIdentity.credentials))\
+        .options(joinedload(FarmerIdentity.batches))\
         .order_by(FarmerIdentity.created_at.desc())\
         .limit(limit)\
         .all()
