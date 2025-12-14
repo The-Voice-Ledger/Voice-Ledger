@@ -2026,6 +2026,54 @@ Batch 31: 6000.0 kg of Yergechev coffee
 
 ✅ **Phase 2 Complete:** Async processing fully operational!
 
+---
+
+## Phase 3: IVR/Phone System Integration
+
+**Branch:** `feature/voice-ivr` (created from feature/voice-interface)  
+**Start Date:** December 14, 2025 (23:50)  
+**Goal:** Enable farmers to use basic phones to record supply chain events via voice
+
+**Why IVR/Phone System?**
+
+Current limitations:
+- Requires smartphone with mobile app or web access
+- Many smallholder farmers have only basic feature phones
+- Limited internet connectivity in rural areas
+- Low digital literacy barriers
+
+Phase 3 solutions:
+- Call a local phone number (e.g., +251-11-XXX-XXXX for Ethiopia)
+- Speak commands in local language
+- Receive SMS confirmation with batch details
+- Works with any phone (feature phone or smartphone)
+- No internet required on farmer's device
+
+**Architecture:**
+
+```
+Farmer's Phone (Feature Phone)
+    ↓
+  Calls IVR Number
+    ↓
+Twilio → Voice Ledger Webhook
+    ↓
+Record Audio → Process Command
+    ↓
+Send SMS Confirmation
+```
+
+**Use Case Example:**
+
+```
+1. Farmer dials: +251-11-XXX-XXXX
+2. IVR: "Welcome to Voice Ledger. Please state your command after the beep."
+3. Farmer: "Record commission of 30 bags from my farm"
+4. System: Processing... (ASR → NLU → Database)
+5. SMS sent: "✅ Batch #FARM123 created: 30 bags (1800 kg). GTIN: 00614141812345"
+6. IVR: "Your command has been recorded. You will receive an SMS confirmation. Goodbye."
+```
+
 **Updated requirements.txt:**
 
 ```diff
