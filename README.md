@@ -1,4 +1,4 @@
-# Voice Ledger
+# The Voice Ledger
 
 A voice-first blockchain traceability system for coffee supply chains that enables natural language event recording using standardized EPCIS 2.0 events, self-sovereign identity, and immutable blockchain anchoring.
 
@@ -7,7 +7,7 @@ A voice-first blockchain traceability system for coffee supply chains that enabl
 
 ## Overview
 
-Voice Ledger converts spoken supply chain events into verifiable, blockchain-anchored records. The system processes voice commands through automatic speech recognition and natural language understanding to generate standardized GS1 EPCIS 2.0 events, which are canonicalized, hashed, and anchored to blockchain with full event data stored on IPFS.
+The Voice Ledger converts spoken supply chain events into verifiable, blockchain-anchored records. The system processes voice commands through automatic speech recognition and natural language understanding to generate standardized GS1 EPCIS 2.0 events, which are canonicalized, hashed, and anchored to blockchain with full event data stored on IPFS.
 
 **v1.0 (Current Implementation):** Cloud-based prototype using OpenAI APIs, suitable for urban cooperatives with reliable internet.
 
