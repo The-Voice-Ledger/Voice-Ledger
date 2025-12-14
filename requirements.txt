@@ -1,13 +1,41 @@
-# Lab 1: GS1 & EPCIS base requirements
+# -----------------------------
+# Core / Testing
+# -----------------------------
 pytest==7.4.3
+requests==2.31.0  # Required for healthchecks in Docker containers
 
-# Lab 2: Voice & AI Layer
+# -----------------------------
+# Lab 2: Voice API (FastAPI) + OpenAI
+# -----------------------------
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
-openai==1.12.0
 pydantic==2.5.0
 python-dotenv==1.0.0
+openai==1.12.0
+httpx==0.26.0
 
-# Lab 3: SSI & Identity
+# -----------------------------
+# Lab 3: SSI (Ed25519 signing with PyNaCl)
+# -----------------------------
 PyNaCl==1.5.0
+
+# -----------------------------
+# Lab 4: Blockchain
+# -----------------------------
+# Note: Foundry toolkit (forge, cast, anvil) installed separately
+# Installation: curl -L https://foundry.paradigm.xyz | bash
+# No Python dependencies needed for Lab 4
+
+# -----------------------------
+# Lab 5: Digital Product Passports (QR codes)
+# -----------------------------
+qrcode[pil]==7.4.2
+Pillow==10.1.0
+
+# -----------------------------
+# Lab 6: DevOps & Monitoring (Dashboard)
+# -----------------------------
+streamlit==1.29.0
+plotly==5.18.0
+pandas==2.1.4

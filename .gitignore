@@ -68,6 +68,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Documentation (except README)
+documentation/
+
 # Documentation builds (keep source, ignore builds)
 docs/_build/
 site/
