@@ -101,11 +101,13 @@ async def root():
     return {
         "service": "Voice Ledger Voice Interface API",
         "status": "operational",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "endpoints": [
             "GET /voice/health",
             "POST /voice/transcribe",
-            "POST /voice/process-command",
+            "POST /voice/process-command (sync)",
+            "POST /voice/upload-async (Phase 2)",
+            "GET /voice/status/{task_id} (Phase 2)",
             "POST /asr-nlu (legacy)"
         ]
     }
@@ -390,6 +392,246 @@ async def asr_nlu_endpoint(
         # Clean up temp file
         if temp_path.exists():
             temp_path.unlink()
+
+
+# ============================================================================
+# PHASE 2: ASYNC PROCESSING ENDPOINTS
+# ============================================================================
+
+# Import Celery task
+try:
+    from voice.tasks.voice_tasks import process_voice_command_task
+    from voice.tasks.celery_app import app as celery_app
+    CELERY_AVAILABLE = True
+except ImportError as e:
+    CELERY_AVAILABLE = False
+    print(f"⚠️  Celery not available - async endpoints will be disabled: {e}")
+
+
+class AsyncTaskResponse(BaseModel):
+    """Response for async task submission."""
+    status: str
+    task_id: str
+    message: str
+    status_url: str
+
+
+class TaskStatusResponse(BaseModel):
+    """Response for task status check."""
+    task_id: str
+    status: str  # PENDING, STARTED, VALIDATING, TRANSCRIBING, EXTRACTING, EXECUTING, SUCCESS, FAILURE
+    progress: Optional[int] = None  # 0-100
+    stage: Optional[str] = None
+    result: Optional[dict] = None
+    error: Optional[str] = None
+
+
+@app.post("/voice/upload-async", response_model=AsyncTaskResponse)
+async def upload_audio_async(
+    file: UploadFile = File(...),
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Upload audio file for async voice command processing.
+    
+    Returns task_id immediately, processes in background.
+    
+    Pipeline:
+    1. Upload file → Validate format
+    2. Queue Celery task → Return task_id
+    3. Worker processes: ASR → NLU → Database
+    4. Poll /voice/status/{task_id} for result
+    
+    Args:
+        file: Audio file (WAV, MP3, M4A, OGG)
+        api_key: API key for authentication
+        
+    Returns:
+        {
+            "status": "processing",
+            "task_id": "abc123...",
+            "message": "Voice command queued for processing",
+            "status_url": "/voice/status/abc123..."
+        }
+        
+    Raises:
+        503: Celery not available
+        400: Invalid audio format or too large
+    """
+    
+    if not CELERY_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Async processing not available. Celery workers not running."
+        )
+    
+    # Validate file format
+    allowed_formats = ['.wav', '.mp3', '.m4a', '.ogg', '.aiff']
+    file_ext = Path(file.filename).suffix.lower()
+    
+    if file_ext not in allowed_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid audio format. Supported: {', '.join(allowed_formats)}"
+        )
+    
+    # Save uploaded file to temp location
+    temp_path = Path(f"/tmp/voice_upload_{file.filename}")
+    
+    try:
+        content = await file.read()
+        
+        # Check file size (max 25MB for Whisper API)
+        if len(content) > 25 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="Audio file too large (max 25MB)"
+            )
+        
+        # Save to temp file
+        with temp_path.open("wb") as f:
+            f.write(content)
+        
+        # Queue Celery task
+        task = process_voice_command_task.delay(
+            str(temp_path),
+            original_filename=file.filename
+        )
+        
+        return {
+            "status": "processing",
+            "task_id": task.id,
+            "message": "Voice command queued for processing. Check status at /voice/status/{task_id}",
+            "status_url": f"/voice/status/{task.id}"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        if temp_path.exists():
+            temp_path.unlink()
+        raise
+        
+    except Exception as e:
+        # Cleanup and return error
+        if temp_path.exists():
+            temp_path.unlink()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue task: {str(e)}"
+        )
+
+
+@app.get("/voice/status/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Check status of async voice processing task.
+    
+    States:
+    - PENDING: Task queued, waiting for worker
+    - STARTED: Worker picked up task
+    - VALIDATING: Validating audio file (10%)
+    - TRANSCRIBING: Running Whisper ASR (30%)
+    - EXTRACTING: Running GPT-3.5 NLU (60%)
+    - EXECUTING: Creating database record (80%)
+    - SUCCESS: Complete (100%)
+    - FAILURE: Task failed
+    
+    Args:
+        task_id: Task ID from /voice/upload-async
+        api_key: API key for authentication
+        
+    Returns:
+        {
+            "task_id": "abc123...",
+            "status": "TRANSCRIBING",
+            "progress": 30,
+            "stage": "Transcribing audio with Whisper",
+            "result": null  # Available when SUCCESS
+        }
+        
+    Raises:
+        503: Celery not available
+        404: Task not found
+    """
+    
+    if not CELERY_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Async processing not available"
+        )
+    
+    # Get task result from Celery
+    task = celery_app.AsyncResult(task_id)
+    
+    # Handle different task states
+    if task.state == 'PENDING':
+        return {
+            "task_id": task_id,
+            "status": "PENDING",
+            "progress": 0,
+            "stage": "Task queued, waiting for worker",
+            "result": None,
+            "error": None
+        }
+    
+    elif task.state == 'STARTED':
+        return {
+            "task_id": task_id,
+            "status": "STARTED",
+            "progress": 5,
+            "stage": "Worker started processing",
+            "result": None,
+            "error": None
+        }
+    
+    elif task.state in ['VALIDATING', 'TRANSCRIBING', 'EXTRACTING', 'EXECUTING']:
+        # Custom states with progress
+        info = task.info or {}
+        return {
+            "task_id": task_id,
+            "status": task.state,
+            "progress": info.get('progress', 0),
+            "stage": info.get('stage', f'{task.state}...'),
+            "result": None,
+            "error": None
+        }
+    
+    elif task.state == 'SUCCESS':
+        # Task completed
+        result = task.result
+        return {
+            "task_id": task_id,
+            "status": "SUCCESS",
+            "progress": 100,
+            "stage": "Complete",
+            "result": result,
+            "error": result.get('error') if isinstance(result, dict) else None
+        }
+    
+    elif task.state == 'FAILURE':
+        # Task failed
+        return {
+            "task_id": task_id,
+            "status": "FAILURE",
+            "progress": 0,
+            "stage": "Task failed",
+            "result": None,
+            "error": str(task.info)
+        }
+    
+    else:
+        # Unknown state
+        return {
+            "task_id": task_id,
+            "status": task.state,
+            "progress": 0,
+            "stage": f"Unknown state: {task.state}",
+            "result": None,
+            "error": None
+        }
 
 
 if __name__ == "__main__":

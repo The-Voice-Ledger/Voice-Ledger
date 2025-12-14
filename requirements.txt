@@ -22,6 +22,10 @@ pydub==0.25.1       # Audio format conversion (MP3/M4A → WAV)
 soundfile==0.12.1   # Audio I/O with numpy arrays
 aiofiles==23.2.1    # Async file operations
 
+# Lab 7 Phase 2: Async Processing
+celery==5.4.0       # Distributed task queue
+redis==5.0.1        # Message broker + result backend
+
 # -----------------------------
 # Lab 3: SSI (Ed25519 signing with PyNaCl)
 # -----------------------------
