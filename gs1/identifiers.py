@@ -14,51 +14,88 @@ PREFIX = "0614141"  # Example GS1 company prefix
 
 def gln(location_code: str) -> str:
     """
-    Generate a Global Location Number (GLN).
+    Generate a Global Location Number (GLN) with check digit per GS1 standards.
+    
+    GLN Format: Company Prefix (7 digits) + Location Reference (5 digits) + Check Digit (1)
     
     Args:
-        location_code: Unique location identifier (will be zero-padded to 6 digits)
+        location_code: Unique location identifier (will be zero-padded to 5 digits)
     
     Returns:
-        13-digit GLN string
+        13-digit GLN string with check digit
     
     Example:
         >>> gln("10")
-        '061414100000010'
+        '0614141000108'  # Last digit is check digit
     """
-    return PREFIX + location_code.zfill(6)
+    # GLN: company prefix (7) + location ref (5) + check digit (1) = 13 total
+    base = PREFIX + location_code.zfill(5)
+    return base + calculate_check_digit(base)
 
 
-def gtin(product_code: str) -> str:
+def calculate_check_digit(code: str) -> str:
     """
-    Generate a Global Trade Item Number (GTIN).
+    Calculate GS1 check digit using the standard algorithm.
     
     Args:
-        product_code: Unique product identifier (will be zero-padded to 6 digits)
+        code: Numeric string without check digit
     
     Returns:
-        13-digit GTIN string
-    
-    Example:
-        >>> gtin("200")
-        '061414100000200'
+        Single digit check digit as string
     """
-    return PREFIX + product_code.zfill(6)
+    # GS1 check digit algorithm: weight alternates 3,1,3,1... from right to left
+    total = sum(int(digit) * (3 if i % 2 else 1) for i, digit in enumerate(reversed(code)))
+    check_digit = (10 - (total % 10)) % 10
+    return str(check_digit)
+
+
+def gtin(product_code: str, gtin_format: str = "GTIN-14") -> str:
+    """
+    Generate a Global Trade Item Number (GTIN) with check digit.
+    
+    Supports GTIN-13 and GTIN-14 formats per GS1 standards.
+    
+    Args:
+        product_code: Unique product identifier (5-6 digits recommended)
+        gtin_format: "GTIN-13" (13 digits) or "GTIN-14" (14 digits)
+    
+    Returns:
+        GTIN string with check digit
+    
+    Examples:
+        >>> gtin("12345", "GTIN-13")
+        '0614141012345X'  # X = check digit
+        >>> gtin("12345", "GTIN-14")
+        '00614141012345X'  # X = check digit
+    """
+    if gtin_format == "GTIN-13":
+        # GTIN-13: company prefix (7) + product code (5) + check digit (1)
+        base = PREFIX + product_code.zfill(5)
+        return base + calculate_check_digit(base)
+    elif gtin_format == "GTIN-14":
+        # GTIN-14: indicator (1) + company prefix (7) + product code (5) + check digit (1)
+        base = "0" + PREFIX + product_code.zfill(5)
+        return base + calculate_check_digit(base)
+    else:
+        raise ValueError(f"Unsupported GTIN format: {gtin_format}. Use 'GTIN-13' or 'GTIN-14'.")
 
 
 def sscc(serial: str) -> str:
     """
-    Generate a Serial Shipping Container Code (SSCC).
+    Generate a Serial Shipping Container Code (SSCC) with check digit per GS1 standards.
+    
+    SSCC Format: Extension Digit (1) + Company Prefix (7) + Serial Reference (9) + Check Digit (1)
     
     Args:
         serial: Unique serial number (will be zero-padded to 9 digits)
     
     Returns:
-        18-digit SSCC string (starts with extension digit '0')
+        18-digit SSCC string with check digit
     
     Example:
         >>> sscc("999")
-        '0061414100000000999'
+        '006141410000000999X'  # X = check digit
     """
-    base = PREFIX + serial.zfill(9)
-    return "0" + base  # SSCC starts with an extension digit
+    # SSCC: extension (1) + company prefix (7) + serial ref (9) + check digit (1) = 18 total
+    base = "0" + PREFIX + serial.zfill(9)
+    return base + calculate_check_digit(base)

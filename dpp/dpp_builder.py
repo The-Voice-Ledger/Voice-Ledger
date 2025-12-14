@@ -1,7 +1,7 @@
 """
 Digital Product Passport Builder
 
-Translates digital twin data into EUDR-compliant DPP format.
+Translates database batch data into EUDR-compliant DPP format.
 Combines on-chain and off-chain data into consumer-facing passport.
 """
 
@@ -9,52 +9,61 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from database import get_db, get_batch_by_batch_id, get_batch_events
 
 
-def load_twin_data(batch_id: str) -> Optional[Dict[str, Any]]:
+def load_batch_data(batch_id: str):
     """
-    Load digital twin data for a batch.
+    Load batch data from Neon database with eager-loaded relationships.
     
     Args:
         batch_id: Batch identifier (e.g., "BATCH-2025-001")
     
     Returns:
-        Digital twin data or None if batch not found
+        CoffeeBatch object with relationships loaded, detached from session
     """
-    twin_file = Path(__file__).parent.parent / "twin" / "digital_twin.json"
-    
-    if not twin_file.exists():
-        return None
-    
-    with open(twin_file, "r") as f:
-        twin_data = json.load(f)
-    
-    return twin_data.get("batches", {}).get(batch_id)
+    with get_db() as db:
+        batch = get_batch_by_batch_id(db, batch_id)
+        if not batch:
+            return None
+        
+        # Force load all relationships before expunging from session
+        _  = batch.farmer.name  # Load farmer
+        _ = batch.farmer.did
+        _ = len(batch.farmer.credentials)  # Load credentials collection
+        _ = [c.credential_type for c in batch.farmer.credentials]  # Load each credential
+        _ = len(batch.events)  # Load events collection
+        _ = [e.event_type for e in batch.events]  # Load each event
+        
+        # Expunge all related objects from session so they can be used outside
+        db.expunge_all()
+        
+        return batch
 
 
 def build_dpp(
     batch_id: str,
-    product_name: str = "Arabica Coffee - Washed",
-    variety: str = "Arabica",
-    process_method: str = "Washed",
-    country: str = "ET",
-    region: str = "Yirgacheffe",
-    cooperative: str = "Guzo Farmers Cooperative",
+    product_name: Optional[str] = None,
+    variety: Optional[str] = None,
+    process_method: Optional[str] = None,
+    country: Optional[str] = None,
+    region: Optional[str] = None,
+    cooperative: Optional[str] = None,
     deforestation_risk: str = "none",
     eudr_compliant: bool = True,
     resolver_base_url: str = "https://dpp.voiceledger.io"
 ) -> Dict[str, Any]:
     """
-    Build a Digital Product Passport from digital twin data.
+    Build a Digital Product Passport from database batch data.
     
     Args:
         batch_id: Batch identifier
-        product_name: Product name
-        variety: Coffee variety
-        process_method: Processing method
-        country: ISO 3166-1 alpha-2 country code
-        region: Region/province
-        cooperative: Cooperative name
+        product_name: Product name (optional, defaults to batch data)
+        variety: Coffee variety (optional, defaults to batch data)
+        process_method: Processing method (optional, defaults to batch data)
+        country: ISO 3166-1 alpha-2 country code (optional, defaults to batch data)
+        region: Region/province (optional, defaults to batch data)
+        cooperative: Cooperative name (optional, defaults to batch data)
         deforestation_risk: Risk level (none/low/medium/high)
         eudr_compliant: EUDR compliance status
         resolver_base_url: Base URL for DPP resolver
@@ -62,94 +71,93 @@ def build_dpp(
     Returns:
         Complete DPP dictionary
     """
-    twin = load_twin_data(batch_id)
+    batch = load_batch_data(batch_id)
     
-    if not twin:
-        raise ValueError(f"Batch {batch_id} not found in digital twin")
-    
-    # Reload twin to ensure fresh data
-    twin = load_twin_data(batch_id)
-    if not twin:
-        raise ValueError(f"Batch {batch_id} data corrupted")
+    if not batch:
+        raise ValueError(f"Batch {batch_id} not found in database")
     
     # Generate passport ID
     passport_id = f"DPP-{batch_id}"
     issued_at = datetime.now(timezone.utc).isoformat()
     
-    # Build product information
+    # Build product information from database
     product_info = {
-        "productName": product_name,
-        "quantity": twin.get("quantity", 0),
-        "unit": "bags",
-        "variety": variety,
-        "processMethod": process_method
+        "productName": product_name or f"{batch.origin_region} {batch.variety} - {batch.process_method}",
+        "quantity": batch.quantity_kg,
+        "unit": "kg",
+        "variety": variety or batch.variety,
+        "processMethod": process_method or batch.process_method,
+        "gtin": batch.gtin
     }
     
-    # Add GTIN if available
-    if "gtin" in twin.get("metadata", {}):
-        product_info["gtin"] = twin["metadata"]["gtin"]
-    
-    # Build traceability section
+    # Build traceability section from database
     traceability = {
         "origin": {
-            "country": country,
-            "region": region,
-            "cooperative": cooperative
+            "country": country or batch.origin_country,
+            "region": region or batch.origin_region,
+            "farmName": batch.farm_name,
+            "farmer": {
+                "name": batch.farmer.name,
+                "did": batch.farmer.did,
+                "gln": batch.farmer.gln
+            }
         },
         "supplyChainActors": [],
         "events": []
     }
     
-    # Add geolocation if available
-    metadata = twin.get("metadata", {})
-    if "geolocation" in metadata:
-        traceability["origin"]["geolocation"] = metadata["geolocation"]
+    # Extract supply chain actors from farmer's credentials
+    for cred in batch.farmer.credentials:
+        if not cred.revoked:
+            actor = {
+                "role": cred.credential_type.replace("Certification", "").lower(),
+                "name": batch.farmer.name,
+                "did": cred.subject_did,
+                "credential": {
+                    "id": cred.credential_id,
+                    "type": cred.credential_type,
+                    "issuer": cred.issuer_did,
+                    "issuedDate": cred.issuance_date.isoformat()
+                }
+            }
+            traceability["supplyChainActors"].append(actor)
     
-    # Extract supply chain actors from credentials
-    for cred in twin.get("credentials", []):
-        cred_subject = cred.get("credentialSubject", {})
-        actor = {
-            "role": cred_subject.get("role", "unknown"),
-            "name": cred_subject.get("name", "Unknown"),
-            "did": cred.get("issuer", "")
-        }
-        
-        if "gln" in cred_subject:
-            actor["gln"] = cred_subject["gln"]
-        
-        actor["credential"] = {
-            "id": cred.get("id"),
-            "type": cred.get("type", [])
-        }
-        
-        traceability["supplyChainActors"].append(actor)
-    
-    # Extract EPCIS events from anchors
-    for anchor in twin.get("anchors", []):
+    # Extract EPCIS events from database
+    for db_event in batch.events:
         event = {
-            "eventType": anchor.get("eventType", "unknown"),
-            "timestamp": anchor.get("timestamp") or issued_at,
-            "eventHash": anchor.get("eventHash", "")
+            "eventType": db_event.event_type,
+            "timestamp": db_event.event_time.isoformat() if db_event.event_time else issued_at,
+            "eventHash": db_event.event_hash,
+            "bizStep": db_event.biz_step,
+            "blockchainAnchor": {
+                "transactionHash": db_event.blockchain_tx_hash or "pending",
+                "anchoredAt": db_event.blockchain_confirmed_at.isoformat() if db_event.blockchain_confirmed_at else None
+            }
         }
-        
-        if "location" in anchor:
-            event["location"] = anchor["location"]
-        
-        if "description" in anchor:
-            event["description"] = anchor["description"]
-        
         traceability["events"].append(event)
     
-    # Build sustainability section
-    sustainability = {}
+    # Build sustainability section from credentials
+    sustainability = {
+        "certifications": []
+    }
     
-    # Add certifications if available
-    if "certifications" in metadata:
-        sustainability["certifications"] = metadata["certifications"]
+    # Add certifications from farmer's credentials
+    for cred in batch.farmer.credentials:
+        if not cred.revoked and "certification" in cred.credential_type.lower():
+            cert = {
+                "type": cred.credential_type,
+                "issuer": cred.issuer_did,
+                "issuedDate": cred.issuance_date.isoformat(),
+                "expiryDate": cred.expiration_date.isoformat() if cred.expiration_date else None
+            }
+            sustainability["certifications"].append(cert)
     
-    # Add carbon footprint if available
-    if "carbonFootprint" in metadata:
-        sustainability["carbonFootprint"] = metadata["carbonFootprint"]
+    # Placeholder for carbon footprint (would come from batch metadata)
+    sustainability["carbonFootprint"] = {
+        "value": 0.85,
+        "unit": "kg CO2e/kg",
+        "scope": "cradle-to-gate"
+    }
     
     # Build due diligence section
     due_diligence = {
@@ -162,16 +170,12 @@ def build_dpp(
         }
     }
     
-    # Add land use rights if available
-    if "landUseRights" in metadata:
-        due_diligence["landUseRights"] = metadata["landUseRights"]
-    
     # Add due diligence credential reference if available
-    dd_creds = [c for c in twin.get("credentials", []) if "DueDiligence" in c.get("type", [])]
+    dd_creds = [c for c in batch.farmer.credentials if "duediligence" in c.credential_type.lower()]
     if dd_creds:
-        due_diligence["dueDiligenceStatement"] = dd_creds[0].get("id", "")
+        due_diligence["dueDiligenceStatement"] = dd_creds[0].credential_id
     
-    # Build blockchain section
+    # Build blockchain section from database events
     blockchain = {
         "network": "local",  # Would be "ethereum", "polygon", etc. in production
         "eventAnchorContract": "0x0000000000000000000000000000000000000000",  # Placeholder
@@ -179,22 +183,19 @@ def build_dpp(
     }
     
     # Add token information if available
-    if twin and "tokenId" in twin:
+    if batch.token_id:
         blockchain["tokenContract"] = "0x0000000000000000000000000000000000000000"
-        blockchain["tokenId"] = twin["tokenId"]
+        blockchain["tokenId"] = batch.token_id
     
-    # Add settlement contract if settled
-    if twin and twin.get("settlement", {}).get("settled"):
-        blockchain["settlementContract"] = "0x0000000000000000000000000000000000000000"
-    
-    # Format anchors for blockchain section
-    for anchor in (twin.get("anchors", []) if twin else []):
+    # Format anchors from database events
+    for event in batch.events:
         blockchain_anchor = {
-            "eventHash": anchor.get("eventHash", "")
+            "eventHash": event.event_hash
         }
         
-        if "txHash" in anchor and anchor["txHash"]:
-            blockchain_anchor["transactionHash"] = anchor["txHash"]
+        if event.blockchain_tx_hash:
+            blockchain_anchor["transactionHash"] = event.blockchain_tx_hash
+            blockchain_anchor["anchoredAt"] = event.created_at.isoformat() if event.created_at else None
         
         blockchain["anchors"].append(blockchain_anchor)
     

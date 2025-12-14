@@ -2,6 +2,8 @@
 Voice Ledger Monitoring Dashboard
 
 Streamlit dashboard for monitoring system health and visualizing supply chain data.
+
+Updated to query Neon PostgreSQL database instead of JSON files.
 """
 
 import json
@@ -11,6 +13,7 @@ import plotly.express as px
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
+from database import get_db, get_all_batches, get_all_farmers
 
 # Page configuration
 st.set_page_config(
@@ -58,19 +61,27 @@ page = st.sidebar.radio(
     ["Overview", "Batches", "Analytics", "System Health"]
 )
 
-# Load data
-@st.cache_data
-def load_twin_data():
-    """Load digital twin data"""
-    twin_file = Path(__file__).parent.parent / "twin" / "digital_twin.json"
-    if twin_file.exists():
-        with open(twin_file) as f:
-            return json.load(f)
-    return {"batches": {}}
+# Load data from database
+@st.cache_data(ttl=60)  # Cache for 60 seconds
+def load_dashboard_data():
+    """Load real-time data from Neon database"""
+    with get_db() as db:
+        batches = get_all_batches(db)
+        farmers = get_all_farmers(db)
+        
+        return {
+            'batches': batches,
+            'farmers': farmers,
+            'total_batches': len(batches),
+            'total_farmers': len(farmers),
+            'total_kg': sum(b.quantity_kg for b in batches),
+            'total_events': sum(len(b.events) for b in batches),
+            'total_credentials': sum(len(f.credentials) for f in farmers)
+        }
 
 @st.cache_data
 def load_dpp_data():
-    """Load all DPP files"""
+    """Load all DPP files (legacy cache)"""
     dpp_dir = Path(__file__).parent.parent / "dpp" / "passports"
     dpps = []
     if dpp_dir.exists():
@@ -80,77 +91,72 @@ def load_dpp_data():
     return dpps
 
 # Load data
-twin_data = load_twin_data()
+data = load_dashboard_data()
 dpp_data = load_dpp_data()
-batches = twin_data.get("batches", {})
+batches = {b.batch_id: b for b in data['batches']}  # Convert to dict for compatibility
 
 # Overview Page
 if page == "Overview":
     st.header("System Overview")
     
-    # Key Metrics
+    # Key Metrics from database
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(
             label="Total Batches",
-            value=len(batches),
-            delta=f"+{len(batches)} this session"
+            value=data['total_batches'],
+            delta=f"{data['total_batches']} tracked"
         )
     
     with col2:
-        total_quantity = sum(b.get("quantity", 0) for b in batches.values())
         st.metric(
             label="Total Volume",
-            value=f"{total_quantity:,} bags",
-            delta=f"{total_quantity} bags tracked"
+            value=f"{data['total_kg']:,.1f} kg",
+            delta=f"{data['total_kg']:.1f} kg tracked"
         )
     
     with col3:
-        total_anchors = sum(len(b.get("anchors", [])) for b in batches.values())
         st.metric(
-            label="Blockchain Anchors",
-            value=total_anchors,
-            delta=f"{total_anchors} events recorded"
+            label="Blockchain Events",
+            value=data['total_events'],
+            delta=f"{data['total_events']} recorded"
         )
     
     with col4:
-        settled_count = sum(1 for b in batches.values() if b and b.get("settlement") and b.get("settlement").get("settled"))
         st.metric(
-            label="Settled Batches",
-            value=settled_count,
-            delta=f"{settled_count}/{len(batches)} settled"
+            label="Total Farmers",
+            value=data['total_farmers'],
+            delta=f"{data['total_farmers']} registered"
         )
     
     st.markdown("---")
     
-    # Recent Activity
+    # Recent Activity from database
     st.subheader("Recent Activity")
     
-    if batches:
-        # Show recent batches
-        recent_batches = list(batches.items())[:5]
+    if data['batches']:
+        # Show recent batches (last 5)
+        recent_batches = data['batches'][:5]
         
-        for batch_id, batch_data in recent_batches:
-            with st.expander(f"Batch {batch_id}"):
+        for batch in recent_batches:
+            with st.expander(f"Batch {batch.batch_id} - {batch.farmer.name}"):
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.write("**Quantity:**", f"{batch_data.get('quantity', 0)} bags")
-                    st.write("**Token ID:**", batch_data.get("tokenId", "N/A"))
+                    st.write("**GTIN:**", batch.gtin)
+                    st.write("**Quantity:**", f"{batch.quantity_kg} kg")
+                    st.write("**Token ID:**", batch.token_id or "Not minted")
                 
                 with col2:
-                    st.write("**Events:**", len(batch_data.get("anchors", [])))
-                    st.write("**Credentials:**", len(batch_data.get("credentials", [])))
+                    st.write("**Origin:**", batch.origin_region)
+                    st.write("**Variety:**", batch.variety)
+                    st.write("**Events:**", len(batch.events))
                 
                 with col3:
-                    settlement = batch_data.get("settlement")
-                    if settlement:
-                        st.write("**Settlement:**", f"${settlement.get('amount', 0)/100:,.2f}")
-                        st.write("**Status:**", "Settled" if settlement.get("settled") else "Pending")
-                    else:
-                        st.write("**Settlement:**", "Not recorded")
-                        st.write("**Status:**", "N/A")
+                    st.write("**Farmer:**", batch.farmer.name)
+                    st.write("**DID:**", batch.farmer.did[:20] + "...")
+                    st.write("**Credentials:**", len(batch.farmer.credentials))
     else:
         st.info("No batches recorded yet. Start by creating a commissioning event!")
 
@@ -158,80 +164,76 @@ if page == "Overview":
 elif page == "Batches":
     st.header("Batch Management")
     
-    if not batches:
+    if not data['batches']:
         st.warning("No batches found. Create your first batch using the voice API or EPCIS builder.")
     else:
         # Batch selector
-        selected_batch = st.selectbox(
+        selected_batch_id = st.selectbox(
             "Select Batch",
-            options=list(batches.keys())
+            options=[b.batch_id for b in data['batches']]
         )
         
-        if selected_batch:
-            batch = batches[selected_batch]
+        if selected_batch_id:
+            batch = batches[selected_batch_id]
             
             # Batch details
-            st.subheader(f"Batch: {selected_batch}")
+            st.subheader(f"Batch: {selected_batch_id}")
             
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("### Details")
-                st.write(f"**Token ID:** {batch.get('tokenId', 'Not minted')}")
-                st.write(f"**Quantity:** {batch.get('quantity', 0)} bags")
-                
-                metadata = batch.get("metadata", {})
-                if metadata:
-                    st.write(f"**Origin:** {metadata.get('origin', 'Unknown')}")
-                    st.write(f"**Cooperative:** {metadata.get('cooperative', 'Unknown')}")
+                st.write(f"**GTIN:** {batch.gtin}")
+                st.write(f"**Token ID:** {batch.token_id or 'Not minted'}")
+                st.write(f"**Quantity:** {batch.quantity_kg} kg")
+                st.write(f"**Variety:** {batch.variety}")
+                st.write(f"**Process:** {batch.process_method}")
+                st.write(f"**Grade:** {batch.grade or 'Not graded'}")
             
             with col2:
-                st.markdown("### Blockchain")
-                anchors = batch.get("anchors", [])
-                st.write(f"**Anchored Events:** {len(anchors)}")
-                
-                for anchor in anchors:
-                    st.write(f"- {anchor.get('eventType', 'unknown')}: `{anchor.get('eventHash', '')[:16]}...`")
+                st.markdown("### Origin")
+                st.write(f"**Country:** {batch.origin_country}")
+                st.write(f"**Region:** {batch.origin_region}")
+                st.write(f"**Farm:** {batch.farm_name}")
+                st.write(f"**Farmer:** {batch.farmer.name}")
+                st.write(f"**DID:** {batch.farmer.did[:30]}...")
             
-            # Settlement info
-            settlement = batch.get("settlement")
-            if settlement:
-                st.markdown("### Settlement")
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Amount", f"${settlement.get('amount', 0)/100:,.2f}")
-                
-                with col2:
-                    st.metric("Recipient", settlement.get("recipient", "N/A")[:10] + "...")
-                
-                with col3:
-                    status = "Settled" if settlement.get("settled") else "Pending"
-                    st.metric("Status", status)
+            # Events
+            st.markdown("### Blockchain Events")
+            events = batch.events
+            st.write(f"**Total Events:** {len(events)}")
+            
+            for event in events:
+                anchored = "✅" if event.blockchain_tx_hash else "⏳"
+                st.write(f"{anchored} **{event.event_type}** ({event.biz_step}) - {event.event_time.strftime('%Y-%m-%d %H:%M')}")
+                if event.blockchain_tx_hash:
+                    st.write(f"   TX: `{event.blockchain_tx_hash[:16]}...`")
             
             # Credentials
-            credentials = batch.get("credentials", [])
+            credentials = batch.farmer.credentials
             if credentials:
                 st.markdown("### Credentials")
                 st.write(f"**Total Credentials:** {len(credentials)}")
                 
-                for i, cred in enumerate(credentials):
-                    with st.expander(f"Credential {i+1}"):
-                        st.json(cred)
+                for cred in credentials:
+                    status = "✅ Active" if not cred.revoked else "❌ Revoked"
+                    st.write(f"{status} **{cred.credential_type}** - Issued: {cred.issued_at.strftime('%Y-%m-%d')}")
+                    if cred.expires_at:
+                        st.write(f"   Expires: {cred.expires_at.strftime('%Y-%m-%d')}")
 
 # Analytics Page
 elif page == "Analytics":
     st.header("Analytics")
     
-    if not batches:
+    if not data['batches']:
         st.warning("No data available for analytics.")
     else:
         # Batch distribution by quantity
         st.subheader("Batch Volume Distribution")
         
         batch_quantities = {
-            batch_id: data.get("quantity", 0)
-            for batch_id, data in batches.items()
+            batch.batch_id: batch.quantity_kg
+            for batch in data['batches']
         }
         
         fig = go.Figure(data=[
@@ -243,7 +245,7 @@ elif page == "Analytics":
         ])
         fig.update_layout(
             xaxis_title="Batch ID",
-            yaxis_title="Quantity (bags)",
+            yaxis_title="Quantity (kg)",
             height=400
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -252,9 +254,9 @@ elif page == "Analytics":
         st.subheader("Event Types Distribution")
         
         event_types = {}
-        for batch in batches.values():
-            for anchor in batch.get("anchors", []):
-                event_type = anchor.get("eventType", "unknown")
+        for batch in data['batches']:
+            for event in batch.events:
+                event_type = event.event_type
                 event_types[event_type] = event_types.get(event_type, 0) + 1
         
         if event_types:
@@ -268,21 +270,28 @@ elif page == "Analytics":
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
         
-        # Settlement statistics
-        st.subheader("Settlement Statistics")
+        # Region distribution
+        st.subheader("Batch Distribution by Region")
         
-        col1, col2 = st.columns(2)
+        regions = {}
+        for batch in data['batches']:
+            region = batch.origin_region or "Unknown"
+            regions[region] = regions.get(region, 0) + 1
         
-        with col1:
-            total_settlement = sum(
-                b.get("settlement", {}).get("amount", 0)
-                for b in batches.values()
-            ) / 100
-            st.metric("Total Settlement Value", f"${total_settlement:,.2f}")
-        
-        with col2:
-            avg_settlement = total_settlement / len(batches) if batches else 0
-            st.metric("Average per Batch", f"${avg_settlement:,.2f}")
+        if regions:
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=list(regions.keys()),
+                    y=list(regions.values()),
+                    marker_color='#4ECDC4'
+                )
+            ])
+            fig.update_layout(
+                xaxis_title="Region",
+                yaxis_title="Number of Batches",
+                height=400
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 # System Health Page
 elif page == "System Health":
@@ -317,25 +326,21 @@ elif page == "System Health":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        # Count EPCIS events
-        epcis_dir = Path(__file__).parent.parent / "epcis" / "events"
-        epcis_count = len(list(epcis_dir.glob("*.json"))) if epcis_dir.exists() else 0
-        st.metric("EPCIS Events", epcis_count)
+        # Count events from database
+        st.metric("EPCIS Events", data['total_events'])
     
     with col2:
-        # Count DPPs
+        # Count DPPs (cached files)
         dpp_count = len(dpp_data)
         st.metric("Digital Passports", dpp_count)
     
     with col3:
-        # Count QR codes
-        qr_dir = Path(__file__).parent.parent / "dpp" / "qrcodes"
-        qr_count = len(list(qr_dir.glob("*.png"))) if qr_dir.exists() else 0
-        st.metric("QR Codes", qr_count)
+        # Count credentials from database
+        st.metric("Credentials", data['total_credentials'])
     
     with col4:
-        # Count batches
-        st.metric("Digital Twins", len(batches))
+        # Count batches from database
+        st.metric("Batches in DB", data['total_batches'])
     
     st.markdown("---")
     
@@ -348,10 +353,12 @@ elif page == "System Health":
         st.write("**Platform:** Voice Ledger v1.0.0")
         st.write("**Compliance:** EUDR-ready")
         st.write("**Blockchain:** Local Anvil node")
+        st.write("**Database:** Neon PostgreSQL")
     
     with col2:
         st.write("**Python Version:** 3.9.6")
         st.write("**Smart Contracts:** 3 deployed")
+        st.write("**ORM:** SQLAlchemy 2.0.23")
         st.write("**Last Updated:** ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 # Footer

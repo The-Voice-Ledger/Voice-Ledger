@@ -3,6 +3,8 @@ DPP Resolver API
 
 FastAPI service that resolves Digital Product Passports by batch ID.
 Public-facing API for consumers to access product traceability data.
+
+Updated to query Neon PostgreSQL database instead of JSON files.
 """
 
 import json
@@ -13,7 +15,8 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from dpp.dpp_builder import build_dpp, validate_dpp, load_twin_data
+from dpp.dpp_builder import build_dpp, validate_dpp, load_batch_data
+from database import get_db, get_all_batches, get_batch_by_batch_id, get_batch_events
 
 
 # Initialize FastAPI app
@@ -46,7 +49,7 @@ async def health_check():
 @app.get("/dpp/{batch_id}")
 async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
     """
-    Resolve Digital Product Passport by batch ID.
+    Resolve Digital Product Passport by batch ID from database.
     
     Args:
         batch_id: Batch identifier (e.g., "BATCH-2025-001")
@@ -58,25 +61,18 @@ async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
     Raises:
         HTTPException: If batch not found or DPP build fails
     """
-    # Check if batch exists in digital twin
-    twin = load_twin_data(batch_id)
-    if not twin:
+    # Check if batch exists in database
+    batch = load_batch_data(batch_id)
+    if not batch:
         raise HTTPException(
             status_code=404,
             detail=f"Batch {batch_id} not found"
         )
     
     try:
-        # Build DPP from digital twin
-        # In production, these values would come from database
+        # Build DPP from database (all data from batch object)
         dpp = build_dpp(
             batch_id=batch_id,
-            product_name="Ethiopian Yirgacheffe - Washed Arabica",
-            variety="Arabica",
-            process_method="Washed",
-            country="ET",
-            region="Yirgacheffe, Gedeo Zone",
-            cooperative=twin.get("metadata", {}).get("cooperative", "Unknown Cooperative"),
             deforestation_risk="none",
             eudr_compliant=True
         )
@@ -97,6 +93,8 @@ async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
                 "product": dpp["productInformation"]["productName"],
                 "quantity": f"{dpp['productInformation']['quantity']} {dpp['productInformation']['unit']}",
                 "origin": f"{dpp['traceability']['origin']['region']}, {dpp['traceability']['origin']['country']}",
+                "farmer": dpp["traceability"]["origin"]["farmer"]["name"],
+                "gtin": dpp["productInformation"]["gtin"],
                 "eudrCompliant": dpp["dueDiligence"]["eudrCompliant"],
                 "deforestationRisk": dpp["dueDiligence"]["riskAssessment"]["deforestationRisk"],
                 "qrUrl": dpp["qrCode"]["url"]
@@ -120,7 +118,7 @@ async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
 @app.get("/dpp/{batch_id}/verify")
 async def verify_dpp(batch_id: str) -> Dict[str, Any]:
     """
-    Verify DPP authenticity and blockchain anchoring.
+    Verify DPP authenticity and blockchain anchoring from database.
     
     Args:
         batch_id: Batch identifier
@@ -128,83 +126,78 @@ async def verify_dpp(batch_id: str) -> Dict[str, Any]:
     Returns:
         Verification results including blockchain status
     """
-    twin = load_twin_data(batch_id)
-    if not twin:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Batch {batch_id} not found"
-        )
-    
-    # Check blockchain anchors
-    anchors = twin.get("anchors", [])
-    anchored_events = len([a for a in anchors if a.get("eventHash")])
-    
-    # Check credentials
-    credentials = twin.get("credentials", [])
-    
-    # Check settlement status
-    settlement = twin.get("settlement", {})
-    is_settled = settlement.get("settled", False)
-    
-    # Determine verification status
-    has_anchors = anchored_events > 0
-    has_credentials = len(credentials) > 0
-    
-    verification_status = "verified" if (has_anchors and has_credentials) else "partial"
-    
-    return {
-        "batchId": batch_id,
-        "verificationStatus": verification_status,
-        "blockchain": {
-            "anchored": has_anchors,
-            "anchoredEvents": anchored_events,
-            "totalAnchors": len(anchors)
-        },
-        "credentials": {
-            "verified": has_credentials,
-            "totalCredentials": len(credentials),
-            "types": [c.get("type", []) for c in credentials]
-        },
-        "settlement": {
-            "recorded": is_settled,
-            "amount": settlement.get("amount"),
-            "recipient": settlement.get("recipient")
-        },
-        "timestamp": twin.get("metadata", {}).get("lastUpdated")
-    }
+    with get_db() as db:
+        batch = get_batch_by_batch_id(db, batch_id)
+        if not batch:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Batch {batch_id} not found"
+            )
+        
+        # Check blockchain anchors
+        events = get_batch_events(db, batch_id)
+        anchored_events = [e for e in events if e.blockchain_tx_hash]
+        
+        # Check credentials
+        credentials = batch.farmer.credentials
+        verified_credentials = [c for c in credentials if not c.revoked]
+        
+        # Determine verification status
+        has_anchors = len(anchored_events) > 0
+        has_credentials = len(verified_credentials) > 0
+        
+        verification_status = "verified" if (has_anchors and has_credentials) else "partial"
+        
+        return {
+            "batchId": batch_id,
+            "verificationStatus": verification_status,
+            "blockchain": {
+                "anchored": has_anchors,
+                "anchoredEvents": len(anchored_events),
+                "totalEvents": len(events)
+            },
+            "credentials": {
+                "verified": has_credentials,
+                "totalCredentials": len(verified_credentials),
+                "types": [c.credential_type for c in verified_credentials]
+            },
+            "batch": {
+                "gtin": batch.gtin,
+                "quantity": f"{batch.quantity_kg} kg",
+                "farmer": batch.farmer.name
+            }
+        }
 
 
 @app.get("/batches")
 async def list_batches() -> Dict[str, Any]:
     """
-    List all available batches.
+    List all available batches from database.
     
     Returns:
         List of batch IDs with summary information
     """
-    twin_file = Path(__file__).parent.parent / "twin" / "digital_twin.json"
-    
-    if not twin_file.exists():
-        return {"batches": []}
-    
-    with open(twin_file, "r") as f:
-        twin_data = json.load(f)
-    
-    batches = []
-    for batch_id, data in twin_data.get("batches", {}).items():
-        batches.append({
-            "batchId": batch_id,
-            "quantity": data.get("quantity"),
-            "tokenId": data.get("tokenId"),
-            "anchors": len(data.get("anchors", [])),
-            "credentials": len(data.get("credentials", [])),
-            "settled": data.get("settlement", {}).get("settled", False)
-        })
-    
-    return {
-        "total": len(batches),
-        "batches": batches
-    }
+    with get_db() as db:
+        batches = get_all_batches(db)
+        
+        batch_list = []
+        for batch in batches:
+            batch_list.append({
+                "batchId": batch.batch_id,
+                "gtin": batch.gtin,
+                "quantity": batch.quantity_kg,
+                "unit": "kg",
+                "tokenId": batch.token_id,
+                "farmer": batch.farmer.name,
+                "origin": batch.origin_region,
+                "events": len(batch.events),
+                "credentials": len(batch.farmer.credentials)
+            })
+        
+        return {
+            "total": len(batch_list),
+            "batches": batch_list
+        }
 
 
 # For testing/development

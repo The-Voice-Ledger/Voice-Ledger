@@ -54,12 +54,17 @@ def issue_credential(claims: dict, issuer_private_key_hex: str) -> dict:
     # Build credential structure
     issuance_date = datetime.now(timezone.utc).isoformat()
     
+    # Generate unique credential ID (W3C VC standard requirement)
+    credential_type = claims.get("type", "GenericCredential")
+    credential_id = f"urn:uuid:{credential_type.lower()}-{hashlib.sha256((issuance_date + vk.encode().hex()).encode()).hexdigest()[:16]}"
+    
     credential = {
         "@context": [
             "https://www.w3.org/2018/credentials/v1",
             "https://voiceledger.org/credentials/v1"
         ],
-        "type": ["VerifiableCredential", claims.get("type", "GenericCredential")],
+        "id": credential_id,
+        "type": ["VerifiableCredential", credential_type],
         "issuer": vk.encode().hex(),
         "issuanceDate": issuance_date,
         "credentialSubject": {k: v for k, v in claims.items() if k != "type"}

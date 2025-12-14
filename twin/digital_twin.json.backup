@@ -1,0 +1,449 @@
+{
+  "batches": {
+    "BATCH-2025-001": {
+      "batchId": "BATCH-2025-001",
+      "anchors": [
+        {
+          "eventHash": "bc16581a015e8d239723f41734f0847b8615dcae996f182491ddffc67017b3fc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 1,
+      "metadata": {
+        "origin": "Ethiopia",
+        "cooperative": "Guzo"
+      },
+      "settlement": {
+        "amount": 1000000,
+        "recipient": "0x1234567890abcdef1234567890abcdef12345678",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 50
+    },
+    "BATCH-2025-TEST": {
+      "batchId": "BATCH-2025-TEST",
+      "anchors": [
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        },
+        {
+          "eventHash": "a3aedade85dc4abb6de9443ed1cc2e73737f655953dadd6f5adc22e4f1c98082",
+          "eventType": "commissioning",
+          "txHash": "0xabc123...",
+          "timestamp": null
+        }
+      ],
+      "tokenId": 42,
+      "metadata": {
+        "origin": "Ethiopia",
+        "region": "Yirgacheffe",
+        "cooperative": "Test Cooperative",
+        "variety": "Arabica",
+        "processMethod": "Washed"
+      },
+      "settlement": {
+        "amount": 2500000,
+        "recipient": "0xTestRecipient123456789",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 100
+    },
+    "BATCH-TEST-003": {
+      "batchId": "BATCH-TEST-003",
+      "anchors": [
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        },
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        },
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        },
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        },
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        },
+        {
+          "eventHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "eventType": "commissioning",
+          "txHash": "0xtest123",
+          "timestamp": null
+        }
+      ],
+      "tokenId": 99,
+      "metadata": {
+        "origin": "Ethiopia",
+        "cooperative": "Test"
+      },
+      "settlement": {
+        "amount": 5000000,
+        "recipient": "0xTestRecipient",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 75
+    },
+    "BATCH-TEST-004": {
+      "batchId": "BATCH-TEST-004",
+      "anchors": [
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 100,
+      "metadata": {},
+      "settlement": null,
+      "credentials": [],
+      "quantity": 50
+    },
+    "BATCH-TEST-005": {
+      "batchId": "BATCH-TEST-005",
+      "anchors": [
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "6ca711220b5a114feebfb072514b7e0e024b98507f1506105a7711c5725493e7",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": null,
+      "metadata": {},
+      "settlement": null,
+      "credentials": []
+    },
+    "BATCH-DPP-TEST-001": {
+      "batchId": "BATCH-DPP-TEST-001",
+      "anchors": [
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 200,
+      "metadata": {
+        "origin": "Ethiopia",
+        "cooperative": "Test Coop"
+      },
+      "settlement": {
+        "amount": 1000000,
+        "recipient": "0xTest",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 100
+    },
+    "BATCH-DPP-TEST-002": {
+      "batchId": "BATCH-DPP-TEST-002",
+      "anchors": [
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 201,
+      "metadata": {},
+      "settlement": {
+        "amount": 500000,
+        "recipient": "0xTest2",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 50
+    },
+    "BATCH-DPP-TEST-003": {
+      "batchId": "BATCH-DPP-TEST-003",
+      "anchors": [
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 202,
+      "metadata": {},
+      "settlement": {
+        "amount": 750000,
+        "recipient": "0xTest3",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 75
+    },
+    "BATCH-DPP-TEST-004": {
+      "batchId": "BATCH-DPP-TEST-004",
+      "anchors": [
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        },
+        {
+          "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "eventType": "commissioning",
+          "txHash": null,
+          "timestamp": null
+        }
+      ],
+      "tokenId": 203,
+      "metadata": {},
+      "settlement": {
+        "amount": 600000,
+        "recipient": "0xTest4",
+        "txHash": null,
+        "settled": true
+      },
+      "credentials": [],
+      "quantity": 60
+    }
+  }
+}

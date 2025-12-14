@@ -83,9 +83,10 @@ Voice Input → ASR (Whisper API) → NLU (GPT-3.5 API) → EPCIS Event Builder
 
 **Digital Twin Synchronization** [COMPLETE]
 - Unified state management combining on-chain and off-chain data
-- JSON-based persistence layer
+- Neon PostgreSQL persistence layer
 - Batch lifecycle tracking
 - Event history aggregation
+- Migration from JSON completed (9/9 batches)
 
 **Voice Processing API** [COMPLETE - v1.0 Cloud Version]
 - FastAPI REST service for audio processing
@@ -108,7 +109,6 @@ Voice Input → ASR (Whisper API) → NLU (GPT-3.5 API) → EPCIS Event Builder
 - Batch information aggregation
 - Resolver service for DPP retrieval
 
-### Standards Compliance (v1.0)
 ### Standards Compliance
 
 **GS1 Standards**
@@ -126,11 +126,10 @@ Voice Input → ASR (Whisper API) → NLU (GPT-3.5 API) → EPCIS Event Builder
 - EIP-712 for typed data signing
 ## Technology Stack (v1.0)
 
-**Backend (Current)**
 **Backend**
 - Python 3.11
 - FastAPI 0.104.1
-- SQLAlchemy 2.0.23 (prepared for Neon database migration)
+- SQLAlchemy 2.0.23 (Neon PostgreSQL integration)
 - PyNaCl 1.5.0 (Ed25519 cryptography)
 - PyLD 2.0.3 (JSON-LD canonicalization)
 - Web3.py 6.11.3 (blockchain interaction)
@@ -144,19 +143,16 @@ Voice Input → ASR (Whisper API) → NLU (GPT-3.5 API) → EPCIS Event Builder
 - ONNX Runtime for mobile inference
 
 **Blockchain**
-**Storage (v1.0)**
-- IPFS (go-ipfs) - Decentralized event storage
-- JSON file system - Current local storage
+- Foundry (Forge, Anvil) - Local development and testing
+- Solidity 0.8.20 - Smart contract development
+- OpenZeppelin 5.0 - Contract libraries
+- Web3.py 6.11.3 - Blockchain interaction
+- Polygon/Ethereum - Target deployment networks
 
-**Storage (v2.0 - Planned)**
-- Neon serverless PostgreSQL - Unified dev/prod database
-- SQLite offline queue - On-device event caching
-
-**Frontend**
 **Storage**
-- IPFS (go-ipfs)
-- JSON file system (current)
-- Neon serverless PostgreSQL (in progress)
+- IPFS (Pinata) - Decentralized event storage with pinning service
+- Neon serverless PostgreSQL - Production database [COMPLETE]
+- SQLite offline queue - Planned for v2.0 mobile app
 
 **Frontend**
 - Streamlit 1.28.2
@@ -177,9 +173,10 @@ Voice-Ledger/
 │   │   └── did_key.py          # DID generation and resolution
 │   └── agent.py                # Verifiable Credential issuance
 ├── blockchain/
-│   └── contracts/
+│   └── src/
 │       ├── EPCISEventAnchor.sol
-│       └── CoffeeBatchToken.sol
+│       ├── CoffeeBatchToken.sol
+│       └── SettlementContract.sol
 ├── voice/
 │   ├── asr/
 │   │   └── asr_infer.py        # Whisper integration
@@ -188,9 +185,21 @@ Voice-Ledger/
 │   └── service/
 │       ├── api.py              # FastAPI REST service
 │       └── auth.py             # API authentication
+├── database/
+│   ├── models.py               # SQLAlchemy models (5 tables)
+│   ├── connection.py           # Database session management
+│   ├── crud.py                 # CRUD operations
+│   └── test_db.py              # Database integration tests
+├── scripts/
+│   ├── migrate_to_neon.py      # JSON to Neon migration
+│   └── clear_database.py       # Database maintenance
+├── ipfs/
+│   ├── ipfs_client.py          # IPFS integration (Pinata)
+│   └── ipfs_upload.py          # Event upload to IPFS
 ├── twin/
 │   └── twin_builder.py         # Digital twin management
 ├── dpp/
+│   ├── schema.json             # DPP JSON Schema (EUDR)
 │   ├── dpp_builder.py          # Digital Product Passport
 │   ├── dpp_resolver.py         # DPP resolution service
 │   └── qrcode_gen.py           # QR code generation
@@ -365,7 +374,6 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 
 - Voice processing requires internet connectivity (OpenAI API)
 - English language only in current implementation
-- JSON file-based storage (database migration planned for v2.0)
 - Cloud API costs limit scalability ($0.014/transaction)
 - No mobile application implementation
 - 8-15 second latency for voice processing
@@ -374,20 +382,14 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 **These limitations are addressed in v2.0 roadmap below.**
 
 ## Documentation
-## Current Limitations
-
-- Voice processing requires internet connectivity (OpenAI API)
-- English language only in current implementation
-- JSON file-based storage (PostgreSQL migration in progress)
-- Cloud API costs limit scalability
-- No mobile application implementation
-
-## Documentation
 
 - `END_TO_END_WORKFLOW.md`: Comprehensive technical workflow documentation
 - `VOICE_LEDGER_OVERVIEW.md`: System overview and future roadmap
-- `NEON_DATABASE_SETUP.md`: Database migration guide
+- `NEON_DATABASE_SETUP.md`: Database setup and migration guide
+- `NEON_INTEGRATION_COMPLETE.md`: Neon database integration status
+- `BUILD_LOG.md`: Complete build log with all implementation steps
 - `Technical_Guide.md`: Implementation details
+- `PITCH_DECK.md`: Impact investor presentation
 
 ## Future Development Roadmap
 
@@ -566,13 +568,14 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 - Build multilingual IVR call flow
 - SMS notification system
 
-**Phase 4: Neon Database Migration (2 weeks)**
-- Replace JSON file storage with Neon serverless PostgreSQL
-- Unified database for dev/staging/production
-- Database branching for safe testing
-- Migration script for existing data
+**Phase 4: Neon Database Migration** [COMPLETE]
+- ✓ Replaced JSON file storage with Neon serverless PostgreSQL
+- ✓ Unified database for dev/staging/production
+- ✓ Database branching capability configured
+- ✓ Migration script completed (9/9 batches migrated)
+- ✓ Unique GTIN generation using gs1.identifiers module
 
-### Database Migration: Neon Serverless Postgres
+### Database Migration: Neon Serverless Postgres [COMPLETE]
 
 **Why Neon**
 - Serverless auto-scaling (pay only for compute used)
@@ -580,27 +583,33 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 - Same connection string for all environments
 - Free tier: 10GB storage + 100 compute hours/month
 
-**Implementation Steps**
+**Implementation Completed**
 ```bash
-# Install dependencies
+# Dependencies installed ✓
 pip install sqlalchemy asyncpg psycopg2-binary alembic
 
-# Set environment variable
-export DATABASE_URL="postgresql://user:pass@ep-name.region.aws.neon.tech/voiceledger"
+# Database connected ✓
+export DATABASE_URL="postgresql://neondb_owner:***@ep-weathered-bread-agcdwm1n-pooler.c-2.eu-central-1.aws.neon.tech/neondb"
 
-# Run migrations
-alembic upgrade head
+# Tables created ✓
+python database/models.py
 
-# Migrate existing JSON data
-python scripts/migrate_json_to_neon.py
+# Data migrated ✓ (9/9 batches)
+python -m scripts.migrate_to_neon
 ```
 
-**Database Schema**
+**Database Schema (5 Tables)**
 - `farmer_identities`: DID, encrypted keys, location, GLN
-- `coffee_batches`: GTIN, token ID, quantity, origin, variety
+- `coffee_batches`: GTIN (unique), token ID, quantity, origin, variety
 - `epcis_events`: Event hash, canonical form, IPFS CID, blockchain TX
 - `verifiable_credentials`: Certifications, quality grades, VCs
 - `offline_queue`: Pending events for sync
+
+**Migration Results**
+- ✓ All 9 batches migrated successfully
+- ✓ Unique GTINs generated (0614141001000 - 0614141001008)
+- ✓ CRUD operations tested and verified
+- ✓ Connection verified (EU Central region)
 
 ### Target Impact
 
