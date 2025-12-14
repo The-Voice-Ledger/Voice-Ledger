@@ -369,6 +369,140 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 - `NEON_DATABASE_SETUP.md`: Database migration guide
 - `Technical_Guide.md`: Implementation details
 
+## Future Development Roadmap
+
+### Version 2.0: Offline-First with Addis AI Integration
+
+**Current State (v1.0 - Cloud Prototype)**
+- OpenAI Whisper ASR (cloud API, 3-5s latency)
+- GPT-3.5 NLU (cloud API, 1-2s latency)
+- English only
+- Internet required
+- $0.014 per transaction
+- 15-20% rural accessibility
+
+**Planned State (v2.0 - Offline-First)**
+- Whisper-Small quantized (244MB, on-device)
+- Gemma 3B + LoRA (1.5GB, on-device)
+- 5 languages (Amharic, Afan Oromo, Tigrinya, Spanish, English)
+- No internet required (offline-first, sync when available)
+- $0 marginal cost per transaction
+- 95%+ rural accessibility
+
+### Language Support
+
+| Language | Region | Speakers | Coffee Farmers |
+|----------|--------|----------|----------------|
+| Amharic | Ethiopia | 32M | 2.5M |
+| Afan Oromo | Ethiopia (Oromia) | 37M | 2.8M |
+| Tigrinya | Ethiopia (Tigray) | 7M | 0.5M |
+| Spanish | Latin America | 50M+ | 5M+ |
+| English | International | 2M | 0.2M |
+
+### Device Support Matrix
+
+**Smartphone App (Android)**
+- Whisper-Small ONNX (4-bit quantized): 244MB
+- Gemma 3B ONNX (4-bit quantized): 1.5GB
+- Offline SQLite queue for event storage
+- Auto-sync when connectivity available
+- Target: 30% of rural farmers
+
+**IVR System (Feature Phones)**
+- Toll-free number (e.g., 8000 1234)
+- Edge GPU nodes (A100) in regional telecom centers
+- Voice menu in 5 languages
+- SMS receipt confirmation
+- Target: 70% of rural farmers
+
+### Key Improvements
+
+**Accessibility**
+- 6x increase in rural coverage (15% → 95%)
+- Literacy-independent (voice-only interface)
+- Works during network outages
+- Supports feature phones via IVR
+
+**Performance**
+- 5x faster processing (<2s vs 8-15s)
+- Zero latency dependency on cloud APIs
+- On-device data privacy (voice never leaves device)
+
+**Technical Architecture**
+- Offline ASR: Whisper-Small with domain-specific fine-tuning (coffee terminology)
+- Offline NLU: Gemma 3B with LoRA adapters for entity extraction
+- Offline queue: SQLite database with conflict resolution
+- Opportunistic sync: Automatic blockchain anchoring when connectivity restored
+
+### Implementation Timeline
+
+**Phase 1: Model Fine-Tuning (6 months)**
+- Collect 100+ hours annotated audio per language
+- Fine-tune Whisper-Small for coffee domain vocabulary
+- Train Gemma 3B LoRA adapters for intent/entity extraction
+- Target accuracy: 88-92% WER (Word Error Rate)
+
+**Phase 2: Mobile App Development (6 months)**
+- Native Android app with ONNX Runtime integration
+- Offline queue with exponential backoff retry
+- Secure DID key storage (encrypted with PIN)
+- Background sync service
+
+**Phase 3: IVR System Deployment (12 months)**
+- Partner with Ethiopian Telecom for toll-free number
+- Deploy edge GPU nodes (A100) in 10 regional centers
+- Build multilingual IVR call flow
+- SMS notification system
+
+**Phase 4: Neon Database Migration (2 weeks)**
+- Replace JSON file storage with Neon serverless PostgreSQL
+- Unified database for dev/staging/production
+- Database branching for safe testing
+- Migration script for existing data
+
+### Database Migration: Neon Serverless Postgres
+
+**Why Neon**
+- Serverless auto-scaling (pay only for compute used)
+- Database branching (like Git for databases)
+- Same connection string for all environments
+- Free tier: 10GB storage + 100 compute hours/month
+
+**Implementation Steps**
+```bash
+# Install dependencies
+pip install sqlalchemy asyncpg psycopg2-binary alembic
+
+# Set environment variable
+export DATABASE_URL="postgresql://user:pass@ep-name.region.aws.neon.tech/voiceledger"
+
+# Run migrations
+alembic upgrade head
+
+# Migrate existing JSON data
+python scripts/migrate_json_to_neon.py
+```
+
+**Database Schema**
+- `farmer_identities`: DID, encrypted keys, location, GLN
+- `coffee_batches`: GTIN, token ID, quantity, origin, variety
+- `epcis_events`: Event hash, canonical form, IPFS CID, blockchain TX
+- `verifiable_credentials`: Certifications, quality grades, VCs
+- `offline_queue`: Pending events for sync
+
+### Target Impact
+
+**Accessibility**
+- 11M+ addressable smallholder farmers
+- 95% rural coverage (vs 15% current)
+- Support for 70% feature phone users
+
+**Standards Compliance**
+- EPCIS 2.0 (ISO/IEC 19987:2024)
+- W3C DIDs and Verifiable Credentials
+- EUDR automated compliance
+- GS1 identifiers (GTIN, GLN, SSCC)
+
 ## License
 
 MIT License
@@ -379,4 +513,4 @@ Emmanuel Acho, PhD
 
 ## Version
 
-1.0.0 (Cloud Prototype)
+1.0.0 (Cloud Prototype) | 2.0.0 (Offline-First - In Development)
