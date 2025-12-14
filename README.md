@@ -415,6 +415,98 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 - SMS receipt confirmation
 - Target: 70% of rural farmers
 
+### System Architecture Comparison
+
+**v1.0 Architecture (Cloud-Dependent)**
+
+```
+┌─────────────────────────────────────┐
+│   FARMER (Smartphone + Internet)   │
+│   Records voice command             │
+└──────────────┬──────────────────────┘
+               │ Audio (WAV/MP3)
+               ▼
+┌─────────────────────────────────────┐
+│   CLOUD PROCESSING (Required)       │
+│  ┌──────────────┐  ┌──────────────┐│
+│  │ OpenAI       │  │   GPT-3.5    ││
+│  │ Whisper ASR  │→ │   NLU        ││
+│  │ (3-5s)       │  │   (1-2s)     ││
+│  └──────────────┘  └──────────────┘│
+└──────────────┬──────────────────────┘
+               │ Structured Data
+               ▼
+┌─────────────────────────────────────┐
+│      BACKEND (FastAPI)              │
+│  • Build EPCIS Event                │
+│  • Canonicalize (URDNA2015)         │
+│  • Hash (SHA-256)                   │
+│  • Sign with DID                    │
+└──────────────┬──────────────────────┘
+               │
+               ├─→ IPFS Storage
+               ├─→ Blockchain Anchor
+               └─→ JSON File Storage
+```
+
+**v2.0 Architecture (Offline-First)**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│              FARMER DEVICES (No Internet Required)         │
+│                                                             │
+│  ┌──────────────────────────┐  ┌───────────────────────┐  │
+│  │ SMARTPHONE APP           │  │ FEATURE PHONE (IVR)   │  │
+│  │ ┌──────────────────────┐ │  │ Call: 8000 1234       │  │
+│  │ │ Whisper-Small (244MB)│ │  │ (Toll-free)           │  │
+│  │ │ On-device ASR        │ │  │                       │  │
+│  │ │ <1s latency          │ │  │ Edge GPU Node:        │  │
+│  │ └──────────┬───────────┘ │  │ - Whisper ASR (0.8s)  │  │
+│  │            ▼             │  │ - Gemma NLU (0.5s)    │  │
+│  │ ┌──────────────────────┐ │  │ SMS confirmation      │  │
+│  │ │ Gemma 3B + LoRA      │ │  └───────────┬───────────┘  │
+│  │ │ On-device NLU        │ │              │              │
+│  │ │ (1.5GB)              │ │              │              │
+│  │ └──────────┬───────────┘ │              │              │
+│  │            ▼             │              │              │
+│  │ ┌──────────────────────┐ │              │              │
+│  │ │ EPCIS Event Builder  │ │              │              │
+│  │ │ SQLite Offline Queue │ │              │              │
+│  │ └──────────┬───────────┘ │              │              │
+│  └────────────┼──────────────┘              │              │
+└───────────────┼─────────────────────────────┼──────────────┘
+                │                             │
+                │ (Sync when WiFi/3G available)
+                ▼                             ▼
+┌────────────────────────────────────────────────────────────┐
+│                    BACKEND (FastAPI)                       │
+│  • Verify signature (DID)                                  │
+│  • Canonicalize & Hash                                     │
+│  • Deduplicate (check hash)                                │
+│  • Store in Neon Database ──────┐                          │
+└──────────────┬──────────────────┼──────────────────────────┘
+               │                  │
+               │                  ▼
+               │         ┌─────────────────────────────┐
+               │         │ NEON (Serverless Postgres)  │
+               │         │ • EPCIS events              │
+               │         │ • Farmer identities (DIDs)  │
+               │         │ • Coffee batches            │
+               │         │ • Verifiable credentials    │
+               │         │ • Offline sync queue        │
+               │         └─────────────────────────────┘
+               │
+               ├─────────→ IPFS Storage (full events)
+               │
+               └─────────→ Blockchain Anchor (hash + CID)
+                          ┌──────────────────────────┐
+                          │ Smart Contracts          │
+                          │ • EPCISEventAnchor       │
+                          │ • CoffeeBatchToken       │
+                          │   (ERC-1155)             │
+                          └──────────────────────────┘
+```
+
 ### Key Improvements
 
 **Accessibility**
