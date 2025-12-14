@@ -1369,6 +1369,198 @@ JSON Response to User
 
 ---
 
+### Step 14: Test Database Integration
+
+**Testing Strategy:**
+
+1. **Health Check** - Verify database module loaded correctly
+2. **Voice Command Test** - Full pipeline (audio → database)
+3. **Database Verification** - Query database to confirm batch created
+4. **Field Validation** - Verify all fields match model structure
+
+**Test 1: Health Check**
+
+```bash
+curl -s http://localhost:8000/voice/health | python3 -m json.tool
+```
+
+**Result:**
+```json
+{
+  "service": "Voice Ledger Voice Interface API",
+  "status": "operational",
+  "version": "2.0.0",
+  "openai_api_configured": true,
+  "database_available": true,    // ✅ Database integration working
+  "ffmpeg_available": true
+}
+```
+
+✅ All services operational
+
+**Test 2: Create Test Audio**
+
+```bash
+# Generate audio for commission command
+say "Record commission of 50 bags of Arabica coffee from Abebe farm" \
+  -o tests/samples/test_commission.aiff
+
+# Convert to WAV (16kHz, mono)
+ffmpeg -y -i tests/samples/test_commission.aiff \
+  -ar 16000 -ac 1 tests/samples/test_commission.wav
+```
+
+**Test 3: Full Voice Command Workflow**
+
+```bash
+curl -s -X POST http://localhost:8000/voice/process-command \
+  -H "X-API-Key: ${VOICE_LEDGER_API_KEY}" \
+  -F "file=@tests/samples/test_commission.wav" | python3 -m json.tool
+```
+
+**Result:**
+```json
+{
+  "transcript": "Record commission of 50 bags of Arabica coffee from Abebe farm",
+  "intent": "record_commission",
+  "entities": {
+    "quantity": 50,
+    "unit": "bags",
+    "product": "Arabica coffee",
+    "origin": "Abebe farm",
+    "destination": null,
+    "batch_id": null
+  },
+  "result": {
+    "id": 29,
+    "batch_id": "ABEBE_FARM_ARABICA_COFFEE_20251214",
+    "gtin": "00614141810583",
+    "quantity_kg": 3000.0,
+    "origin": "Abebe farm",
+    "variety": "Arabica coffee",
+    "message": "Successfully commissioned 50 bags of Arabica coffee from Abebe farm"
+  },
+  "error": null,
+  "audio_metadata": {
+    "duration_seconds": 3.962,
+    "sample_rate": 16000,
+    "channels": 1,
+    "format": "wav",
+    "file_size_mb": 0.12
+  }
+}
+```
+
+**Analysis:**
+- ✅ Audio transcribed correctly (3.96 seconds)
+- ✅ Intent recognized: `record_commission`
+- ✅ Entities extracted: quantity (50), unit (bags), product, origin
+- ✅ Unit conversion: 50 bags × 60 kg/bag = 3000 kg
+- ✅ Batch ID generated from entities: `ABEBE_FARM_ARABICA_COFFEE_20251214`
+- ✅ GTIN generated: `00614141810583` (exactly 14 digits)
+- ✅ Database batch created with ID 29
+
+**Test 4: Database Verification**
+
+```python
+from database.connection import get_db
+from database.crud import get_batch_by_batch_id
+
+with get_db() as db:
+    batch = get_batch_by_batch_id(db, 'ABEBE_FARM_ARABICA_COFFEE_20251214')
+    print(f'Batch ID: {batch.batch_id}')
+    print(f'GTIN: {batch.gtin} (length: {len(batch.gtin)})')
+    print(f'Quantity: {batch.quantity_kg} kg')
+    print(f'Processing Method: {batch.processing_method}')
+    print(f'Quality Grade: {batch.quality_grade}')
+```
+
+**Database Record:**
+```
+✅ Batch found in database!
+  ID: 29
+  Batch ID: ABEBE_FARM_ARABICA_COFFEE_20251214
+  GTIN: 00614141810583 (length: 14)
+  Quantity: 3000.0 kg
+  Origin: Abebe farm
+  Variety: Arabica coffee
+  Processing Method: Washed
+  Quality Grade: A
+  Created: 2025-12-14 22:30:58.962413
+```
+
+**Issues Found & Fixed:**
+
+1. **Database Session Error**
+   - **Problem:** `'_GeneratorContextManager' object is not an iterator`
+   - **Cause:** Used `db = next(get_db())` - incorrect for context manager
+   - **Fix:** Changed to `with get_db() as db:`
+   - **Removed:** `finally: db.close()` (handled by context manager)
+
+2. **Field Name Mismatch**
+   - **Problem:** `'process_type' is an invalid keyword argument for CoffeeBatch`
+   - **Cause:** Used `process_type` and `quality_score` (non-existent fields)
+   - **Fix:** Updated to `processing_method` and `quality_grade` (actual model fields)
+
+3. **GTIN Too Long**
+   - **Problem:** Generated 15 digits instead of 14
+   - **Cause:** Product code was 6 digits (timestamp `%H%M%S` = up to 235959)
+   - **Fix:** Use seconds-since-midnight (0-86399) as 5-digit code
+   - **Formula:** `hour*3600 + minute*60 + second` → zero-pad to 5 digits
+   - **Result:** Exactly 14 digits (indicator + prefix + product + check)
+
+**Complete Flow Verified:**
+
+```
+Voice Audio (3.96s)
+  ↓
+Audio Validation & Conversion to WAV
+  ↓
+OpenAI Whisper ASR → "Record commission of 50 bags..."
+  ↓
+GPT-3.5 NLU → intent: record_commission, entities: {...}
+  ↓
+execute_voice_command(db, intent, entities)
+  ↓
+handle_record_commission(db, entities)
+  ↓
+Generate IDs:
+  - batch_id: ABEBE_FARM_ARABICA_COFFEE_20251214
+  - gtin: 00614141810583 (14 digits)
+  - batch_number: BATCH-20251214-223058
+  ↓
+Convert units: 50 bags → 3000 kg
+  ↓
+create_batch(db, batch_data)
+  ↓
+Database INSERT → batch.id = 29
+  ↓
+Return result to API → JSON response to user
+```
+
+✅ **Phase 1b Complete:** Voice commands successfully create database records!
+
+**Performance Metrics:**
+- Total request time: ~6-8 seconds
+  - Audio validation: <100ms
+  - Whisper ASR: ~4-5 seconds
+  - GPT-3.5 NLU: ~1-2 seconds
+  - Database operation: <100ms
+  
+**Current Limitations:**
+- Only `record_commission` fully implemented
+- Other intents (`record_shipment`, `record_receipt`, `record_transformation`) return placeholder errors
+- No farmer_id association (requires farmer context)
+- Default values for processing_method and quality_grade
+
+**Next Steps for Phase 2:**
+- Implement async processing with Celery + Redis
+- Add webhook notifications for long-running operations
+- Implement rate limiting
+- Add comprehensive error logging
+
+---
+
 ---
 
 ## Notes and Decisions
