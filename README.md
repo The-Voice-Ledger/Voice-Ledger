@@ -2,105 +2,113 @@
 
 A voice-first blockchain traceability system for coffee supply chains that enables natural language event recording using standardized EPCIS 2.0 events, self-sovereign identity, and immutable blockchain anchoring.
 
+**Current Status:** v1.0 (Cloud Prototype) - Functional, English-only, internet-required  
+**In Development:** v2.0 (Offline-First) - Multilingual, offline-capable, 95%+ rural accessibility
+
 ## Overview
 
 Voice Ledger converts spoken supply chain events into verifiable, blockchain-anchored records. The system processes voice commands through automatic speech recognition and natural language understanding to generate standardized GS1 EPCIS 2.0 events, which are canonicalized, hashed, and anchored to blockchain with full event data stored on IPFS.
 
-## System Architecture
+**v1.0 (Current Implementation):** Cloud-based prototype using OpenAI APIs, suitable for urban cooperatives with reliable internet.
+
+**v2.0 (Planned):** Offline-first system with on-device AI models supporting 5 languages (Amharic, Afan Oromo, Tigrinya, Spanish, English) for 11M+ smallholder farmers.
+
+## System Architecture (v1.0 - Current)
 
 ```
-Voice Input → ASR (Whisper) → NLU (GPT-3.5) → EPCIS Event Builder
-                                                      ↓
-                                              Canonicalization (URDNA2015)
-                                                      ↓
-                                                SHA-256 Hash
-                                                      ↓
-                                    ┌─────────────────┴──────────────────┐
-                                    ↓                                    ↓
-                              IPFS Storage                      Blockchain Anchor
-                           (Full Event Data)                  (Hash + CID + Timestamp)
+Voice Input → ASR (Whisper API) → NLU (GPT-3.5 API) → EPCIS Event Builder
+              [Cloud, Internet]     [Cloud, Internet]           ↓
+                                                      Canonicalization (URDNA2015)
+                                                                 ↓
+                                                           SHA-256 Hash
+                                                                 ↓
+                                    ┌────────────────────────────┴──────────────────┐
+                                    ↓                                                ↓
+                              IPFS Storage                                  Blockchain Anchor
+                           (Full Event Data)                          (Hash + CID + Timestamp)
 ```
 
-## Implemented Components
+## Implemented Components (v1.0)
 
-### Core Modules
+### Core Modules (v1.0 - Production Ready)
 
-**GS1 Identifier Generation**
+**GS1 Identifier Generation** [COMPLETE]
 - GTIN-13 generation with check digit validation
 - GLN (Global Location Number) for farms and facilities
 - SSCC (Serial Shipping Container Code) for shipments
 - Compliance with GS1 standards
 
-**EPCIS 2.0 Event Builder**
+**EPCIS 2.0 Event Builder** [COMPLETE]
 - ObjectEvent for harvest and observation
 - TransformationEvent for processing stages
 - AggregationEvent for shipment composition
 - Full JSON-LD context with CBV business steps
 - Instance/Lot Master Data (ILMD) support
 
-**JSON-LD Canonicalization**
+**JSON-LD Canonicalization** [COMPLETE]
 - URDNA2015 algorithm implementation using pyld
 - Deterministic N-Quads output
 - Semantic equivalence verification
 - Ensures identical hashes regardless of key ordering
 
-**Cryptographic Hashing**
+**Cryptographic Hashing** [COMPLETE]
 - SHA-256 hashing of canonical events
 - Event hash generation for blockchain anchoring
 - Metadata tracking (algorithm, canonicalization method)
 
-**W3C Decentralized Identifiers (DIDs)**
+**W3C Decentralized Identifiers (DIDs)** [COMPLETE]
 - did:key method implementation
 - Ed25519 key pair generation using PyNaCl
 - DID document resolution
 - Multibase encoding (base58btc)
 
-**Verifiable Credentials**
+**Verifiable Credentials** [COMPLETE]
 - W3C VC Data Model 1.1 implementation
 - Ed25519Signature2020 proof type
 - Organic certification credentials
 - Quality grade credentials
 - Credential verification with signature validation
 
-**Smart Contracts**
+**Smart Contracts** [COMPLETE]
 - EPCISEventAnchor.sol: Event hash anchoring with IPFS CID storage
 - CoffeeBatchToken.sol: ERC-1155 semi-fungible tokens for batch representation
 - Event linking to token metadata
 - Solidity 0.8.20 with OpenZeppelin libraries
 
-**IPFS Integration**
+**IPFS Integration** [COMPLETE]
 - Full EPCIS event storage
 - Content-addressed retrieval
 - Pinata integration for persistent pinning
 - Local IPFS node support
 
-**Digital Twin Synchronization**
+**Digital Twin Synchronization** [COMPLETE]
 - Unified state management combining on-chain and off-chain data
 - JSON-based persistence layer
 - Batch lifecycle tracking
 - Event history aggregation
 
-**Voice Processing API**
+**Voice Processing API** [COMPLETE - v1.0 Cloud Version]
 - FastAPI REST service for audio processing
-- OpenAI Whisper integration for speech recognition
+- OpenAI Whisper integration for speech recognition (English only)
 - GPT-3.5 for natural language understanding
 - Entity extraction (quantity, variety, location, date)
 - Intent classification (harvest, processing, shipment)
 - API key authentication
+- **Limitation:** Requires internet, 8-15s latency, $0.014/transaction
 
-**Web Dashboard**
+**Web Dashboard** [COMPLETE]
 - Streamlit-based interface
 - Batch tracking by GTIN or batch number
 - Event timeline visualization
 - Supply chain journey mapping
 - Blockchain verification interface
-
-**Digital Product Passport (DPP)**
+**Digital Product Passport (DPP)** [COMPLETE]
 - GS1 Digital Link URI generation
 - QR code generation with embedded metadata
 - Batch information aggregation
 - Resolver service for DPP retrieval
 
+### Standards Compliance (v1.0)
 ### Standards Compliance
 
 **GS1 Standards**
@@ -116,9 +124,9 @@ Voice Input → ASR (Whisper) → NLU (GPT-3.5) → EPCIS Event Builder
 **Ethereum Standards**
 - ERC-1155 Multi Token Standard
 - EIP-712 for typed data signing
+## Technology Stack (v1.0)
 
-## Technology Stack
-
+**Backend (Current)**
 **Backend**
 - Python 3.11
 - FastAPI 0.104.1
@@ -126,17 +134,25 @@ Voice Input → ASR (Whisper) → NLU (GPT-3.5) → EPCIS Event Builder
 - PyNaCl 1.5.0 (Ed25519 cryptography)
 - PyLD 2.0.3 (JSON-LD canonicalization)
 - Web3.py 6.11.3 (blockchain interaction)
+**Voice Processing (v1.0 - Cloud APIs)**
+- OpenAI Whisper (ASR) - English only, requires internet
+- OpenAI GPT-3.5 (NLU) - Cloud-based entity extraction
 
-**Voice Processing**
-- OpenAI Whisper (ASR)
-- OpenAI GPT-3.5 (NLU)
+**Voice Processing (v2.0 - Planned Offline)**
+- Whisper-Small quantized (244MB) - 5 languages, on-device
+- Gemma 3B + LoRA (1.5GB) - Offline entity extraction
+- ONNX Runtime for mobile inference
 
 **Blockchain**
-- Foundry (Solidity development framework)
-- Solidity 0.8.20
-- OpenZeppelin Contracts 5.0.0
-- Ethereum-compatible networks (Polygon, Ethereum)
+**Storage (v1.0)**
+- IPFS (go-ipfs) - Decentralized event storage
+- JSON file system - Current local storage
 
+**Storage (v2.0 - Planned)**
+- Neon serverless PostgreSQL - Unified dev/prod database
+- SQLite offline queue - On-device event caching
+
+**Frontend**
 **Storage**
 - IPFS (go-ipfs)
 - JSON file system (current)
@@ -345,15 +361,19 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 **API Security**
 - API key authentication on all endpoints
 - Rate limiting to prevent abuse
-- CORS configuration for production
-- HTTPS required in production
+## Current Limitations (v1.0)
 
-**Smart Contract Security**
-- OpenZeppelin audited libraries
-- Access control with Ownable pattern
-- Event emission for all state changes
-- Reentrancy guards where applicable
+- Voice processing requires internet connectivity (OpenAI API)
+- English language only in current implementation
+- JSON file-based storage (database migration planned for v2.0)
+- Cloud API costs limit scalability ($0.014/transaction)
+- No mobile application implementation
+- 8-15 second latency for voice processing
+- Only 15-20% of rural Ethiopian farmers have required connectivity
 
+**These limitations are addressed in v2.0 roadmap below.**
+
+## Documentation
 ## Current Limitations
 
 - Voice processing requires internet connectivity (OpenAI API)
