@@ -16,6 +16,13 @@ openai==1.12.0
 httpx==0.26.0
 
 # -----------------------------
+# Lab 7: Voice Interface Integration (Audio Processing)
+# -----------------------------
+pydub==0.25.1       # Audio format conversion (MP3/M4A → WAV)
+soundfile==0.12.1   # Audio I/O with numpy arrays
+aiofiles==23.2.1    # Async file operations
+
+# -----------------------------
 # Lab 3: SSI (Ed25519 signing with PyNaCl)
 # -----------------------------
 PyNaCl==1.5.0
