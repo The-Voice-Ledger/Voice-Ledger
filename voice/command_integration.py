@@ -17,7 +17,7 @@ from database.crud import create_batch, create_event, get_farmer_by_farmer_id, g
 from sqlalchemy.orm import Session
 
 # Import GS1 and EPCIS utilities
-from gs1.identifiers import generate_gtin, generate_sscc
+from gs1.identifiers import gtin as generate_gtin, sscc as generate_sscc
 import hashlib
 import json
 
@@ -77,8 +77,13 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
     
     # Generate required IDs
     batch_id = generate_batch_id_from_entities(entities)
-    gtin = generate_gtin()  # 14-digit GTIN
-    batch_number = f"BATCH-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+    # GTIN-14 format: indicator(1) + company_prefix(7) + product_code(5) + check_digit(1) = 14 total
+    # Use seconds since midnight as unique 5-digit code (00000-86399)
+    now = datetime.utcnow()
+    seconds_today = now.hour * 3600 + now.minute * 60 + now.second
+    product_code = str(seconds_today).zfill(5)  # Zero-pad to exactly 5 digits
+    gtin = generate_gtin(product_code, "GTIN-14")  # 14-digit GTIN
+    batch_number = f"BATCH-{now.strftime('%Y%m%d-%H%M%S')}"
     
     # Convert quantity to kg (assuming 60kg per bag if unit is "bags")
     if unit.lower() in ["bag", "bags"]:
@@ -86,7 +91,7 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
     else:
         quantity_kg = float(quantity)
     
-    # Prepare batch data
+    # Prepare batch data with correct field names from CoffeeBatch model
     batch_data = {
         "batch_id": batch_id,
         "gtin": gtin,
@@ -94,8 +99,8 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
         "quantity_kg": quantity_kg,
         "origin": origin,
         "variety": product,
-        "process_type": "Washed",  # Default
-        "quality_score": 85.0,  # Default
+        "processing_method": "Washed",  # Default processing method
+        "quality_grade": "A",  # Default quality grade (A, B, C, etc.)
         "created_at": datetime.utcnow()
     }
     
