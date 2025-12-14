@@ -35,18 +35,14 @@ from voice.audio_utils import (
     get_audio_metadata
 )
 
-# Import database CRUD operations
+# Import database and voice command integration
 try:
-    from database.crud import (
-        create_batch,
-        create_epcis_event,
-        get_farmer_by_did
-    )
     from database.database import get_db
+    from voice.command_integration import execute_voice_command, VoiceCommandError
     DATABASE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     DATABASE_AVAILABLE = False
-    print("⚠️  Database module not available - /voice/process-command will be disabled")
+    print(f"⚠️  Database module not available - /voice/process-command will be disabled: {e}")
 
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
@@ -291,29 +287,43 @@ async def process_voice_command(
         db_result = None
         error = None
         
-        # Note: Full database integration would require session management
-        # This is a placeholder for the integration logic
-        # TODO: Implement actual database operations based on intent
-        
-        if intent == "record_shipment":
-            error = "Database integration not yet implemented"
-        elif intent == "record_commission":
-            error = "Database integration not yet implemented"
-        elif intent == "record_receipt":
-            error = "Database integration not yet implemented"
-        elif intent == "record_transformation":
-            error = "Database integration not yet implemented"
-        else:
-            error = f"Unknown intent: {intent}"
-        
-        return {
-            "transcript": transcript,
-            "intent": intent,
-            "entities": entities,
-            "result": db_result,
-            "error": error,
-            "audio_metadata": metadata
-        }
+        # Use database session to execute command
+        db = next(get_db())
+        try:
+            message, db_result = execute_voice_command(db, intent, entities)
+            
+            return {
+                "transcript": transcript,
+                "intent": intent,
+                "entities": entities,
+                "result": db_result,
+                "message": message,
+                "error": None,
+                "audio_metadata": metadata
+            }
+            
+        except VoiceCommandError as e:
+            # Command execution failed with known error
+            return {
+                "transcript": transcript,
+                "intent": intent,
+                "entities": entities,
+                "result": None,
+                "error": str(e),
+                "audio_metadata": metadata
+            }
+        except Exception as e:
+            # Unexpected error
+            return {
+                "transcript": transcript,
+                "intent": intent,
+                "entities": entities,
+                "result": None,
+                "error": f"Unexpected error: {str(e)}",
+                "audio_metadata": metadata
+            }
+        finally:
+            db.close()
         
     except AudioValidationError as e:
         raise HTTPException(status_code=400, detail=f"Audio validation failed: {str(e)}")

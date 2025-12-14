@@ -976,6 +976,397 @@ curl -X POST "http://localhost:8000/voice/transcribe" \
 - Intent → CRUD operation mapping
 - Full end-to-end voice command workflow
 
+**Testing Notes:**
+- WAV transcription: ✅ Fully tested and working
+- MP3 transcription: ⚠️ Logic validated in audio_utils, integration test had terminal conflicts
+- Format conversion: ✅ Tested independently (MP3 created: 92KB vs WAV 181KB)
+- Core pipeline proven: Upload → Validate → Convert → Whisper → Response
+
+✅ **Phase 1a Complete** - Core voice transcription working
+
+---
+
+## Phase 1b: Database Integration
+
+**What We're Building:**
+
+Currently, `/voice/process-command` receives audio, transcribes it, extracts intent and entities, but returns an error because it doesn't execute the database operation. Phase 1b will complete this integration.
+
+**Example Voice Command:**
+```
+"I want to record a shipment of 50 bags of washed coffee 
+ from Abebe farm to Addis Ababa warehouse"
+```
+
+**Current Behavior:**
+1. ✅ Audio → Text: "I want to record a shipment..."
+2. ✅ Text → Intent: `record_shipment`
+3. ✅ Text → Entities: `{quantity: 50, product: "washed coffee", origin: "Abebe farm", destination: "Addis Ababa warehouse"}`
+4. ❌ Database: Returns error "Database integration not yet implemented"
+
+**Target Behavior (Phase 1b):**
+1. ✅ Audio → Text
+2. ✅ Text → Intent + Entities
+3. ✅ **Database:** Create EPCIS shipping event in database
+4. ✅ **Response:** Return created event object
+
+---
+
+## Phase 1b: Database Integration
+
+**Goal:** Connect voice commands to actual database operations, enabling full workflow from voice → transcript → intent → database action.
+
+**Current Status:**
+- `/voice/process-command` endpoint exists but returns placeholder errors
+- Database CRUD operations available: `create_batch()`, `create_epcis_event()`, `get_farmer_by_did()`
+- Need to map 4 intents to database operations
+
+**Implementation Plan:**
+1. Add database session management to voice API
+2. Implement intent → CRUD mapping for all 4 intents
+3. Add entity validation (ensure required fields present)
+4. Test with real voice commands
+5. Document complete workflow
+
+---
+
+### Step 11: Examine Database CRUD Operations
+
+**Why:** Before integrating, we need to understand what database operations are available and what parameters they require.
+
+**Available CRUD Operations:**
+
+```python
+# database/crud.py
+
+def create_farmer(db: Session, farmer_data: dict) -> FarmerIdentity:
+    """Create new farmer identity."""
+    # Required fields: farmer_id, did, encrypted_private_key, public_key
+    # Optional: name, phone_number, location, gln, latitude, longitude, etc.
+
+def create_batch(db: Session, batch_data: dict) -> CoffeeBatch:
+    """Create new coffee batch."""
+    # Required fields: batch_id, gtin, batch_number, quantity_kg
+    # Optional: origin, variety, process_type, harvest_date, farmer_id, etc.
+
+def create_event(db: Session, event_data: dict, pin_to_ipfs: bool = True) -> EPCISEvent:
+    """Store EPCIS event and optionally pin to IPFS."""
+    # Required fields: event_hash, event_type, action, batch_id
+    # Optional: event_json, ipfs_cid, blockchain_tx_hash, submitter_id, etc.
+
+def get_farmer_by_did(db: Session, did: str) -> Optional[FarmerIdentity]:
+    """Query farmer by DID."""
+
+def get_batch_by_gtin(db: Session, gtin: str) -> Optional[CoffeeBatch]:
+    """Query batch by GTIN."""
+
+def get_batch_by_batch_id(db: Session, batch_id: str) -> Optional[CoffeeBatch]:
+    """Query batch by batch_id."""
+```
+
+**Database Models (Key Fields):**
+
+```python
+# database/models.py
+
+class FarmerIdentity:
+    farmer_id: str (unique)
+    did: str (unique)
+    name: str
+    location: str
+    latitude, longitude: float
+    country_code: str (ISO 3166-1 alpha-2)
+    
+class CoffeeBatch:
+    batch_id: str (unique)
+    gtin: str (unique, 14 digits)
+    quantity_kg: float
+    origin: str
+    variety: str (e.g., "Arabica", "Yirgacheffe")
+    process_type: str (e.g., "Washed", "Natural")
+    farmer_id: int (foreign key)
+    
+class EPCISEvent:
+    event_hash: str (unique, SHA-256)
+    event_type: str ("ObjectEvent", "AggregationEvent", "TransformationEvent")
+    action: str ("OBSERVE", "ADD", "DELETE")
+    batch_id: int (foreign key)
+    event_json: JSON (full EPCIS 2.0 event)
+    ipfs_cid: str (optional)
+```
+
+**Intent to CRUD Mapping:**
+
+| Intent | Database Operation | Required Entities |
+|--------|-------------------|-------------------|
+| `record_commission` | `create_batch()` | quantity, product, origin |
+| `record_shipment` | `create_event()` (OBSERVE) | batch_id, origin, destination |
+| `record_receipt` | `create_event()` (OBSERVE) | batch_id, destination |
+| `record_transformation` | `create_event()` (OBSERVE) | batch_id, product |
+
+**Challenge - Missing Context:**
+
+Voice commands provide high-level information but database requires:
+- **GTIN:** 14-digit Global Trade Item Number (must be generated)
+- **Event Hash:** SHA-256 of canonicalized JSON (must be computed)
+- **Full EPCIS JSON:** Complete event structure (must be constructed)
+- **Farmer ID:** Foreign key reference (must be looked up)
+
+**Solution Strategy:**
+
+For Phase 1b, we'll implement **simplified database integration**:
+1. Generate required fields from voice entities
+2. Create minimal but valid database objects
+3. Use helper functions from existing modules (gs1, epcis)
+4. Focus on proving the concept works end-to-end
+
+---
+
+### Step 12: Create Voice Command Integration Module
+
+**File Created:** `voice/command_integration.py`
+
+**Why:** Separate the voice-to-database mapping logic from the API layer for:
+- **Modularity:** Voice command logic isolated from web framework
+- **Testability:** Can test intent handlers without running API server
+- **Maintainability:** Easy to add new intents or modify logic
+- **Reusability:** Can be used by CLI tools, batch processors, etc.
+
+**Architecture:**
+
+```python
+Voice Command Flow:
+┌──────────────┐
+│ Voice API    │
+│ (FastAPI)    │
+└──────┬───────┘
+       │ intent + entities
+       ▼
+┌──────────────────────┐
+│ command_integration  │
+│ - validate entities  │
+│ - generate IDs       │
+│ - map to CRUD        │
+└──────┬───────────────┘
+       │ CRUD operation
+       ▼
+┌──────────────┐
+│ Database     │
+│ (Neon PG)    │
+└──────────────┘
+```
+
+**Key Functions:**
+
+```python
+def generate_batch_id_from_entities(entities: dict) -> str:
+    """Generate batch_id from voice entities."""
+    # Format: ORIGIN_PRODUCT_TIMESTAMP
+    # Example: ABEBE_ARABICA_20251214
+    
+def handle_record_commission(db: Session, entities: dict) -> Tuple[str, dict]:
+    """Create new coffee batch from voice command."""
+    # 1. Validate required entities (quantity, origin)
+    # 2. Generate IDs (batch_id, GTIN)
+    # 3. Convert units (bags → kg)
+    # 4. Create batch in database
+    # 5. Return success message + batch object
+    
+def handle_record_shipment(db: Session, entities: dict) -> Tuple[str, dict]:
+    """Create shipping event (placeholder for Phase 1b)."""
+    # Requires existing batch_id - deferred to future
+    
+def execute_voice_command(db: Session, intent: str, entities: dict) -> Tuple[str, dict]:
+    """Main entry point - routes intent to handler."""
+    # Maps intent → handler function
+    # Executes handler with error handling
+    # Returns (message, result_dict)
+```
+
+**Intent Handler Status:**
+
+| Intent | Handler | Status | Notes |
+|--------|---------|--------|-------|
+| `record_commission` | `handle_record_commission()` | ✅ Implemented | Creates new batch |
+| `record_shipment` | `handle_record_shipment()` | ⏸️ Placeholder | Requires existing batch_id |
+| `record_receipt` | `handle_record_receipt()` | ⏸️ Placeholder | Requires existing batch_id |
+| `record_transformation` | `handle_record_transformation()` | ⏸️ Placeholder | Complex - needs multiple batches |
+
+**Implementation Details - record_commission:**
+
+```python
+# Input: Voice command → NLU → Entities
+entities = {
+    "quantity": 50,
+    "unit": "bags",
+    "product": "Arabica Coffee",
+    "origin": "Abebe farm"
+}
+
+# Processing:
+1. Validate: Check quantity and origin present
+2. Generate IDs:
+   - batch_id = "ABEBE_FARM_ARABICA_COFFEE_20251214"
+   - gtin = generate_gtin()  # 14 digits from gs1/identifiers.py
+   - batch_number = "BATCH-20251214-230145"
+   
+3. Convert units: 50 bags × 60 kg/bag = 3000 kg
+
+4. Create database record:
+   batch_data = {
+       "batch_id": "ABEBE_FARM_ARABICA_COFFEE_20251214",
+       "gtin": "06141410000147",
+       "batch_number": "BATCH-20251214-230145",
+       "quantity_kg": 3000.0,
+       "origin": "Abebe farm",
+       "variety": "Arabica Coffee",
+       "process_type": "Washed",  # Default
+       "quality_score": 85.0      # Default
+   }
+
+5. Return result:
+   message = "Batch created successfully"
+   result = {
+       "id": 29,
+       "batch_id": "ABEBE_FARM_ARABICA_COFFEE_20251214",
+       "gtin": "06141410000147",
+       "quantity_kg": 3000.0,
+       "message": "Successfully commissioned 50 bags of Arabica Coffee from Abebe farm"
+   }
+```
+
+**Error Handling:**
+
+```python
+class VoiceCommandError(Exception):
+    """Raised when voice command cannot be executed."""
+    pass
+
+# Usage:
+try:
+    message, result = execute_voice_command(db, intent, entities)
+except VoiceCommandError as e:
+    # Known error with clear message for user
+    return {"error": str(e)}
+except Exception as e:
+    # Unexpected error
+    return {"error": f"Unexpected error: {str(e)}"}
+```
+
+**Design Decisions:**
+
+1. **Simplified for Phase 1b:**
+   - Only `record_commission` fully implemented
+   - Other intents return helpful error messages
+   - Focuses on proving the concept works
+
+2. **Default Values:**
+   - Process type: "Washed" (most common)
+   - Quality score: 85.0 (good baseline)
+   - Can be enhanced with NLU to extract from voice
+
+3. **Unit Conversion:**
+   - "bags" → 60 kg per bag (coffee industry standard)
+   - Direct kg if unit specified as "kg" or "kilograms"
+
+4. **ID Generation:**
+   - batch_id: Human-readable from voice entities
+   - GTIN: Uses existing `generate_gtin()` from gs1 module
+   - Ensures uniqueness and GS1 compliance
+
+✅ Voice command integration module complete (344 lines)
+
+---
+
+### Step 13: Integrate Command Module into Voice API
+
+**File Modified:** `voice/service/api.py`
+
+**Changes Made:**
+
+1. **Import command integration:**
+   ```python
+   from voice.command_integration import execute_voice_command, VoiceCommandError
+   ```
+
+2. **Update `/voice/process-command` endpoint:**
+   ```python
+   # OLD (placeholder):
+   if intent == "record_shipment":
+       error = "Database integration not yet implemented"
+   
+   # NEW (actual execution):
+   db = next(get_db())
+   try:
+       message, db_result = execute_voice_command(db, intent, entities)
+       return {
+           "transcript": transcript,
+           "intent": intent,
+           "entities": entities,
+           "result": db_result,
+           "message": message,
+           "error": None
+       }
+   except VoiceCommandError as e:
+       return {"error": str(e)}
+   finally:
+       db.close()
+   ```
+
+3. **Response model updated:**
+   - Added `message` field for success messages
+   - `error` now properly populated when command fails
+   - `result` contains created database object
+
+**Complete Flow:**
+
+```
+Audio File Upload
+  ↓
+Validate & Convert to WAV
+  ↓
+OpenAI Whisper (ASR)
+  ↓
+Transcript: "Commission 50 bags from Abebe farm"
+  ↓
+GPT-3.5 (NLU)
+  ↓
+Intent: "record_commission"
+Entities: {quantity: 50, unit: "bags", origin: "Abebe farm"}
+  ↓
+execute_voice_command(db, intent, entities)
+  ↓
+handle_record_commission(db, entities)
+  ↓
+Generate IDs (batch_id, GTIN)
+  ↓
+create_batch(db, batch_data)
+  ↓
+Return: {batch_id, gtin, quantity_kg, message}
+  ↓
+JSON Response to User
+```
+
+**Error Handling Hierarchy:**
+
+1. **Audio Validation Error** (HTTP 400)
+   - Invalid format, too large, too long
+
+2. **ASR Error** (HTTP 500)
+   - Whisper API failure, network issues
+
+3. **NLU Error** (HTTP 500)
+   - GPT-3.5 failure, malformed response
+
+4. **Voice Command Error** (HTTP 200 with error field)
+   - Missing entities, unknown intent
+   - Returns partial success with error message
+
+5. **Database Error** (HTTP 200 with error field)
+   - Constraint violations, connection issues
+
+✅ Voice API updated with database integration
+
 ---
 
 ---
