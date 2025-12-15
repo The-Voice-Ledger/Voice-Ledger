@@ -44,11 +44,24 @@ except ImportError as e:
     DATABASE_AVAILABLE = False
     print(f"⚠️  Database module not available - /voice/process-command will be disabled: {e}")
 
+# Import IVR router (optional - only if Phase 3 is set up)
+try:
+    from voice.ivr.ivr_api import router as ivr_router
+    IVR_AVAILABLE = True
+except ImportError as e:
+    IVR_AVAILABLE = False
+    print(f"ℹ️  IVR module not available - Phase 3 endpoints disabled: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
     version="2.0.0"
 )
+
+# Include IVR router if available (Phase 3)
+if IVR_AVAILABLE:
+    app.include_router(ivr_router)
+    print("✅ IVR endpoints registered at /voice/ivr/*")
 
 # Allow local tools and UIs
 app.add_middleware(

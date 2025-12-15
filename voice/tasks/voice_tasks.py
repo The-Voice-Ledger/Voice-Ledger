@@ -20,6 +20,13 @@ from voice.audio_utils import validate_and_convert_audio, cleanup_temp_file, Aud
 from database.connection import get_db
 from voice.command_integration import execute_voice_command, VoiceCommandError
 
+# Import SMS notifier for IVR notifications
+try:
+    from voice.ivr.sms_notifier import SMSNotifier
+    sms_notifier = SMSNotifier()
+except ImportError:
+    sms_notifier = None
+
 
 class VoiceProcessingTask(Task):
     """
@@ -156,6 +163,31 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
             except Exception as e:
                 # Unexpected database error
                 error = f"Database error: {str(e)}"
+        
+        # Send SMS notification if this came from IVR and we have phone number
+        if metadata and metadata.get("source") == "ivr":
+            from_number = metadata.get("from_number")
+            
+            if from_number and sms_notifier and sms_notifier.is_available():
+                try:
+                    if not error and db_result:
+                        # Success - send batch confirmation
+                        batch_id = db_result.get("batch_id") or db_result.get("gtin")
+                        batch_data = {
+                            "coffee_type": entities.get("coffee_type", "Unknown"),
+                            "quantity_bags": entities.get("quantity_bags", 0),
+                            "quantity_kg": entities.get("quantity_kg", 0),
+                            "quality_grade": entities.get("quality_grade", "Unknown")
+                        }
+                        sms_notifier.send_batch_confirmation(from_number, batch_data, batch_id)
+                    else:
+                        # Error - send error notification
+                        sms_notifier.send_error_notification(
+                            from_number,
+                            error or "Processing completed but no batch was created"
+                        )
+                except Exception as sms_error:
+                    print(f"Failed to send SMS notification: {sms_error}")
         
         # Return complete result
         return {
