@@ -29,20 +29,20 @@ class VoiceCommandError(Exception):
 
 def generate_batch_id_from_entities(entities: dict) -> str:
     """
-    Generate a batch_id from voice command entities.
+    Generate a unique batch_id from voice command entities.
     
     Format: FARMER_PRODUCT_TIMESTAMP
-    Example: ABEBE_ARABICA_20251214
+    Example: ABEBE_ARABICA_20251214_143025
     
     Args:
         entities: Extracted entities from NLU
         
     Returns:
-        Generated batch_id
+        Generated batch_id (unique per second)
     """
     origin = entities.get("origin", "UNKNOWN").upper().replace(" ", "_")[:20]
     product = entities.get("product", "COFFEE").upper().replace(" ", "_")[:15]
-    timestamp = datetime.utcnow().strftime("%Y%m%d")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")  # Include time for uniqueness
     
     return f"{origin}_{product}_{timestamp}"
 
@@ -228,10 +228,14 @@ def execute_voice_command(db: Session, intent: str, entities: dict) -> Tuple[str
         "ABEBE_ARABICA_20251214"
     """
     # Validate intent
-    if intent not in INTENT_HANDLERS:
+    if not intent or intent not in INTENT_HANDLERS:
         raise VoiceCommandError(
-            f"Unknown intent: {intent}. "
-            f"Supported intents: {', '.join(INTENT_HANDLERS.keys())}"
+            f"Could not understand your command (intent: {intent}).\n\n"
+            f"Please describe what you want to do:\n"
+            f"• 'New batch of 50 kg...' - Create new batch\n"
+            f"• 'Shipped batch ABC...' - Send existing batch\n"
+            f"• 'Received batch XYZ...' - Receive batch\n"
+            f"• 'Washed batch DEF...' - Process coffee"
         )
     
     # Get handler for this intent

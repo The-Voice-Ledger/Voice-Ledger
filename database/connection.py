@@ -11,7 +11,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(
+    DATABASE_URL, 
+    echo=False,
+    pool_pre_ping=True,  # Test connections before using them
+    pool_recycle=3600,   # Recycle connections after 1 hour
+    pool_size=5,         # Connection pool size
+    max_overflow=10      # Max overflow connections
+)
 SessionLocal = sessionmaker(bind=engine)
 
 @contextmanager

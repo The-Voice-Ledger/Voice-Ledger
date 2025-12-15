@@ -6,12 +6,14 @@ and metadata extraction for the Voice Ledger API.
 """
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 import tempfile
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 import soundfile as sf
+import json
 
 
 # Audio constraints
@@ -65,12 +67,13 @@ def validate_audio_file(file_path: str, max_size_mb: int = MAX_FILE_SIZE_MB) -> 
         )
 
 
-def get_audio_duration(file_path: str) -> float:
+def get_audio_duration(file_path: str, timeout: int = 10) -> float:
     """
-    Get duration of audio file in seconds.
+    Get duration of audio file in seconds using ffprobe.
     
     Args:
         file_path: Path to audio file
+        timeout: Maximum seconds to wait (default: 10)
         
     Returns:
         Duration in seconds
@@ -84,20 +87,44 @@ def get_audio_duration(file_path: str) -> float:
         Duration: 15.43 seconds
     """
     try:
-        audio = AudioSegment.from_file(file_path)
-        return len(audio) / 1000.0  # Convert milliseconds to seconds
-    except CouldntDecodeError as e:
-        raise AudioValidationError(f"Failed to read audio file: {str(e)}")
+        # Use ffprobe to get duration without loading entire file
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'json',
+            file_path
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+            check=True
+        )
+        
+        data = json.loads(result.stdout)
+        duration = float(data['format']['duration'])
+        return duration
+        
+    except subprocess.TimeoutExpired:
+        raise AudioValidationError(f"Reading audio duration timed out after {timeout} seconds")
+    except (KeyError, ValueError, json.JSONDecodeError) as e:
+        raise AudioValidationError(f"Failed to parse audio duration: {str(e)}")
+    except subprocess.CalledProcessError as e:
+        raise AudioValidationError(f"Failed to read audio file: {e.stderr.decode('utf-8', errors='ignore')}")
     except Exception as e:
         raise AudioValidationError(f"Error getting audio duration: {str(e)}")
 
 
-def get_audio_metadata(file_path: str) -> dict:
+def get_audio_metadata(file_path: str, timeout: int = 10) -> dict:
     """
-    Extract metadata from audio file.
+    Extract metadata from audio file using ffprobe.
     
     Args:
         file_path: Path to audio file
+        timeout: Maximum seconds to wait (default: 10)
         
     Returns:
         Dictionary with metadata:
@@ -123,32 +150,63 @@ def get_audio_metadata(file_path: str) -> dict:
     path = Path(file_path)
     
     try:
-        audio = AudioSegment.from_file(file_path)
+        # Use ffprobe to get audio metadata
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', 'format=duration:stream=sample_rate,channels',
+            '-of', 'json',
+            file_path
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+            check=True
+        )
+        
+        data = json.loads(result.stdout)
+        
+        # Extract values (first audio stream)
+        stream = data['streams'][0] if data.get('streams') else {}
+        duration = float(data['format'].get('duration', 0))
+        sample_rate = int(stream.get('sample_rate', 16000))
+        channels = int(stream.get('channels', 1))
         
         return {
-            "duration_seconds": len(audio) / 1000.0,
-            "sample_rate": audio.frame_rate,
-            "channels": audio.channels,
+            "duration_seconds": duration,
+            "sample_rate": sample_rate,
+            "channels": channels,
             "format": path.suffix.lstrip('.').lower(),
             "file_size_mb": path.stat().st_size / (1024 * 1024)
         }
+        
+    except subprocess.TimeoutExpired:
+        raise AudioValidationError(f"Reading audio metadata timed out after {timeout} seconds")
+    except (KeyError, ValueError, json.JSONDecodeError, IndexError) as e:
+        raise AudioValidationError(f"Failed to parse audio metadata: {str(e)}")
+    except subprocess.CalledProcessError as e:
+        raise AudioValidationError(f"Failed to read audio file: {e.stderr.decode('utf-8', errors='ignore')}")
     except Exception as e:
         raise AudioValidationError(f"Failed to extract metadata: {str(e)}")
 
 
-def convert_to_wav(input_path: str, output_path: Optional[str] = None) -> str:
+def convert_to_wav(input_path: str, output_path: Optional[str] = None, timeout: int = 30) -> str:
     """
-    Convert audio file to WAV format using pydub + ffmpeg.
+    Convert audio file to WAV format using ffmpeg directly with timeout protection.
     
     Args:
         input_path: Path to input audio file (any format)
         output_path: Path for output WAV file (optional, creates temp file if None)
+        timeout: Maximum seconds to wait for conversion (default: 30)
         
     Returns:
         Path to converted WAV file
         
     Raises:
-        AudioValidationError: If conversion fails
+        AudioValidationError: If conversion fails or times out
         
     Example:
         >>> wav_path = convert_to_wav("voice.mp3")
@@ -166,22 +224,52 @@ def convert_to_wav(input_path: str, output_path: Optional[str] = None) -> str:
         return input_path
     
     try:
-        # Load audio file (pydub auto-detects format via ffmpeg)
-        audio = AudioSegment.from_file(input_path)
-        
         # Create output path if not provided
         if output_path is None:
             # Create temp file with .wav extension
             fd, output_path = tempfile.mkstemp(suffix='.wav', prefix='voice_')
-            os.close(fd)  # Close file descriptor, pydub will handle writing
+            os.close(fd)  # Close file descriptor
         
-        # Export as WAV
-        audio.export(output_path, format='wav')
+        # Use ffmpeg directly with explicit pipes to avoid stdin/stdout blocking
+        # -y: overwrite output file without asking
+        # -i: input file
+        # -acodec pcm_s16le: standard WAV codec
+        # -ar 16000: 16kHz sample rate (good for speech)
+        # -ac 1: mono audio
+        cmd = [
+            'ffmpeg',
+            '-y',  # Overwrite without asking
+            '-i', input_path,  # Input file
+            '-acodec', 'pcm_s16le',  # WAV codec
+            '-ar', '16000',  # 16kHz sample rate
+            '-ac', '1',  # Mono
+            output_path
+        ]
+        
+        # Run with timeout and explicit pipe configuration
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,  # Don't wait for stdin
+            check=False
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.decode('utf-8', errors='ignore')
+            raise AudioValidationError(f"ffmpeg conversion failed: {error_msg}")
+        
+        # Verify output file was created
+        if not Path(output_path).exists():
+            raise AudioValidationError("Conversion completed but output file not found")
         
         return output_path
         
-    except CouldntDecodeError as e:
-        raise AudioValidationError(f"Failed to decode audio file: {str(e)}")
+    except subprocess.TimeoutExpired:
+        raise AudioValidationError(f"Audio conversion timed out after {timeout} seconds")
+    except AudioValidationError:
+        # Re-raise our custom errors
+        raise
     except Exception as e:
         raise AudioValidationError(f"Audio conversion failed: {str(e)}")
 

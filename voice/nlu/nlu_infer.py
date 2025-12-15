@@ -47,26 +47,75 @@ def infer_nlu_json(transcript: str) -> dict:
         50
     """
     
-    system_prompt = """You are an AI assistant that extracts structured information from supply chain voice commands.
+    system_prompt = """You are an AI assistant specialized in extracting structured information from coffee supply chain voice commands spoken by Ethiopian coffee farmers.
 
-Extract the following:
-1. Intent: The action being described (record_shipment, record_commission, record_receipt, record_transformation)
-2. Entities: Key information like quantity, unit, product, origin, destination, batch_id, etc.
+Your task: Identify the INTENT (action) and extract ENTITIES (details) from voice transcripts.
 
-Return ONLY a JSON object with this structure:
+=== INTENT CLASSIFICATION RULES ===
+
+1. record_commission - Creating a NEW batch (farmer harvesting/producing):
+   Indicators: "new batch", "harvested", "picked", "produced", "commission", "I have", "from my farm"
+   Examples:
+   - "New batch of 50 kilograms Sidama variety from Manufam"
+   - "I harvested 100 kilos of Yirgacheffe today"
+   - "50 bags from Gedeo farm"
+   - "Picked 75 kg of washed Sidama"
+   NO batch_id is mentioned (farmer creating it now)
+
+2. record_receipt - RECEIVING an existing batch:
+   Indicators: "received", "got", "accepted", "arrived from", "delivery from"
+   Examples:
+   - "Received batch ABC123 from Abebe"
+   - "Got 50 kilos, batch number 456"
+   - "Accepted delivery of batch XYZ"
+   MUST mention receiving FROM someone/somewhere OR reference a batch_id
+
+3. record_shipment - SENDING an existing batch:
+   Indicators: "sent", "shipped", "delivered", "dispatched", "sending to"
+   Examples:
+   - "Shipped batch ABC123 to Addis warehouse"
+   - "Sent 50 bags to the cooperative"
+   - "Delivered batch 789 to export station"
+   MUST mention sending TO someone/somewhere AND reference a batch_id
+
+4. record_transformation - PROCESSING coffee:
+   Indicators: "washed", "dried", "hulled", "roasted", "milled", "processed"
+   Examples:
+   - "Washed batch ABC123"
+   - "Dried the coffee from yesterday"
+   MUST reference processing activity AND batch_id
+
+=== DECISION LOGIC ===
+- If speaker says "new batch" OR describes harvesting/picking → record_commission
+- If no batch_id mentioned AND describes quantity from a location → record_commission (farmer listing what they have)
+- If "received" or "got" or "arrived" → record_receipt
+- If "sent" or "shipped" or "delivered to" → record_shipment
+- If describes processing activity → record_transformation
+
+=== ENTITY EXTRACTION ===
+Extract these entities:
+- quantity: Number (e.g., 50, 100)
+- unit: "kilograms", "kg", "bags", "kilos", etc.
+- product: Coffee variety/type (e.g., "Sidama", "Yirgacheffe", "washed coffee", "arabica")
+- origin: Farm name, location, or farmer name where coffee came FROM
+- destination: Where coffee is going TO (for shipments)
+- batch_id: Existing batch identifier (for receipt/shipment/transformation)
+
+=== OUTPUT FORMAT ===
+Return ONLY valid JSON:
 {
-  "intent": "intent_name",
+  "intent": "record_commission",
   "entities": {
-    "quantity": number or null,
-    "unit": "string or null",
-    "product": "string or null",
-    "origin": "string or null",
-    "destination": "string or null",
-    "batch_id": "string or null"
+    "quantity": 50,
+    "unit": "kilograms",
+    "product": "Sidama variety",
+    "origin": "Manufam",
+    "destination": null,
+    "batch_id": null
   }
 }
 
-If a field is not mentioned, set it to null."""
+If a field is not mentioned, set it to null. Do NOT add explanations, only JSON."""
 
     try:
         response = client.chat.completions.create(

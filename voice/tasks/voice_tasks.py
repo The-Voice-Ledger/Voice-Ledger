@@ -6,9 +6,12 @@ Background tasks for async voice command processing.
 
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Dict, Any
 from celery import Task
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -62,7 +65,12 @@ class VoiceProcessingTask(Task):
     max_retries=3,
     default_retry_delay=60
 )
-def process_voice_command_task(self, audio_path: str, original_filename: str = None) -> Dict[str, Any]:
+def process_voice_command_task(
+    self, 
+    audio_path: str, 
+    original_filename: str = None,
+    metadata: Dict[str, Any] = None
+) -> Dict[str, Any]:
     """
     Background task: Process voice command from audio file.
     
@@ -77,6 +85,7 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
         self: Task instance (auto-injected by bind=True)
         audio_path: Path to uploaded audio file
         original_filename: Original filename for logging
+        metadata: Optional metadata (channel, user_id, etc.)
         
     Returns:
         {
@@ -93,6 +102,10 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
         Exception: On unrecoverable errors (triggers retry)
     """
     
+    # Initialize metadata if not provided
+    if metadata is None:
+        metadata = {}
+    
     try:
         # Update task state: validating
         self.update_state(
@@ -102,7 +115,9 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
         
         # Validate and convert audio to WAV
         try:
-            wav_path, metadata = validate_and_convert_audio(audio_path)
+            wav_path, audio_metadata = validate_and_convert_audio(audio_path)
+            # Merge audio metadata with passed metadata
+            metadata.update(audio_metadata)
         except AudioValidationError as e:
             return {
                 "status": "error",
@@ -117,29 +132,38 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
         # Update task state: transcribing
         self.update_state(
             state='TRANSCRIBING',
-            meta={'stage': 'Transcribing audio with Whisper', 'progress': 30}
+            meta={'stage': 'Transcribing audio with Whisper (auto-detecting language)', 'progress': 30}
         )
         
-        # Run ASR (Whisper)
+        # Run ASR (Whisper) with automatic language detection
         try:
-            transcript = run_asr(wav_path)
+            asr_result = run_asr(wav_path)
+            transcript = asr_result['text']
+            detected_language = asr_result['language']
+            metadata['detected_language'] = detected_language
+            logger.info(f"ASR detected language: {detected_language}, transcript: {transcript[:50]}...")
         except Exception as e:
             # Retry on ASR failures (could be API rate limit)
+            logger.error(f"ASR failed: {e}")
             raise self.retry(exc=e, countdown=60)
         
         # Update task state: extracting
         self.update_state(
             state='EXTRACTING',
-            meta={'stage': 'Extracting intent and entities', 'progress': 60}
+            meta={
+                'stage': f'Extracting intent and entities (Language: {detected_language})', 
+                'progress': 60
+            }
         )
         
-        # Run NLU (GPT-3.5)
+        # Run NLU (GPT-3.5) - works for both English and Amharic
         try:
             nlu_result = infer_nlu_json(transcript)
             intent = nlu_result.get("intent")
             entities = nlu_result.get("entities", {})
         except Exception as e:
             # Retry on NLU failures
+            logger.error(f"NLU failed: {e}")
             raise self.retry(exc=e, countdown=60)
         
         # Update task state: executing
@@ -164,30 +188,59 @@ def process_voice_command_task(self, audio_path: str, original_filename: str = N
                 # Unexpected database error
                 error = f"Database error: {str(e)}"
         
-        # Send SMS notification if this came from IVR and we have phone number
-        if metadata and metadata.get("source") == "ivr":
-            from_number = metadata.get("from_number")
+        # Send notification back to user
+        if metadata:
+            channel = metadata.get("channel") or metadata.get("source")
+            user_id = metadata.get("user_id") or metadata.get("from_number")
+            chat_id = metadata.get("chat_id")
             
-            if from_number and sms_notifier and sms_notifier.is_available():
+            if channel and user_id:
                 try:
-                    if not error and db_result:
-                        # Success - send batch confirmation
-                        batch_id = db_result.get("batch_id") or db_result.get("gtin")
-                        batch_data = {
-                            "coffee_type": entities.get("coffee_type", "Unknown"),
-                            "quantity_bags": entities.get("quantity_bags", 0),
-                            "quantity_kg": entities.get("quantity_kg", 0),
-                            "quality_grade": entities.get("quality_grade", "Unknown")
-                        }
-                        sms_notifier.send_batch_confirmation(from_number, batch_data, batch_id)
-                    else:
-                        # Error - send error notification
-                        sms_notifier.send_error_notification(
-                            from_number,
-                            error or "Processing completed but no batch was created"
-                        )
-                except Exception as sms_error:
-                    print(f"Failed to send SMS notification: {sms_error}")
+                    # Telegram notifications (simple and reliable)
+                    if channel == "telegram":
+                        from voice.telegram.notifier import send_batch_confirmation, send_error_notification
+                        
+                        # Use chat_id if available, otherwise user_id
+                        target_id = chat_id if chat_id else int(user_id) if isinstance(user_id, str) else user_id
+                        
+                        if not error and db_result:
+                            # Success notification
+                            batch_info = {
+                                "id": db_result.get("batch_id") or db_result.get("gtin"),
+                                "variety": db_result.get("variety") or entities.get("product", "Unknown"),
+                                "quantity": db_result.get("quantity_kg") or entities.get("quantity", 0),
+                                "farm": db_result.get("origin") or entities.get("origin", "Unknown"),
+                                "gtin": db_result.get("gtin")
+                            }
+                            logger.info(f"Sending batch confirmation to Telegram chat {target_id}")
+                            success = send_batch_confirmation(target_id, batch_info)
+                            if success:
+                                logger.info(f"Notification sent successfully to {target_id}")
+                            else:
+                                logger.error(f"Failed to send notification to {target_id}")
+                        else:
+                            # Error notification
+                            logger.info(f"Sending error notification to Telegram chat {target_id}")
+                            send_error_notification(target_id, error or 'Processing failed')
+                    
+                    # IVR/SMS notifications (legacy)
+                    elif channel == "ivr":
+                        from voice.ivr.sms_notifier import SMSNotifier
+                        sms_notifier = SMSNotifier()
+                        
+                        if sms_notifier.is_available():
+                            if not error and db_result:
+                                batch_id = db_result.get("batch_id") or db_result.get("gtin")
+                                batch_data = {
+                                    "coffee_type": entities.get("product", "Unknown"),
+                                    "quantity_kg": entities.get("quantity", 0)
+                                }
+                                sms_notifier.send_batch_confirmation(user_id, batch_data, batch_id)
+                            else:
+                                sms_notifier.send_error_notification(user_id, error or 'Processing failed')
+                
+                except Exception as e:
+                    logger.error(f"Failed to send notification: {e}", exc_info=True)
         
         # Return complete result
         return {

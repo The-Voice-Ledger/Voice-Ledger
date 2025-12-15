@@ -52,6 +52,14 @@ except ImportError as e:
     IVR_AVAILABLE = False
     print(f"ℹ️  IVR module not available - Phase 3 endpoints disabled: {e}")
 
+# Import Telegram router (optional - Phase 4 multi-channel)
+try:
+    from voice.telegram.telegram_api import router as telegram_router
+    TELEGRAM_AVAILABLE = True
+except ImportError as e:
+    TELEGRAM_AVAILABLE = False
+    print(f"ℹ️  Telegram module not available - Phase 4 endpoints disabled: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -62,6 +70,11 @@ app = FastAPI(
 if IVR_AVAILABLE:
     app.include_router(ivr_router)
     print("✅ IVR endpoints registered at /voice/ivr/*")
+
+# Include Telegram router if available (Phase 4)
+if TELEGRAM_AVAILABLE:
+    app.include_router(telegram_router)
+    print("✅ Telegram endpoints registered at /voice/telegram/*")
 
 # Allow local tools and UIs
 app.add_middleware(

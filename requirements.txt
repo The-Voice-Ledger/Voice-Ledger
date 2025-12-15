@@ -30,6 +30,9 @@ redis==5.0.1        # Message broker + result backend
 twilio==9.0.4       # Twilio SDK for voice/SMS
 phonenumbers==8.13.27  # Phone number parsing and validation
 
+# Lab 8 Phase 4: Multi-Channel (Telegram)
+python-telegram-bot==20.7  # Telegram Bot API for voice messages
+
 # -----------------------------
 # Lab 3: SSI (Ed25519 signing with PyNaCl)
 # -----------------------------
