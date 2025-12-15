@@ -14,6 +14,28 @@ load_dotenv()
 Base = declarative_base()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+class UserIdentity(Base):
+    """Telegram user identity with auto-generated DIDs for batch ownership tracking"""
+    __tablename__ = "user_identities"
+    
+    id = Column(Integer, primary_key=True)
+    telegram_user_id = Column(String(50), unique=True, nullable=False, index=True)
+    telegram_username = Column(String(100))
+    telegram_first_name = Column(String(100))
+    telegram_last_name = Column(String(100))
+    
+    # Auto-generated DID for user authentication
+    did = Column(String(200), unique=True, nullable=False, index=True)
+    encrypted_private_key = Column(Text, nullable=False)
+    public_key = Column(String(100), nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_active_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    created_batches = relationship("CoffeeBatch", back_populates="creator", foreign_keys="CoffeeBatch.created_by_user_id")
+
 class FarmerIdentity(Base):
     __tablename__ = "farmer_identities"
     
@@ -66,11 +88,16 @@ class CoffeeBatch(Base):
     quality_grade = Column(String(20))
     farmer_id = Column(Integer, ForeignKey("farmer_identities.id"))
     
+    # User ownership tracking (for Telegram user who created the batch)
+    created_by_user_id = Column(Integer, ForeignKey("user_identities.id"))
+    created_by_did = Column(String(200), index=True)  # Denormalized for fast queries
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     farmer = relationship("FarmerIdentity", back_populates="batches")
+    creator = relationship("UserIdentity", back_populates="created_batches", foreign_keys=[created_by_user_id])
     events = relationship("EPCISEvent", back_populates="batch")
 
 class EPCISEvent(Base):
