@@ -5,6 +5,7 @@ Handles webhooks from Telegram for voice messages, text commands, and callbacks.
 """
 
 import logging
+import os
 from typing import Dict, Any
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
