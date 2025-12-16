@@ -436,6 +436,11 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             db = SessionLocal()
             try:
+                # Extract user info from message
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
                 # Get or create user identity
                 from ssi.user_identity import get_or_create_user_identity
                 identity = get_or_create_user_identity(
