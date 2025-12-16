@@ -1,18 +1,18 @@
-# The Voice Ledger 🌍
+# The Voice Ledger
 
 A voice-first blockchain traceability system for coffee supply chains that enables natural language event recording using standardized EPCIS 2.0 events, self-sovereign identity, and immutable blockchain anchoring.
 
 **Current Status:** v1.5 (Bilingual Cloud) - Functional, English + Amharic, automatic language detection  
 **In Development:** v2.0 (Offline-First) - 5 languages, offline-capable, 95%+ rural accessibility
 
-## ✨ New Features (v1.5 - December 2025)
+## New Features (v1.5 - December 2025)
 
-- 🌍 **Bilingual Support**: Automatic English/Amharic language detection
-- 💰 **50% Cost Savings**: Local Amharic model reduces transcription costs to $0
-- 🤖 **Telegram Bot**: @voice_ledger_bot for easy voice message submission
-- ⚡ **Async Processing**: Celery + Redis for non-blocking operations
-- 🔄 **Production Ready**: Database connection pooling, enhanced error handling
-- 📚 **Comprehensive Docs**: 3000+ lines of documentation
+- **Bilingual Support**: Automatic English/Amharic language detection
+- **50% Cost Savings**: Local Amharic model reduces transcription costs to $0
+- **Telegram Bot**: @voice_ledger_bot for easy voice message submission
+- **Async Processing**: Celery + Redis for non-blocking operations
+- **Production Ready**: Database connection pooling, enhanced error handling
+- **Comprehensive Docs**: 3000+ lines of documentation
 
 ## Overview
 
@@ -459,28 +459,28 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 **API Security**
 - API key authentication on all endpoints
 - Rate limiting to prevent abuse
-## Recent Improvements (v1.5) ✨
+## Recent Improvements (v1.5)
 
 ### Bilingual Support (December 2025)
-- ✅ **Automatic language detection**: English and Amharic
-- ✅ **Dual model architecture**: OpenAI API (English) + Local model (Amharic)
-- ✅ **50% cost savings**: Amharic transcriptions run locally ($0 vs $0.02)
-- ✅ **Zero configuration**: Farmers just speak, system auto-detects language
-- ✅ **57M+ Amharic speakers**: Now accessible to Ethiopian farmers
+- **Automatic language detection**: English and Amharic
+- **Dual model architecture**: OpenAI API (English) + Local model (Amharic)
+- **50% cost savings**: Amharic transcriptions run locally ($0 vs $0.02)
+- **Zero configuration**: Farmers just speak, system auto-detects language
+- **57M+ Amharic speakers**: Now accessible to Ethiopian farmers
 
 ### Production Enhancements
-- ✅ **Telegram bot**: @voice_ledger_bot fully operational
-- ✅ **Async processing**: Celery + Redis for non-blocking operations
-- ✅ **Database connection pooling**: SSL handling with auto-reconnection
-- ✅ **Enhanced NLU**: Comprehensive prompts with coffee domain examples
-- ✅ **Improved batch IDs**: Timestamp-based to prevent collisions
-- ✅ **Synchronous notifications**: Reliable Telegram message delivery
+- **Telegram bot**: @voice_ledger_bot fully operational
+- **Async processing**: Celery + Redis for non-blocking operations
+- **Database connection pooling**: SSL handling with auto-reconnection
+- **Enhanced NLU**: Comprehensive prompts with coffee domain examples
+- **Improved batch IDs**: Timestamp-based to prevent collisions
+- **Synchronous notifications**: Reliable Telegram message delivery
 
 ### Documentation & Organization
-- ✅ **3000+ lines** of comprehensive documentation
-- ✅ **Centralized docs**: All in `documentation/` folder
-- ✅ **Admin scripts**: Service management tools in `admin_scripts/`
-- ✅ **Complete build log**: Full implementation history tracked
+- **3000+ lines** of comprehensive documentation
+- **Centralized docs**: All in `documentation/` folder
+- **Admin scripts**: Service management tools in `admin_scripts/`
+- **Complete build log**: Full implementation history tracked
 
 ## Current Limitations (v1.5)
 

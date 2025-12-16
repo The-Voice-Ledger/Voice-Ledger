@@ -184,6 +184,30 @@ def get_user_by_telegram_id(telegram_user_id: str, db_session: Session = None) -
             db_session.close()
 
 
+def get_user_by_did(did: str, db_session: Session = None) -> UserIdentity:
+    """
+    Retrieve user identity by DID.
+    
+    Args:
+        did: Decentralized Identifier (e.g., did:key:z6Mk...)
+        db_session: Database session (optional)
+        
+    Returns:
+        UserIdentity object or None if not found
+    """
+    close_session = False
+    if db_session is None:
+        from database.models import SessionLocal
+        db_session = SessionLocal()
+        close_session = True
+    
+    try:
+        return db_session.query(UserIdentity).filter_by(did=did).first()
+    finally:
+        if close_session:
+            db_session.close()
+
+
 def _get_encryption_key() -> bytes:
     """
     Get or generate encryption key for private key storage.

@@ -60,6 +60,14 @@ except ImportError as e:
     TELEGRAM_AVAILABLE = False
     print(f"ℹ️  Telegram module not available - Phase 4 endpoints disabled: {e}")
 
+# Import Verification router (Phase 5 - public credential verification)
+try:
+    from voice.verification.verify_api import router as verification_router
+    VERIFICATION_AVAILABLE = True
+except ImportError as e:
+    VERIFICATION_AVAILABLE = False
+    print(f"ℹ️  Verification module not available - Phase 5 endpoints disabled: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -75,6 +83,11 @@ if IVR_AVAILABLE:
 if TELEGRAM_AVAILABLE:
     app.include_router(telegram_router)
     print("✅ Telegram endpoints registered at /voice/telegram/*")
+
+# Include Verification router if available (Phase 5)
+if VERIFICATION_AVAILABLE:
+    app.include_router(verification_router)
+    print("✅ Verification endpoints registered at /voice/verify/*")
 
 # Allow local tools and UIs
 app.add_middleware(

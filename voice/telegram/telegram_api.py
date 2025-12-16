@@ -248,7 +248,11 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "*Text Commands:*\n"
                     "/start - Welcome & examples\n"
                     "/help - This help message\n"
-                    "/status - Check system status\n\n"
+                    "/status - Check system status\n"
+                    "/myidentity - Show your DID\n"
+                    "/mycredentials - View track record\n"
+                    "/mybatches - List your batches\n"
+                    "/export - Get QR code for credentials\n\n"
                     "*Voice Command Types:*\n\n"
                     "1️⃣ *Commission* - Create new batch\n"
                     "   Example: \"New batch, 50 kg Sidama from my farm\"\n\n"
@@ -421,6 +425,122 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             finally:
                 db.close()
             return {"ok": True, "message": "Sent batches"}
+        
+        # /export - Generate QR code with verifiable credentials
+        if text.startswith('/export'):
+            import qrcode
+            import io
+            from ssi.user_identity import get_user_by_telegram_id
+            from ssi.batch_credentials import get_user_credentials, calculate_simple_credit_score
+            from database.models import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                # Get or create user identity
+                from ssi.user_identity import get_or_create_user_identity
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                user_did = identity['did']
+                
+                # Check if user has any credentials
+                credentials = get_user_credentials(user_did)
+                
+                if not credentials:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "❌ No credentials to export yet!\n\n"
+                            "Create your first batch by sending a voice message:\n"
+                            "🎙️ \"Record commission for 50kg Yirgacheffe from Gedeo\""
+                        )
+                    )
+                    return {"ok": True}
+                
+                # Get credit score
+                score = calculate_simple_credit_score(user_did)
+                
+                # Generate verification URL for QR code
+                # Use ngrok URL if available, otherwise localhost
+                base_url = os.getenv('NGROK_URL', 'http://localhost:8000')
+                verification_url = f"{base_url}/voice/verify/{user_did}/html"
+                
+                # Create QR code
+                qr = qrcode.QRCode(
+                    version=1,
+                    error_correction=qrcode.constants.ERROR_CORRECT_L,
+                    box_size=10,
+                    border=4,
+                )
+                qr.add_data(verification_url)
+                qr.make(fit=True)
+                
+                # Generate image
+                img = qr.make_image(fill_color="black", back_color="white")
+                
+                # Save to BytesIO
+                bio = io.BytesIO()
+                img.save(bio, 'PNG')
+                bio.seek(0)
+                
+                # Send QR code image via Telegram
+                # We need to use the Telegram bot directly to send photos
+                import requests
+                
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                if not bot_token:
+                    raise Exception("TELEGRAM_BOT_TOKEN not configured")
+                
+                # Send photo using Telegram API
+                files = {'photo': ('qr_code.png', bio, 'image/png')}
+                data = {
+                    'chat_id': user_id,
+                    'caption': (
+                        f"📱 *Your Credential QR Code*\n\n"
+                        f"✅ Credit Score: *{score['score']}/1000*\n"
+                        f"📦 Total Batches: {score['batch_count']}\n"
+                        f"⚖️ Total Production: {score['total_kg']:.1f} kg\n\n"
+                        f"*How to Use:*\n"
+                        f"1. Save this QR code to your photos\n"
+                        f"2. Show it at banks/cooperatives\n"
+                        f"3. They scan to verify your track record\n\n"
+                        f"🔗 Or share this link:\n"
+                        f"`{verification_url}`\n\n"
+                        f"Anyone can verify your credentials without needing Voice Ledger!"
+                    ),
+                    'parse_mode': 'Markdown'
+                }
+                
+                response = requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                    files=files,
+                    data=data,
+                    timeout=30
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Failed to send QR code: {response.text}")
+                    raise Exception(f"Failed to send QR code: {response.text}")
+                
+                logger.info(f"Sent QR code to user {user_id}, DID: {user_did}")
+                
+            except Exception as e:
+                logger.error(f"Error generating QR code: {e}")
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=f"❌ Error generating QR code: {str(e)}"
+                )
+            finally:
+                db.close()
+            
+            return {"ok": True, "message": "Sent QR code"}
         
         # Unknown command
         logger.debug(f"Unknown Telegram text command: {text}")
