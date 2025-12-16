@@ -9,10 +9,12 @@ A voice-first blockchain traceability system for coffee supply chains that enabl
 
 - **Bilingual Support**: Automatic English/Amharic language detection
 - **50% Cost Savings**: Local Amharic model reduces transcription costs to $0
+- **High Accuracy ASR**: Medium Whisper model with 9% WER for Amharic
 - **Telegram Bot**: @voice_ledger_bot for easy voice message submission
 - **Async Processing**: Celery + Redis for non-blocking operations
 - **Production Ready**: Database connection pooling, enhanced error handling
 - **Comprehensive Docs**: 3000+ lines of documentation
+- **Credential Portability**: QR code export and public verification API for farmers
 
 ## Overview
 
@@ -115,7 +117,7 @@ Voice Input (Telegram/IVR) → Language Detection (Whisper API)
 **Voice Processing API** [COMPLETE - v1.5 Bilingual]
 - FastAPI REST service for audio processing
 - **Bilingual ASR**: Automatic language detection (English + Amharic)
-- **Dual model routing**: OpenAI Whisper API (English) + Local Amharic model (b1n1yam/shhook-1.2k-sm)
+- **Dual model routing**: OpenAI Whisper API (English) + Local Amharic model (b1n1yam/shook-medium-amharic-2k)
 - GPT-3.5 for natural language understanding (supports both languages)
 - Entity extraction (quantity, variety, location, date, batch_id)
 - Intent classification (commission, receipt, shipment, transformation)
@@ -144,7 +146,8 @@ Voice Input (Telegram/IVR) → Language Detection (Whisper API)
 
 **W3C Standards**
 - DID Core Specification
-- Verifiable Credentials Data Model
+- Verifiable Credentials Data Model 1.1
+- Verifiable Presentations
 - JSON-LD 1.1
 
 **Ethereum Standards**
@@ -159,9 +162,10 @@ Voice Input (Telegram/IVR) → Language Detection (Whisper API)
 - PyNaCl 1.5.0 (Ed25519 cryptography)
 - PyLD 2.0.3 (JSON-LD canonicalization)
 - Web3.py 6.11.3 (blockchain interaction)
+- qrcode 8.0 (QR code generation for credential sharing)
 **Voice Processing (v1.5 - Bilingual Cloud)**
 - OpenAI Whisper API (ASR) - English, cloud-based
-- Amharic Whisper Model (b1n1yam/shhook-1.2k-sm) - Local inference, $0 cost
+- Amharic Whisper Model (b1n1yam/shook-medium-amharic-2k) - Local inference, $0 cost, 9% WER
 - Automatic language detection and intelligent routing
 - OpenAI GPT-3.5 (NLU) - Bilingual entity extraction (English + Amharic)
 - Celery workers with solo pool for async task processing
@@ -202,7 +206,8 @@ Voice-Ledger/
 ├── ssi/
 │   ├── did/
 │   │   └── did_key.py          # DID generation and resolution
-│   └── agent.py                # Verifiable Credential issuance
+│   ├── agent.py                # Verifiable Credential issuance
+│   └── user_identity.py        # User identity management
 ├── blockchain/
 │   └── src/
 │       ├── EPCISEventAnchor.sol
@@ -222,6 +227,9 @@ Voice-Ledger/
 │   │   └── twilio_channel.py   # IVR integration (ready)
 │   ├── tasks/
 │   │   └── voice_tasks.py      # Celery async tasks
+│   ├── verification/
+│   │   ├── __init__.py         # Verification module
+│   │   └── verify_api.py       # Public verification API
 │   ├── service/
 │   │   ├── api.py              # FastAPI REST service
 │   │   └── auth.py             # API authentication
@@ -321,6 +329,14 @@ tail -f admin_scripts/celery.log | grep "Detected language"
 # Start Telegram bot
 python -m voice.telegram.telegram_api
 
+# Available Commands
+/start             # Welcome message with instructions
+/help              # List all available commands
+/myidentity        # View your DID and identity info
+/mycredentials     # View your verifiable credentials
+/mybatches         # View your coffee batches
+/export            # Generate QR code for credential sharing
+
 # Send voice messages to @voice_ledger_bot
 # System automatically detects English or Amharic
 # Supports all 4 command types:
@@ -343,6 +359,56 @@ python -m voice.asr.asr_infer audio.wav
 curl -X POST http://localhost:8000/asr-nlu \
   -H "X-API-Key: vl_test_12345" \
   -F "file=@harvest_command.wav"
+```
+
+**Credential Verification API (Public, No Auth Required)**
+
+```bash
+# Check API health
+curl http://localhost:8000/voice/verify/health
+
+# Verify credentials by DID (JSON format)
+curl http://localhost:8000/voice/verify/did:key:z6Mk...
+
+# Get W3C Verifiable Presentation
+curl http://localhost:8000/voice/verify/did:key:z6Mk.../presentation
+
+# View human-readable verification page
+open http://localhost:8000/voice/verify/did:key:z6Mk.../html
+```
+
+**Response Example (JSON Verification):**
+```json
+{
+  "verified": true,
+  "did": "did:key:z6Mk...",
+  "user": {
+    "username": "farmer_joe",
+    "telegram_id": 123456789,
+    "location": "Yirgacheffe, Ethiopia"
+  },
+  "credentials": [
+    {
+      "type": "OrganicCertification",
+      "issuer": "Ethiopian Organic Agency",
+      "issuanceDate": "2024-01-15",
+      "credentialSubject": {
+        "certificationLevel": "Organic",
+        "validUntil": "2025-01-15"
+      },
+      "verified": true
+    }
+  ],
+  "batches": [
+    {
+      "batch_id": "BATCH-2024-001",
+      "variety": "Arabica Typica",
+      "quantity_kg": 500,
+      "blockchain_tx": "0x123..."
+    }
+  ],
+  "creditScore": 85
+}
 ```
 
 **Digital Product Passport Generation**
@@ -468,6 +534,43 @@ tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
 - **Zero configuration**: Farmers just speak, system auto-detects language
 - **57M+ Amharic speakers**: Now accessible to Ethiopian farmers
 
+### Credential Portability (Phase 5B)
+- **QR Code Export**: Farmers can generate shareable QR codes with `/export` command
+- **Public Verification API**: Banks and cooperatives can verify credentials without authentication
+- **W3C Verifiable Presentations**: Standards-compliant credential format
+- **Multi-Format Support**: JSON, W3C VP, and human-readable HTML verification
+- **Use Cases**: Loan applications, cooperative membership, quality certification
+- **Privacy-Preserving**: Only reveals necessary credential information, no raw blockchain data
+
+**How It Works:**
+1. Farmer uses `/export` command in Telegram
+2. System generates QR code with verification link
+3. Bank/cooperative scans QR code
+4. Public API verifies credentials and displays farmer profile
+5. No Voice Ledger account required for verifiers
+
+**Verification Endpoints:**
+```bash
+# JSON verification (for applications)
+GET /voice/verify/{did}
+
+# W3C Verifiable Presentation (standards-compliant)
+GET /voice/verify/{did}/presentation
+
+# Human-readable HTML (for browsers)
+GET /voice/verify/{did}/html
+```
+
+**Example Use Case:**
+A farmer applies for a loan at a rural bank. The bank officer scans the farmer's QR code, which opens a verification page showing:
+- Farmer's verified identity (DID)
+- Coffee batch history with blockchain anchors
+- Organic certification credentials
+- Quality grade assessments
+- Simple credit score based on transaction history
+
+The bank makes lending decisions based on verifiable, tamper-proof credentials without manual paperwork.
+
 ### Production Enhancements
 - **Telegram bot**: @voice_ledger_bot fully operational
 - **Async processing**: Celery + Redis for non-blocking operations
@@ -527,7 +630,7 @@ Comprehensive documentation in `documentation/` folder:
 
 **Current State (v1.5 - Bilingual Cloud)**
 - OpenAI Whisper ASR (cloud API, English, 2-4s latency)
-- Local Amharic Whisper (b1n1yam/shhook-1.2k-sm, 3-6s latency)
+- Local Amharic Whisper (b1n1yam/shook-medium-amharic-2k, 3-6s latency, 9% WER)
 - Automatic language detection and routing
 - GPT-3.5 NLU (cloud API, works for both languages, 1-2s latency)
 - English + Amharic supported

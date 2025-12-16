@@ -39,8 +39,8 @@ def load_amharic_model():
     global _amharic_model, _amharic_processor
     
     if _amharic_model is None:
-        logger.info("Loading Amharic Whisper model: b1n1yam/shhook-1.2k-sm")
-        model_name = "b1n1yam/shhook-1.2k-sm"
+        logger.info("Loading Amharic Whisper model: b1n1yam/shook-medium-amharic-2k")
+        model_name = "b1n1yam/shook-medium-amharic-2k"
         _amharic_processor = AutoProcessor.from_pretrained(model_name)
         _amharic_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
         
@@ -127,7 +127,7 @@ def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[
     Transcribe audio file with automatic language detection and routing.
     
     This function intelligently routes audio to the appropriate model:
-    - Amharic audio → Local fine-tuned Whisper model (b1n1yam/shhook-1.2k-sm)
+    - Amharic audio → Local fine-tuned Whisper model (b1n1yam/shook-medium-amharic-2k)
     - English audio → OpenAI Whisper API (whisper-1)
     
     Args:

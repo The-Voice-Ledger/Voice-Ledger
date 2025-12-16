@@ -1,8 +1,18 @@
+# =============================================================================
+# Voice Ledger - Production Dependencies
+# Organized by Lab/Feature (Labs 1-8)
+# =============================================================================
+
 # -----------------------------
 # Core / Testing
 # -----------------------------
 pytest==7.4.3
-requests==2.31.0  # Required for healthchecks in Docker containers
+requests==2.31.0
+
+# -----------------------------
+# Lab 1: GS1 Identifiers & EPCIS Events
+# -----------------------------
+# No external dependencies - uses Python standard library (json, hashlib, pathlib)
 
 # -----------------------------
 # Lab 2: Voice API (FastAPI) + OpenAI
@@ -16,47 +26,24 @@ openai==1.12.0
 httpx==0.26.0
 
 # -----------------------------
-# Lab 7: Voice Interface Integration (Audio Processing)
+# Lab 3: SSI (Self-Sovereign Identity)
 # -----------------------------
-pydub==0.25.1       # Audio format conversion (MP3/M4A → WAV)
-soundfile==0.12.1   # Audio I/O with numpy arrays
-aiofiles==23.2.1    # Async file operations
-
-# Lab 7 Phase 2: Async Processing
-celery==5.4.0       # Distributed task queue
-redis==5.0.1        # Message broker + result backend
-
-# Lab 7 Phase 5: Bilingual ASR (English + Amharic)
-transformers==4.57.3      # HuggingFace models
-torch==2.8.0              # PyTorch for local inference
-torchaudio==2.8.0         # Audio preprocessing
-accelerate==1.10.1        # Optimized model loading
-
-# Lab 8 Phase 3: IVR/Phone System
-twilio==9.0.4       # Twilio SDK for voice/SMS
-phonenumbers==8.13.27  # Phone number parsing and validation
-
-# Lab 8 Phase 4: Multi-Channel (Telegram)
-python-telegram-bot==20.7  # Telegram Bot API for voice messages
+PyNaCl==1.5.0              # Ed25519 signing
+cryptography==41.0.7       # Private key encryption
+pyld==2.0.3                # JSON-LD canonicalization
 
 # -----------------------------
-# Lab 3: SSI (Ed25519 signing with PyNaCl)
-# -----------------------------
-PyNaCl==1.5.0
-cryptography==41.0.7  # For private key encryption in user_identities
-
-# -----------------------------
-# Lab 4: Blockchain
+# Lab 4: Blockchain Integration
 # -----------------------------
 # Note: Foundry toolkit (forge, cast, anvil) installed separately
 # Installation: curl -L https://foundry.paradigm.xyz | bash
-# No Python dependencies needed for Lab 4
+# web3.py could be added here if needed for Python blockchain interaction
 
 # -----------------------------
-# Lab 5: Digital Product Passports (QR codes)
+# Lab 5: Digital Product Passports (DPP)
 # -----------------------------
-qrcode[pil]==7.4.2
-Pillow==10.1.0
+qrcode[pil]==8.0           # QR code generation (updated for credential export)
+Pillow==10.1.0             # Image processing
 
 # -----------------------------
 # Lab 6: DevOps & Monitoring (Dashboard)
@@ -66,9 +53,37 @@ plotly==5.18.0
 pandas==2.1.4
 
 # -----------------------------
+# Lab 7: Voice Interface Integration
+# -----------------------------
+# Phase 1: Audio Processing
+pydub==0.25.1              # Audio format conversion (MP3/M4A → WAV)
+soundfile==0.12.1          # Audio I/O with numpy arrays
+aiofiles==23.2.1           # Async file operations
+
+# Phase 2: Async Processing
+celery==5.4.0              # Distributed task queue
+redis==5.0.1               # Message broker + result backend
+
+# Phase 5: Bilingual ASR (English + Amharic)
+transformers==4.57.3       # HuggingFace models
+torch==2.8.0               # PyTorch for local inference
+torchaudio==2.8.0          # Audio preprocessing
+accelerate==1.10.1         # Optimized model loading
+
+# -----------------------------
+# Lab 8: Multi-Channel Integration
+# -----------------------------
+# Phase 3: IVR/Phone System
+twilio==9.0.4              # Twilio SDK for voice/SMS
+phonenumbers==8.13.27      # Phone number parsing and validation
+
+# Phase 4: Telegram Bot
+python-telegram-bot==20.7  # Telegram Bot API
+
+# -----------------------------
 # Database (Neon PostgreSQL)
 # -----------------------------
 sqlalchemy[asyncio]==2.0.23
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
-alembic==1.13.1qrcode==8.0  # QR code generation for credential export
+alembic==1.13.1

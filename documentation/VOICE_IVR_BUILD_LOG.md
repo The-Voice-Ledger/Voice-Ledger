@@ -1579,7 +1579,7 @@ After completing production fixes, we explored enhancing Voice-Ledger for Ethiop
 
 **Resources Identified:**
 1. **Amharic Dataset**: [FineTome-single-turn-dedup-amharic](https://huggingface.co/datasets/addisai/FineTome-single-turn-dedup-amharic) - 83K instruction examples by Addis AI
-2. **Amharic Whisper Model**: [b1n1yam/shhook-1.2k-sm](https://huggingface.co/b1n1yam/shhook-1.2k-sm) - Fine-tuned Whisper for Ethiopian Amharic dialect
+2. **Amharic Whisper Model**: [b1n1yam/shook-medium-amharic-2k](https://huggingface.co/b1n1yam/shook-medium-amharic-2k) - Fine-tuned Whisper for Ethiopian Amharic dialect
 
 **Decision: Option A - Automatic Language Detection**
 
@@ -1607,7 +1607,7 @@ pip install transformers torch torchaudio accelerate
 ```
 Audio Input → Language Detection (Whisper API)
                     ↓
-            Amharic (am)? → Local Model (b1n1yam/shhook-1.2k-sm)
+            Amharic (am)? → Local Model (b1n1yam/shook-medium-amharic-2k)
                     ↓
             English (en)? → OpenAI API (whisper-1)
                     ↓
@@ -1652,7 +1652,7 @@ Audio Input → Language Detection (Whisper API)
 
 ### Technical Details
 
-**Amharic Model (`b1n1yam/shhook-1.2k-sm`):**
+**Amharic Model (`b1n1yam/shook-medium-amharic-2k`):**
 - Provider: Addis AI (Ethiopian AI company)
 - Architecture: Whisper (OpenAI base)
 - Size: ~300MB (small variant)
