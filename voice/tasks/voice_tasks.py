@@ -175,10 +175,47 @@ def process_voice_command_task(
         # Execute database command
         db_result = None
         error = None
+        user_identity = None
         
         with get_db() as db:
             try:
-                message, db_result = execute_voice_command(db, intent, entities)
+                # Get or create user identity (for DID and batch ownership)
+                user_id_for_identity = None
+                username = None
+                first_name = None
+                last_name = None
+                
+                if metadata:
+                    if metadata.get("channel") == "telegram":
+                        user_id_for_identity = metadata.get("user_id")
+                        username = metadata.get("username")
+                        # Extract name from metadata if available
+                        first_name = metadata.get("first_name")
+                        last_name = metadata.get("last_name")
+                
+                if user_id_for_identity:
+                    try:
+                        from ssi.user_identity import get_or_create_user_identity
+                        user_identity = get_or_create_user_identity(
+                            telegram_user_id=str(user_id_for_identity),
+                            telegram_username=username,
+                            telegram_first_name=first_name,
+                            telegram_last_name=last_name,
+                            db_session=db
+                        )
+                        logger.info(f"User identity: {user_identity['did']}, created={user_identity['created']}")
+                    except Exception as e:
+                        logger.warning(f"Failed to create user identity: {e}")
+                
+                # Execute command with user context
+                if user_identity:
+                    message, db_result = execute_voice_command(
+                        db, intent, entities, 
+                        user_id=user_identity.get('user_id'),
+                        user_did=user_identity.get('did')
+                    )
+                else:
+                    message, db_result = execute_voice_command(db, intent, entities)
                 
             except VoiceCommandError as e:
                 # Known command error (not a failure, just unsupported)
@@ -187,6 +224,7 @@ def process_voice_command_task(
             except Exception as e:
                 # Unexpected database error
                 error = f"Database error: {str(e)}"
+                logger.error(f"Database error details: {e}", exc_info=True)
         
         # Send notification back to user
         if metadata:

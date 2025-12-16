@@ -282,6 +282,146 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             return {"ok": True, "message": "Sent status"}
         
+        # Handle /myidentity command - show user's DID
+        if text.startswith('/myidentity'):
+            from ssi.user_identity import get_or_create_user_identity
+            from database.models import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                status_emoji = "🆕" if identity['created'] else "✅"
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        f"{status_emoji} *Your Identity*\n\n"
+                        f"DID: `{identity['did']}`\n\n"
+                        "This is your decentralized identifier.\n"
+                        "All batches you create are linked to this DID.\n\n"
+                        "Use /mycredentials to see your track record."
+                    )
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Sent identity"}
+        
+        # Handle /mycredentials command - show user's verifiable credentials
+        if text.startswith('/mycredentials'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from ssi.batch_credentials import get_user_credentials, calculate_simple_credit_score
+            from database.models import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                user = get_user_by_telegram_id(user_id, db_session=db)
+                if not user:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="❌ No identity found. Create a batch first to generate your DID."
+                    )
+                    return {"ok": True}
+                
+                credentials = get_user_credentials(user.did, "CoffeeBatchCredential")
+                score = calculate_simple_credit_score(user.did)
+                
+                if not credentials:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "📋 *Your Credentials*\n\n"
+                            "You haven't created any batches yet.\n"
+                            "Record a voice message to create your first batch!"
+                        )
+                    )
+                else:
+                    creds_text = "\n\n".join([
+                        f"📦 *{vc['credentialSubject']['batchId']}*\n"
+                        f"   {vc['credentialSubject']['quantityKg']} kg {vc['credentialSubject']['variety']}\n"
+                        f"   from {vc['credentialSubject']['origin']}\n"
+                        f"   Recorded: {vc['issuanceDate'][:10]}"
+                        for vc in credentials[:5]  # Show last 5
+                    ])
+                    
+                    more_text = f"\n\n...and {len(credentials) - 5} more" if len(credentials) > 5 else ""
+                    
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            f"📋 *Your Track Record*\n\n"
+                            f"Credit Score: *{score['score']}/1000*\n"
+                            f"Total Batches: {score['batch_count']}\n"
+                            f"Total Production: {score['total_kg']:.1f} kg\n"
+                            f"Days Active: {score['days_active']}\n\n"
+                            f"*Recent Batches:*\n\n{creds_text}{more_text}"
+                        )
+                    )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Sent credentials"}
+        
+        # Handle /mybatches command - show user's batches
+        if text.startswith('/mybatches'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from database.models import SessionLocal, CoffeeBatch
+            
+            db = SessionLocal()
+            try:
+                user = get_user_by_telegram_id(user_id, db_session=db)
+                if not user:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="❌ No identity found. Create a batch first!"
+                    )
+                    return {"ok": True}
+                
+                batches = db.query(CoffeeBatch).filter_by(
+                    created_by_user_id=user.id
+                ).order_by(CoffeeBatch.created_at.desc()).limit(10).all()
+                
+                if not batches:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="📦 No batches found. Record a voice message to create one!"
+                    )
+                else:
+                    batch_lines = "\n\n".join([
+                        f"📦 *{b.batch_id}*\n"
+                        f"   {b.quantity_kg} kg {b.variety}\n"
+                        f"   from {b.origin}\n"
+                        f"   GTIN: `{b.gtin}`\n"
+                        f"   Created: {b.created_at.strftime('%Y-%m-%d %H:%M')}"
+                        for b in batches
+                    ])
+                    
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            f"📦 *Your Batches* (showing last {len(batches)})\n\n"
+                            f"{batch_lines}"
+                        )
+                    )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Sent batches"}
+        
         # Unknown command
         logger.debug(f"Unknown Telegram text command: {text}")
         return {"ok": True, "message": "Text command not recognized"}

@@ -47,7 +47,7 @@ def generate_batch_id_from_entities(entities: dict) -> str:
     return f"{origin}_{product}_{timestamp}"
 
 
-def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str, Any]]:
+def handle_record_commission(db: Session, entities: dict, user_id: int = None, user_did: str = None) -> Tuple[str, Dict[str, Any]]:
     """
     Handle 'record_commission' intent - create new coffee batch.
     
@@ -56,6 +56,8 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
     Args:
         db: Database session
         entities: {quantity, unit, product, origin}
+        user_id: Optional user database ID (for VC issuance)
+        user_did: Optional user DID (for batch ownership)
         
     Returns:
         Tuple of (success_message, created_batch_dict)
@@ -101,12 +103,32 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
         "variety": product,
         "processing_method": "Washed",  # Default processing method
         "quality_grade": "A",  # Default quality grade (A, B, C, etc.)
-        "created_at": datetime.utcnow()
+        "created_at": datetime.utcnow(),
+        "created_by_user_id": user_id,  # Track user ownership
+        "created_by_did": user_did  # Denormalized for fast queries
     }
     
     # Create batch in database
     try:
         batch = create_batch(db, batch_data)
+        
+        # Issue verifiable credential if user_id provided
+        credential = None
+        if user_id and user_did:
+            try:
+                from ssi.batch_credentials import issue_batch_credential
+                credential = issue_batch_credential(
+                    batch_id=batch.batch_id,
+                    user_id=user_id,
+                    user_did=user_did,
+                    quantity_kg=batch.quantity_kg,
+                    variety=batch.variety,
+                    origin=batch.origin,
+                    processing_method=batch.processing_method
+                )
+            except Exception as e:
+                # Log error but don't fail batch creation
+                print(f"Warning: Failed to issue credential: {e}")
         
         # Convert to dict for JSON response
         result = {
@@ -116,6 +138,7 @@ def handle_record_commission(db: Session, entities: dict) -> Tuple[str, Dict[str
             "quantity_kg": batch.quantity_kg,
             "origin": batch.origin,
             "variety": batch.variety,
+            "credential_issued": credential is not None,
             "message": f"Successfully commissioned {quantity} {unit} of {product} from {origin}"
         }
         
@@ -201,7 +224,7 @@ INTENT_HANDLERS = {
 }
 
 
-def execute_voice_command(db: Session, intent: str, entities: dict) -> Tuple[str, Dict[str, Any]]:
+def execute_voice_command(db: Session, intent: str, entities: dict, user_id: int = None, user_did: str = None) -> Tuple[str, Dict[str, Any]]:
     """
     Execute voice command by mapping intent to database operation.
     
@@ -209,6 +232,8 @@ def execute_voice_command(db: Session, intent: str, entities: dict) -> Tuple[str
         db: Database session
         intent: Intent extracted from NLU
         entities: Entities extracted from NLU
+        user_id: Optional user database ID (for VC issuance)
+        user_did: Optional user DID (for batch ownership)
         
     Returns:
         Tuple of (success_message, result_dict)
@@ -243,7 +268,11 @@ def execute_voice_command(db: Session, intent: str, entities: dict) -> Tuple[str
     
     # Execute handler
     try:
-        message, result = handler(db, entities)
+        # Pass user context to handlers that support it
+        if intent == "record_commission":
+            message, result = handler(db, entities, user_id=user_id, user_did=user_did)
+        else:
+            message, result = handler(db, entities)
         return (message, result)
     except VoiceCommandError:
         # Re-raise voice command errors as-is
