@@ -26,6 +26,12 @@ aiofiles==23.2.1    # Async file operations
 celery==5.4.0       # Distributed task queue
 redis==5.0.1        # Message broker + result backend
 
+# Lab 7 Phase 5: Bilingual ASR (English + Amharic)
+transformers==4.57.3      # HuggingFace models
+torch==2.8.0              # PyTorch for local inference
+torchaudio==2.8.0         # Audio preprocessing
+accelerate==1.10.1        # Optimized model loading
+
 # Lab 8 Phase 3: IVR/Phone System
 twilio==9.0.4       # Twilio SDK for voice/SMS
 phonenumbers==8.13.27  # Phone number parsing and validation
@@ -37,6 +43,7 @@ python-telegram-bot==20.7  # Telegram Bot API for voice messages
 # Lab 3: SSI (Ed25519 signing with PyNaCl)
 # -----------------------------
 PyNaCl==1.5.0
+cryptography==41.0.7  # For private key encryption in user_identities
 
 # -----------------------------
 # Lab 4: Blockchain
