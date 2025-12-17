@@ -68,6 +68,14 @@ except ImportError as e:
     VERIFICATION_AVAILABLE = False
     print(f"ℹ️  Verification module not available - Phase 5 endpoints disabled: {e}")
 
+# Import Admin router (Phase 5 - registration approval)
+try:
+    from voice.admin.registration_approval import router as admin_router
+    ADMIN_AVAILABLE = True
+except ImportError as e:
+    ADMIN_AVAILABLE = False
+    print(f"ℹ️  Admin module not available - registration approval disabled: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -88,6 +96,11 @@ if TELEGRAM_AVAILABLE:
 if VERIFICATION_AVAILABLE:
     app.include_router(verification_router)
     print("✅ Verification endpoints registered at /voice/verify/*")
+
+# Include Admin router if available (Phase 5)
+if ADMIN_AVAILABLE:
+    app.include_router(admin_router, prefix="/admin")
+    print("✅ Admin endpoints registered at /admin/*")
 
 # Allow local tools and UIs
 app.add_middleware(
@@ -233,7 +246,13 @@ async def transcribe_audio(
         wav_path, metadata = validate_and_convert_audio(str(temp_path))
         
         # Run ASR (audio → text)
-        transcript = run_asr(wav_path)
+        asr_result = run_asr(wav_path)
+        
+        # Handle both dict and string returns (backwards compatibility)
+        if isinstance(asr_result, dict):
+            transcript = asr_result.get('text', '')
+        else:
+            transcript = asr_result
         
         return {
             "transcript": transcript,

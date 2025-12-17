@@ -3,7 +3,7 @@ SQLAlchemy models for Voice Ledger with Neon Postgres
 """
 
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 import os
@@ -13,6 +13,32 @@ load_dotenv()
 
 Base = declarative_base()
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+class Organization(Base):
+    """Organizations (cooperatives, exporters, buyers) in the supply chain"""
+    __tablename__ = "organizations"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), nullable=False, index=True)
+    type = Column(String(50), nullable=False, index=True)  # COOPERATIVE, EXPORTER, BUYER
+    did = Column(String(200), unique=True, nullable=False, index=True)
+    encrypted_private_key = Column(Text, nullable=False)  # Organization's private key for signing
+    public_key = Column(String(100), nullable=False)
+    
+    location = Column(String(200))
+    region = Column(String(100))
+    phone_number = Column(String(20))
+    registration_number = Column(String(100))  # Official license/registration
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    metadata_json = Column(JSON)  # Additional fields
+    
+    # Relationships
+    members = relationship("UserIdentity", back_populates="organization")
+    verified_batches = relationship("CoffeeBatch", back_populates="verifying_organization")
+    farmer_relationships = relationship("FarmerCooperative", back_populates="cooperative")
 
 class UserIdentity(Base):
     """Telegram user identity with auto-generated DIDs for batch ownership tracking"""
@@ -32,12 +58,69 @@ class UserIdentity(Base):
     # GS1 Global Location Number for user's location
     gln = Column(String(13), nullable=True, index=True)
     
+    # Role and organization (for verification system)
+    role = Column(String(50), default='FARMER', index=True)  # FARMER, COOPERATIVE_MANAGER, EXPORTER, BUYER, SYSTEM_ADMIN
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    is_approved = Column(Boolean, default=True, index=True)
+    approved_at = Column(DateTime)
+    approved_by_admin_id = Column(Integer)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     created_batches = relationship("CoffeeBatch", back_populates="creator", foreign_keys="CoffeeBatch.created_by_user_id")
+    organization = relationship("Organization", back_populates="members")
+    cooperative_relationships = relationship("FarmerCooperative", back_populates="farmer")
+
+class PendingRegistration(Base):
+    """Pending registration requests for non-farmer roles"""
+    __tablename__ = "pending_registrations"
+    
+    id = Column(Integer, primary_key=True)
+    telegram_user_id = Column(BigInteger, nullable=False, index=True)
+    telegram_username = Column(String(100))
+    telegram_first_name = Column(String(100))
+    telegram_last_name = Column(String(100))
+    
+    requested_role = Column(String(50), nullable=False)  # COOPERATIVE_MANAGER, EXPORTER, BUYER
+    
+    # Registration form answers
+    full_name = Column(String(200), nullable=False)
+    organization_name = Column(String(200), nullable=False)
+    location = Column(String(200), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    registration_number = Column(String(100))
+    reason = Column(Text)
+    
+    status = Column(String(20), default='PENDING', index=True)  # PENDING, APPROVED, REJECTED
+    reviewed_by_admin_id = Column(Integer)
+    reviewed_at = Column(DateTime)
+    rejection_reason = Column(Text)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class FarmerCooperative(Base):
+    """Many-to-many relationship between farmers and cooperatives"""
+    __tablename__ = "farmer_cooperatives"
+    
+    id = Column(Integer, primary_key=True)
+    farmer_id = Column(Integer, ForeignKey("user_identities.id"), nullable=False, index=True)
+    cooperative_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    first_delivery_date = Column(DateTime, nullable=False)
+    total_batches_verified = Column(Integer, default=1)
+    total_quantity_verified_kg = Column(Float, default=0)
+    
+    status = Column(String(20), default='ACTIVE', index=True)  # ACTIVE, SUSPENDED, TERMINATED
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    farmer = relationship("UserIdentity", back_populates="cooperative_relationships")
+    cooperative = relationship("Organization", back_populates="farmer_relationships")
 
 class FarmerIdentity(Base):
     __tablename__ = "farmer_identities"
@@ -96,6 +179,18 @@ class CoffeeBatch(Base):
     created_by_user_id = Column(Integer, ForeignKey("user_identities.id"))
     created_by_did = Column(String(200), index=True)  # Denormalized for fast queries
     
+    # Verification system fields
+    status = Column(String(30), default='PENDING_VERIFICATION', index=True)  # PENDING_VERIFICATION, VERIFIED, REJECTED, EXPIRED
+    verification_token = Column(String(64), unique=True, index=True)
+    verification_expires_at = Column(DateTime, index=True)
+    verification_used = Column(Boolean, default=False)
+    verified_quantity = Column(Float)  # Actual quantity verified (may differ from claimed)
+    verified_by_did = Column(String(200), index=True)
+    verified_at = Column(DateTime)
+    verification_notes = Column(Text)
+    has_photo_evidence = Column(Boolean, default=False)
+    verifying_organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -103,6 +198,26 @@ class CoffeeBatch(Base):
     farmer = relationship("FarmerIdentity", back_populates="batches")
     creator = relationship("UserIdentity", back_populates="created_batches", foreign_keys=[created_by_user_id])
     events = relationship("EPCISEvent", back_populates="batch")
+    verifying_organization = relationship("Organization", back_populates="verified_batches")
+    evidence = relationship("VerificationEvidence", back_populates="batch")
+
+class VerificationEvidence(Base):
+    """Photo and document evidence for batch verification"""
+    __tablename__ = "verification_evidence"
+    
+    id = Column(Integer, primary_key=True)
+    batch_id = Column(Integer, ForeignKey("coffee_batches.id"), nullable=False, index=True)
+    evidence_type = Column(String(50), nullable=False, index=True)  # PHOTO, DOCUMENT, GPS, WEIGHING_SLIP, OTHER
+    content_hash = Column(String(64), nullable=False, index=True)  # SHA-256 hash
+    storage_url = Column(String(500), nullable=False)  # S3/Spaces URL
+    captured_by_did = Column(String(200), nullable=False)
+    captured_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    metadata_json = Column(JSON)  # Additional data (filename, GPS, etc.)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    batch = relationship("CoffeeBatch", back_populates="evidence")
 
 class EPCISEvent(Base):
     __tablename__ = "epcis_events"
