@@ -208,6 +208,57 @@ def get_user_by_did(did: str, db_session: Session = None) -> UserIdentity:
             db_session.close()
 
 
+def get_or_create_user_gln(user_id: int, db_session: Session = None) -> str:
+    """
+    Get or create a Global Location Number (GLN) for a user.
+    
+    GLN Format: 13 digits (company_prefix + location_ref + check_digit)
+    We use user_id as the location reference for deterministic GLN generation.
+    
+    Args:
+        user_id: Database user ID
+        db_session: Database session (optional)
+        
+    Returns:
+        13-digit GLN string
+        
+    Example:
+        >>> gln = get_or_create_user_gln(42)
+        >>> print(gln)  # e.g., "0614141000429"
+    """
+    from gs1.identifiers import gln as generate_gln
+    
+    close_session = False
+    if db_session is None:
+        from database.models import SessionLocal
+        db_session = SessionLocal()
+        close_session = True
+    
+    try:
+        user = db_session.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+        
+        # If GLN already exists, return it
+        if user.gln:
+            return user.gln
+        
+        # Generate GLN using user_id as location reference
+        # Pad user_id to 5 digits for location code
+        location_ref = str(user_id).zfill(5)
+        gln = generate_gln(location_ref)
+        
+        # Store GLN in database
+        user.gln = gln
+        db_session.commit()
+        
+        return gln
+        
+    finally:
+        if close_session:
+            db_session.close()
+
+
 def _get_encryption_key() -> bytes:
     """
     Get or generate encryption key for private key storage.

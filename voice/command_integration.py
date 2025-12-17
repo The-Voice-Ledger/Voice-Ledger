@@ -87,6 +87,15 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     gtin = generate_gtin(product_code, "GTIN-14")  # 14-digit GTIN
     batch_number = f"BATCH-{now.strftime('%Y%m%d-%H%M%S')}"
     
+    # Generate or retrieve GLN for user's location
+    gln = None
+    if user_id:
+        try:
+            from ssi.user_identity import get_or_create_user_gln
+            gln = get_or_create_user_gln(user_id, db)
+        except Exception as e:
+            print(f"Warning: Failed to generate GLN: {e}")
+    
     # Convert quantity to kg (assuming 60kg per bag if unit is "bags")
     if unit.lower() in ["bag", "bags"]:
         quantity_kg = float(quantity) * 60.0
@@ -97,6 +106,7 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     batch_data = {
         "batch_id": batch_id,
         "gtin": gtin,
+        "gln": gln,  # Global Location Number (may be None for backward compatibility)
         "batch_number": batch_number,
         "quantity_kg": quantity_kg,
         "origin": origin,
@@ -135,6 +145,7 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
             "id": batch.id,
             "batch_id": batch.batch_id,
             "gtin": batch.gtin,
+            "gln": batch.gln,  # Include GLN for notification display
             "quantity_kg": batch.quantity_kg,
             "origin": batch.origin,
             "variety": batch.variety,

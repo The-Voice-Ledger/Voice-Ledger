@@ -73,11 +73,13 @@ def send_batch_confirmation(chat_id: int, batch_info: Dict[str, Any]) -> bool:
     quantity = batch_info.get('quantity', 0)
     farm = batch_info.get('farm', 'Unknown')
     gtin = batch_info.get('gtin', 'N/A')
+    gln = batch_info.get('gln', 'Not assigned')
     
     message = (
         f"✅ *Batch Created Successfully!*\n\n"
         f"📦 *Batch ID:* `{batch_id}`\n"
         f"🏷️ *GTIN:* `{gtin}`\n"
+        f"📍 *GLN:* `{gln}`\n"
         f"☕ *Variety:* {variety}\n"
         f"⚖️ *Quantity:* {quantity} kg\n"
         f"🌍 *Origin:* {farm}\n\n"

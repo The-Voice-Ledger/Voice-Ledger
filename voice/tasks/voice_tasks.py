@@ -248,7 +248,8 @@ def process_voice_command_task(
                                 "variety": db_result.get("variety") or entities.get("product", "Unknown"),
                                 "quantity": db_result.get("quantity_kg") or entities.get("quantity", 0),
                                 "farm": db_result.get("origin") or entities.get("origin", "Unknown"),
-                                "gtin": db_result.get("gtin")
+                                "gtin": db_result.get("gtin"),
+                                "gln": db_result.get("gln")  # Include GLN for notification display
                             }
                             logger.info(f"Sending batch confirmation to Telegram chat {target_id}")
                             success = send_batch_confirmation(target_id, batch_info)

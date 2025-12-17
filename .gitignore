@@ -87,3 +87,4 @@ site/
 *.swp
 tmp/
 temp/
+.service_pids

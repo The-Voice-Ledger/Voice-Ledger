@@ -219,6 +219,13 @@ class TelegramChannel(VoiceChannel):
         """
         message = "✅ *Batch Created Successfully!*\n\n"
         message += f"🆔 Batch ID: `{batch_info.get('id', 'N/A')}`\n"
+        
+        if 'gtin' in batch_info:
+            message += f"🏷️ GTIN: `{batch_info.get('gtin', 'N/A')}`\n"
+        
+        if 'gln' in batch_info and batch_info.get('gln'):
+            message += f"📍 GLN: `{batch_info.get('gln')}`\n"
+        
         message += f"☕ Variety: *{batch_info.get('variety', 'N/A')}*\n"
         message += f"📦 Quantity: *{batch_info.get('quantity', 'N/A')} kg*\n"
         

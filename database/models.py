@@ -29,6 +29,9 @@ class UserIdentity(Base):
     encrypted_private_key = Column(Text, nullable=False)
     public_key = Column(String(100), nullable=False)
     
+    # GS1 Global Location Number for user's location
+    gln = Column(String(13), nullable=True, index=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = Column(DateTime, default=datetime.utcnow)
@@ -72,6 +75,7 @@ class CoffeeBatch(Base):
     batch_id = Column(String(50), unique=True, nullable=False, index=True)
     token_id = Column(Integer, unique=True)
     gtin = Column(String(14), unique=True, nullable=False, index=True)
+    gln = Column(String(13), nullable=True, index=True)  # Global Location Number
     batch_number = Column(String(50), nullable=False)
     quantity_kg = Column(Float, nullable=False)
     origin = Column(String(200))  # Generic origin field (kept for compatibility)
