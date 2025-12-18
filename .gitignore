@@ -49,6 +49,9 @@ blockchain/broadcast/
 *.abi
 *.bin
 
+# Lab documentation
+documentation/labs/
+
 # Digital twin data (generated at runtime)
 twin/digital_twin.json
 

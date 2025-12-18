@@ -33,11 +33,13 @@ cryptography==41.0.7       # Private key encryption
 pyld==2.0.3                # JSON-LD canonicalization
 
 # -----------------------------
-# Lab 4: Blockchain Integration
+# Lab 4: Blockchain Integration (Base Sepolia)
 # -----------------------------
 # Note: Foundry toolkit (forge, cast, anvil) installed separately
 # Installation: curl -L https://foundry.paradigm.xyz | bash
-# web3.py could be added here if needed for Python blockchain interaction
+web3==7.14.0               # Ethereum library for contract interaction
+eth-utils==5.3.1           # Ethereum utilities (keccak256 hashing)
+eth-account==0.13.7        # Account management and transaction signing
 
 # -----------------------------
 # Lab 5: Digital Product Passports (DPP)

@@ -14,6 +14,7 @@ contract CoffeeBatchTokenTest is Test {
     string public constant BATCH_ID_1 = "BATCH-001";
     string public constant BATCH_ID_2 = "BATCH-002";
     string public constant METADATA_JSON = '{"origin":"Ethiopia","variety":"Yirgacheffe"}';
+    string public constant IPFS_CID = "QmUn4tfmog3BkQgzqx3mzvVNzedSpec4bDXsCx7B1nd93X";
     uint256 public constant QUANTITY = 100;
     
     event BatchMinted(
@@ -40,14 +41,14 @@ contract CoffeeBatchTokenTest is Test {
 
     function test_Constructor() public view {
         assertEq(token.owner(), owner);
-        assertEq(token.uri(1), "https://voiceledger.org/api/batch/{id}");
+        // Note: uri() now requires token to exist, tested in test_URI
     }
 
     function test_MintBatch() public {
         vm.expectEmit(true, true, false, true);
         emit BatchMinted(1, BATCH_ID_1, cooperative, QUANTITY, METADATA_JSON);
         
-        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         assertEq(tokenId, 1);
         assertEq(token.balanceOf(cooperative, tokenId), QUANTITY);
@@ -58,6 +59,7 @@ contract CoffeeBatchTokenTest is Test {
             string memory batchId,
             uint256 quantity,
             string memory metadata,
+            string memory ipfsCid,
             uint256 createdAt,
             bool exists
         ) = token.batches(tokenId);
@@ -70,8 +72,8 @@ contract CoffeeBatchTokenTest is Test {
     }
 
     function test_MintMultipleBatches() public {
-        uint256 tokenId1 = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
-        uint256 tokenId2 = token.mintBatch(cooperative, QUANTITY * 2, BATCH_ID_2, METADATA_JSON);
+        uint256 tokenId1 = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
+        uint256 tokenId2 = token.mintBatch(cooperative, QUANTITY * 2, BATCH_ID_2, METADATA_JSON, IPFS_CID);
         
         assertEq(tokenId1, 1);
         assertEq(tokenId2, 2);
@@ -81,11 +83,11 @@ contract CoffeeBatchTokenTest is Test {
 
     function test_RevertWhen_MintingWithEmptyBatchId() public {
         vm.expectRevert(CoffeeBatchToken.BatchIdRequired.selector);
-        token.mintBatch(cooperative, QUANTITY, "", METADATA_JSON);
+        token.mintBatch(cooperative, QUANTITY, "", METADATA_JSON, IPFS_CID);
     }
 
     function test_RevertWhen_MintingDuplicateBatchId() public {
-        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -93,17 +95,17 @@ contract CoffeeBatchTokenTest is Test {
                 BATCH_ID_1
             )
         );
-        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
     }
 
     function test_RevertWhen_NonOwnerMints() public {
         vm.prank(cooperative);
         vm.expectRevert();
-        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
     }
 
     function test_TransferBatch() public {
-        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         vm.prank(cooperative);
         vm.expectEmit(true, true, true, true);
@@ -122,7 +124,7 @@ contract CoffeeBatchTokenTest is Test {
     }
 
     function test_RevertWhen_TransferringMoreThanBalance() public {
-        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         vm.prank(cooperative);
         vm.expectRevert();
@@ -130,7 +132,7 @@ contract CoffeeBatchTokenTest is Test {
     }
 
     function test_GetBatchMetadata() public {
-        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         CoffeeBatchToken.BatchMetadata memory batchMetadata = token.getBatchMetadata(tokenId);
         
@@ -146,7 +148,7 @@ contract CoffeeBatchTokenTest is Test {
     }
 
     function test_GetTokenIdByBatchId() public {
-        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
         
         uint256 retrievedTokenId = token.getTokenIdByBatchId(BATCH_ID_1);
         assertEq(retrievedTokenId, tokenId);
@@ -169,6 +171,27 @@ contract CoffeeBatchTokenTest is Test {
         assertTrue(token.supportsInterface(0x01ffc9a7));
     }
 
+    function test_URI() public {
+        uint256 tokenId = token.mintBatch(cooperative, QUANTITY, BATCH_ID_1, METADATA_JSON, IPFS_CID);
+        
+        string memory expectedUri = string(abi.encodePacked(
+            "https://violet-rainy-toad-577.mypinata.cloud/ipfs/",
+            IPFS_CID
+        ));
+        
+        assertEq(token.uri(tokenId), expectedUri);
+    }
+
+    function test_RevertWhen_GetURIForNonExistentToken() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                CoffeeBatchToken.BatchDoesNotExist.selector,
+                999
+            )
+        );
+        token.uri(999);
+    }
+
     function testFuzz_MintBatch(
         address recipient,
         uint256 quantity,
@@ -184,7 +207,7 @@ contract CoffeeBatchTokenTest is Test {
         // Skip if batch ID already exists
         if (token.batchIdToTokenId(batchId) != 0) return;
         
-        uint256 tokenId = token.mintBatch(recipient, quantity, batchId, METADATA_JSON);
+        uint256 tokenId = token.mintBatch(recipient, quantity, batchId, METADATA_JSON, IPFS_CID);
         
         assertEq(token.balanceOf(recipient, tokenId), quantity);
         assertEq(token.batchIdToTokenId(batchId), tokenId);

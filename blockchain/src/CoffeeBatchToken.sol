@@ -31,6 +31,7 @@ contract CoffeeBatchToken is ERC1155, Ownable {
         string batchId;
         uint256 quantity;
         string metadata; // JSON string with origin, cooperative, process type, etc.
+        string ipfsCid; // IPFS CID for the batch data pinned via Pinata
         uint256 createdAt;
         bool exists;
     }
@@ -52,24 +53,41 @@ contract CoffeeBatchToken is ERC1155, Ownable {
 
     /**
      * @notice Initialize the contract
-     * @dev URI can be updated per token
+     * @dev Base URI not used since each token has unique IPFS CID
      */
-    constructor() ERC1155("https://voiceledger.org/api/batch/{id}") Ownable(msg.sender) {
+    constructor() ERC1155("") Ownable(msg.sender) {
         _nextTokenId = 1;
+    }
+
+    /**
+     * @notice Returns the URI for a given token
+     * @dev Overrides ERC1155 to return the IPFS URL via Pinata gateway
+     * @param tokenId The token ID
+     * @return The full IPFS URL for the token metadata
+     */
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        if (!batches[tokenId].exists) revert BatchDoesNotExist(tokenId);
+        return string(abi.encodePacked(
+            "https://violet-rainy-toad-577.mypinata.cloud/ipfs/",
+            batches[tokenId].ipfsCid
+        ));
     }
 
     /**
      * @notice Mint a new coffee batch token
      * @param recipient Address to receive the tokens
      * @param quantity Number of units (e.g., bags of coffee)
+     * @param batchIdStr Unique batch identifier
      * @param metadata JSON string with batch details
+     * @param ipfsCid IPFS CID of the batch data pinned via Pinata
      * @return tokenId The newly created token ID
      */
     function mintBatch(
         address recipient,
         uint256 quantity,
         string calldata batchIdStr,
-        string calldata metadata
+        string calldata metadata,
+        string calldata ipfsCid
     ) external onlyOwner returns (uint256) {
         if (bytes(batchIdStr).length == 0) revert BatchIdRequired();
         if (batchIdToTokenId[batchIdStr] != 0) revert BatchIdAlreadyExists(batchIdStr);
@@ -81,6 +99,7 @@ contract CoffeeBatchToken is ERC1155, Ownable {
             batchId: batchIdStr,
             quantity: quantity,
             metadata: metadata,
+            ipfsCid: ipfsCid,
             createdAt: block.timestamp,
             exists: true
         });

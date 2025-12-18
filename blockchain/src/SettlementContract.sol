@@ -12,6 +12,7 @@ contract SettlementContract {
     error AlreadySettled(uint256 batchId);
     error InvalidRecipient();
     error InvalidAmount();
+    error InvalidCurrency();
     error NotSettled(uint256 batchId);
     
     // Mapping from batch token ID to settlement status
@@ -19,7 +20,10 @@ contract SettlementContract {
     
     struct SettlementInfo {
         address recipient;
-        uint256 amount;
+        uint256 amount;          // Amount in base units (e.g., cents for USD, wei for ETH)
+        uint8 decimals;          // Decimal places (2 for USD, 18 for ETH, 6 for USDC)
+        string currencyCode;     // "USD", "ETH", "USDC", "BIRR", etc.
+        address paymentToken;    // address(0) for off-chain/native, ERC-20 address for tokens
         uint256 settledAt;
         bool settled;
     }
@@ -28,6 +32,9 @@ contract SettlementContract {
         uint256 indexed batchId,
         address indexed recipient,
         uint256 amount,
+        uint8 decimals,
+        string currencyCode,
+        address paymentToken,
         uint256 timestamp
     );
     
@@ -42,26 +49,44 @@ contract SettlementContract {
      * @dev In production, this would integrate with payment rails
      * @param batchId The batch token ID
      * @param recipient Address to receive settlement
-     * @param amount Settlement amount (in wei for prototype)
+     * @param amount Settlement amount in base units (e.g., cents for fiat, wei for ETH)
+     * @param decimals Number of decimal places for the currency
+     * @param currencyCode Currency identifier (e.g., "USD", "ETH", "USDC")
+     * @param paymentToken Token contract address (address(0) for off-chain/native currencies)
      */
     function settleCommissioning(
         uint256 batchId,
         address recipient,
-        uint256 amount
+        uint256 amount,
+        uint8 decimals,
+        string calldata currencyCode,
+        address paymentToken
     ) external {
         if (settlements[batchId].settled) revert AlreadySettled(batchId);
         if (recipient == address(0)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
+        if (bytes(currencyCode).length == 0) revert InvalidCurrency();
         
         // Record settlement
         settlements[batchId] = SettlementInfo({
             recipient: recipient,
             amount: amount,
+            decimals: decimals,
+            currencyCode: currencyCode,
+            paymentToken: paymentToken,
             settledAt: block.timestamp,
             settled: true
         });
         
-        emit SettlementExecuted(batchId, recipient, amount, block.timestamp);
+        emit SettlementExecuted(
+            batchId,
+            recipient,
+            amount,
+            decimals,
+            currencyCode,
+            paymentToken,
+            block.timestamp
+        );
     }
 
     /**

@@ -75,7 +75,8 @@ contract DeployVoiceLedgerTest is Test {
             cooperative,
             100,
             batchId,
-            metadata
+            metadata,
+            "QmUn4tfmog3BkQgzqx3mzvVNzedSpec4bDXsCx7B1nd93X"
         );
         assertEq(tokenId, 1);
         
@@ -87,11 +88,14 @@ contract DeployVoiceLedgerTest is Test {
         );
         assertTrue(epcisAnchor.isAnchored(eventHash));
         
-        // 3. Execute settlement
+        // 3. Execute settlement ($10,000 USD)
         settlementContract.settleCommissioning(
             tokenId,
             cooperative,
-            1 ether
+            1000000,  // $10,000.00 in cents
+            2,        // 2 decimals
+            "USD",
+            address(0)  // Off-chain payment
         );
         assertTrue(settlementContract.isSettled(tokenId));
         
@@ -100,12 +104,10 @@ contract DeployVoiceLedgerTest is Test {
         
         SettlementContract.SettlementInfo memory settlementInfo = settlementContract.getSettlement(tokenId);
         
-        address recipient = settlementInfo.recipient;
-        uint256 amount = settlementInfo.amount;
-        bool settled = settlementInfo.settled;
-        
-        assertEq(recipient, cooperative);
-        assertEq(amount, 1 ether);
-        assertTrue(settled);
+        assertEq(settlementInfo.recipient, cooperative);
+        assertEq(settlementInfo.amount, 1000000);
+        assertEq(settlementInfo.decimals, 2);
+        assertEq(settlementInfo.currencyCode, "USD");
+        assertTrue(settlementInfo.settled);
     }
 }

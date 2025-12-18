@@ -7,6 +7,7 @@ from database.models import FarmerIdentity, CoffeeBatch, EPCISEvent, VerifiableC
 from datetime import datetime
 from typing import Optional, List
 from ipfs.ipfs_storage import pin_epcis_event, pin_credential
+from blockchain.blockchain_anchor import anchor_event_to_blockchain
 
 def create_farmer(db: Session, farmer_data: dict) -> FarmerIdentity:
     """Create new farmer identity."""
@@ -24,28 +25,54 @@ def create_batch(db: Session, batch_data: dict) -> CoffeeBatch:
     db.refresh(batch)
     return batch
 
-def create_event(db: Session, event_data: dict, pin_to_ipfs: bool = True) -> EPCISEvent:
+def create_event(db: Session, event_data: dict, pin_to_ipfs: bool = True, anchor_to_blockchain: bool = True) -> EPCISEvent:
     """
-    Store EPCIS event and optionally pin to IPFS.
+    Store EPCIS event and optionally pin to IPFS + anchor to blockchain.
     
     Args:
         db: Database session
         event_data: Event data including event_json
         pin_to_ipfs: If True, pin full event to IPFS and store CID
+        anchor_to_blockchain: If True, anchor event hash to Base Sepolia
     
     Returns:
-        Created EPCISEvent with ipfs_cid if pinned
+        Created EPCISEvent with ipfs_cid and blockchain_tx_hash if successful
     """
     # Extract full event JSON if present
     event_json = event_data.get('event_json')
     event_hash = event_data.get('event_hash')
+    batch_id = event_data.get('batch_id')
     
-    # Pin to IPFS if enabled and event JSON available
+    # Step 1: Pin to IPFS if enabled
+    ipfs_cid = None
     if pin_to_ipfs and event_json and event_hash:
         ipfs_cid = pin_epcis_event(event_json, event_hash)
         if ipfs_cid:
             event_data['ipfs_cid'] = ipfs_cid
+            print(f"✓ Event pinned to IPFS: {ipfs_cid}")
     
+    # Step 2: Anchor to blockchain if enabled
+    if anchor_to_blockchain and event_hash and batch_id:
+        # Get batch info for blockchain metadata
+        batch = db.query(CoffeeBatch).filter(CoffeeBatch.id == batch_id).first()
+        
+        if batch:
+            tx_hash = anchor_event_to_blockchain(
+                batch_id=batch.batch_id,
+                event_hash=event_hash,
+                ipfs_cid=ipfs_cid,
+                event_type=event_data.get('event_type', 'ObjectEvent'),
+                location=batch.origin or "",
+                submitter=event_data.get('submitter_did', '')
+            )
+            
+            if tx_hash:
+                event_data['blockchain_tx_hash'] = tx_hash
+                event_data['blockchain_confirmed'] = True
+                event_data['blockchain_confirmed_at'] = datetime.utcnow()
+                print(f"✓ Event anchored to blockchain: {tx_hash}")
+    
+    # Step 3: Save to database
     event = EPCISEvent(**event_data)
     db.add(event)
     db.commit()

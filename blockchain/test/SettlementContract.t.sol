@@ -11,12 +11,18 @@ contract SettlementContractTest is Test {
     // Test data
     uint256 public constant BATCH_ID_1 = 1;
     uint256 public constant BATCH_ID_2 = 2;
-    uint256 public constant SETTLEMENT_AMOUNT = 1 ether;
+    uint256 public constant SETTLEMENT_AMOUNT = 900000; // $9,000.00 USD in cents
+    uint8 public constant DECIMALS_USD = 2;
+    string public constant CURRENCY_USD = "USD";
+    address public constant PAYMENT_TOKEN_OFFCHAIN = address(0);
     
     event SettlementExecuted(
         uint256 indexed batchId,
         address indexed recipient,
         uint256 amount,
+        uint8 decimals,
+        string currencyCode,
+        address paymentToken,
         uint256 timestamp
     );
     
@@ -33,21 +39,42 @@ contract SettlementContractTest is Test {
 
     function test_SettleCommissioning() public {
         vm.expectEmit(true, true, false, true);
-        emit SettlementExecuted(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT, block.timestamp);
+        emit SettlementExecuted(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN,
+            block.timestamp
+        );
         
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         assertTrue(settlement.isSettled(BATCH_ID_1));
         
         (
             address recipient,
             uint256 amount,
+            uint8 decimals,
+            string memory currencyCode,
+            address paymentToken,
             uint256 settledAt,
             bool settled
         ) = settlement.settlements(BATCH_ID_1);
         
         assertEq(recipient, cooperative);
         assertEq(amount, SETTLEMENT_AMOUNT);
+        assertEq(decimals, DECIMALS_USD);
+        assertEq(currencyCode, CURRENCY_USD);
+        assertEq(paymentToken, PAYMENT_TOKEN_OFFCHAIN);
         assertEq(settledAt, block.timestamp);
         assertTrue(settled);
     }
@@ -55,29 +82,48 @@ contract SettlementContractTest is Test {
     function test_IsSettled() public {
         assertFalse(settlement.isSettled(BATCH_ID_1));
         
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         assertTrue(settlement.isSettled(BATCH_ID_1));
     }
 
     function test_GetSettlement() public {
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         SettlementContract.SettlementInfo memory info = settlement.getSettlement(BATCH_ID_1);
         
-        address recipient = info.recipient;
-        uint256 amount = info.amount;
-        uint256 settledAt = info.settledAt;
-        bool settled = info.settled;
-        
-        assertEq(recipient, cooperative);
-        assertEq(amount, SETTLEMENT_AMOUNT);
-        assertGt(settledAt, 0);
-        assertTrue(settled);
+        assertEq(info.recipient, cooperative);
+        assertEq(info.amount, SETTLEMENT_AMOUNT);
+        assertEq(info.decimals, DECIMALS_USD);
+        assertEq(info.currencyCode, CURRENCY_USD);
+        assertEq(info.paymentToken, PAYMENT_TOKEN_OFFCHAIN);
+        assertGt(info.settledAt, 0);
+        assertTrue(info.settled);
     }
 
     function test_RevertWhen_SettlingAlreadySettledBatch() public {
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -85,17 +131,38 @@ contract SettlementContractTest is Test {
                 BATCH_ID_1
             )
         );
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
     }
 
     function test_RevertWhen_SettlingWithZeroAddress() public {
         vm.expectRevert(SettlementContract.InvalidRecipient.selector);
-        settlement.settleCommissioning(BATCH_ID_1, address(0), SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            address(0),
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
     }
 
     function test_RevertWhen_SettlingWithZeroAmount() public {
         vm.expectRevert(SettlementContract.InvalidAmount.selector);
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, 0);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            0,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
     }
 
     function test_RevertWhen_GetInfoForUnsettledBatch() public {
@@ -111,8 +178,22 @@ contract SettlementContractTest is Test {
     function test_SettleMultipleBatches() public {
         address cooperative2 = makeAddr("cooperative2");
         
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
-        settlement.settleCommissioning(BATCH_ID_2, cooperative2, SETTLEMENT_AMOUNT * 2);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
+        settlement.settleCommissioning(
+            BATCH_ID_2,
+            cooperative2,
+            SETTLEMENT_AMOUNT * 2,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         assertTrue(settlement.isSettled(BATCH_ID_1));
         assertTrue(settlement.isSettled(BATCH_ID_2));
@@ -120,23 +201,27 @@ contract SettlementContractTest is Test {
         SettlementContract.SettlementInfo memory info1 = settlement.getSettlement(BATCH_ID_1);
         SettlementContract.SettlementInfo memory info2 = settlement.getSettlement(BATCH_ID_2);
         
-        address recipient1 = info1.recipient;
-        uint256 amount1 = info1.amount;
-        address recipient2 = info2.recipient;
-        uint256 amount2 = info2.amount;
-        
-        assertEq(recipient1, cooperative);
-        assertEq(amount1, SETTLEMENT_AMOUNT);
-        assertEq(recipient2, cooperative2);
-        assertEq(amount2, SETTLEMENT_AMOUNT * 2);
+        assertEq(info1.recipient, cooperative);
+        assertEq(info1.amount, SETTLEMENT_AMOUNT);
+        assertEq(info1.currencyCode, CURRENCY_USD);
+        assertEq(info2.recipient, cooperative2);
+        assertEq(info2.amount, SETTLEMENT_AMOUNT * 2);
+        assertEq(info2.currencyCode, CURRENCY_USD);
     }
 
     function test_SettlementTimestamp() public {
         uint256 beforeTimestamp = block.timestamp;
         
-        settlement.settleCommissioning(BATCH_ID_1, cooperative, SETTLEMENT_AMOUNT);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
-        (,, uint256 settledAt,) = settlement.settlements(BATCH_ID_1);
+        (,,,,, uint256 settledAt,) = settlement.settlements(BATCH_ID_1);
         
         assertGe(settledAt, beforeTimestamp);
         assertLe(settledAt, block.timestamp);
@@ -151,19 +236,78 @@ contract SettlementContractTest is Test {
         vm.assume(amount > 0 && amount < type(uint128).max);
         vm.assume(batchId < type(uint128).max);
         
-        settlement.settleCommissioning(batchId, recipient, amount);
+        settlement.settleCommissioning(
+            batchId,
+            recipient,
+            amount,
+            DECIMALS_USD,
+            CURRENCY_USD,
+            PAYMENT_TOKEN_OFFCHAIN
+        );
         
         assertTrue(settlement.isSettled(batchId));
         
         (
             address storedRecipient,
             uint256 storedAmount,
+            uint8 storedDecimals,
+            string memory storedCurrency,
+            address storedPaymentToken,
             ,
             bool settled
         ) = settlement.settlements(batchId);
         
         assertEq(storedRecipient, recipient);
         assertEq(storedAmount, amount);
+        assertEq(storedDecimals, DECIMALS_USD);
+        assertEq(storedCurrency, CURRENCY_USD);
+        assertEq(storedPaymentToken, PAYMENT_TOKEN_OFFCHAIN);
         assertTrue(settled);
+    }
+
+    function test_RevertWhen_SettlingWithEmptyCurrency() public {
+        vm.expectRevert(SettlementContract.InvalidCurrency.selector);
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            SETTLEMENT_AMOUNT,
+            DECIMALS_USD,
+            "",  // Empty currency code
+            PAYMENT_TOKEN_OFFCHAIN
+        );
+    }
+
+    function test_SettleWithDifferentCurrencies() public {
+        // Settlement 1: USD
+        settlement.settleCommissioning(
+            BATCH_ID_1,
+            cooperative,
+            900000,  // $9,000.00
+            2,       // 2 decimals
+            "USD",
+            address(0)
+        );
+        
+        // Settlement 2: ETH
+        address buyer = makeAddr("buyer");
+        settlement.settleCommissioning(
+            BATCH_ID_2,
+            buyer,
+            5 ether,  // 5 ETH
+            18,       // 18 decimals
+            "ETH",
+            address(0)
+        );
+        
+        SettlementContract.SettlementInfo memory info1 = settlement.getSettlement(BATCH_ID_1);
+        SettlementContract.SettlementInfo memory info2 = settlement.getSettlement(BATCH_ID_2);
+        
+        assertEq(info1.amount, 900000);
+        assertEq(info1.decimals, 2);
+        assertEq(info1.currencyCode, "USD");
+        
+        assertEq(info2.amount, 5 ether);
+        assertEq(info2.decimals, 18);
+        assertEq(info2.currencyCode, "ETH");
     }
 }
