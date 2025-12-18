@@ -1,8 +1,11 @@
 """
-Coffee Batch Credential Issuance
+Coffee Batch Credential Utilities
 
-Issues verifiable credentials for coffee batch commission events.
-Each credential serves as cryptographic proof that a farmer recorded a batch.
+DEPRECATED: Self-issued batch credentials are no longer used.
+Instead, verification credentials are issued by cooperatives after inspection.
+
+This module is kept for backward compatibility with existing data.
+For new implementations, use ssi.verification_credentials instead.
 """
 
 from datetime import datetime, timezone

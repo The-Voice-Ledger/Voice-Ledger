@@ -470,7 +470,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
         # Handle /mybatches command - show user's batches
         if text.startswith('/mybatches'):
             from ssi.user_identity import get_user_by_telegram_id
-            from database.models import SessionLocal, CoffeeBatch
+            from database.models import SessionLocal, CoffeeBatch, Organization
+            from sqlalchemy.orm import joinedload
             
             db = SessionLocal()
             try:
@@ -483,7 +484,9 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                     return {"ok": True}
                 
-                batches = db.query(CoffeeBatch).filter_by(
+                batches = db.query(CoffeeBatch).options(
+                    joinedload(CoffeeBatch.verifying_organization)
+                ).filter_by(
                     created_by_user_id=user.id
                 ).order_by(CoffeeBatch.created_at.desc()).limit(10).all()
                 
@@ -494,21 +497,49 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         message="📦 No batches found. Record a voice message to create one!"
                     )
                 else:
-                    batch_lines = "\n\n".join([
-                        f"📦 *{b.batch_id}*\n"
-                        f"   {b.quantity_kg} kg {b.variety}\n"
-                        f"   from {b.origin}\n"
-                        f"   GTIN: `{b.gtin}`\n"
-                        f"   Created: {b.created_at.strftime('%Y-%m-%d %H:%M')}"
-                        for b in batches
-                    ])
+                    # Build batch information with verification status
+                    batch_lines = []
+                    for b in batches:
+                        # Status emoji
+                        status_emoji = {
+                            'PENDING_VERIFICATION': '⏳',
+                            'VERIFIED': '✅',
+                            'REJECTED': '❌',
+                            'EXPIRED': '⌛'
+                        }.get(b.status, '❓')
+                        
+                        # Base info
+                        batch_info = (
+                            f"📦 *{b.batch_id}*\n"
+                            f"   {b.quantity_kg} kg {b.variety}\n"
+                            f"   from {b.origin}\n"
+                            f"   GTIN: `{b.gtin}`\n"
+                        )
+                        
+                        # Add GLN if available
+                        if b.gln:
+                            batch_info += f"   GLN: `{b.gln}`\n"
+                        
+                        # Add verification status
+                        batch_info += f"   Status: {status_emoji} {b.status.replace('_', ' ').title()}\n"
+                        
+                        # Add verifier info if verified
+                        if b.status == 'VERIFIED' and b.verifying_organization:
+                            batch_info += f"   Verified by: {b.verifying_organization.name}\n"
+                            if b.verified_at:
+                                batch_info += f"   Verified: {b.verified_at.strftime('%Y-%m-%d %H:%M')}\n"
+                        
+                        # Creation date
+                        batch_info += f"   Created: {b.created_at.strftime('%Y-%m-%d %H:%M')}"
+                        
+                        batch_lines.append(batch_info)
                     
                     await processor.send_notification(
                         channel_name='telegram',
                         user_id=user_id,
                         message=(
                             f"📦 *Your Batches* (showing last {len(batches)})\n\n"
-                            f"{batch_lines}"
+                            f"{chr(10).join(batch_lines)}"
                         )
                     )
             finally:

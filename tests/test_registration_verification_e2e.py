@@ -75,10 +75,21 @@ class TestRegistrationVerificationE2E:
         test_org_name = "Test E2E Cooperative"
         
         # Delete in correct order (foreign keys)
+        # First delete batches that reference farmers
         self.db.query(CoffeeBatch).filter(
             CoffeeBatch.batch_id.like('TEST_%')
         ).delete(synchronize_session=False)
         
+        # Also delete any batches referencing test farmers (by farmer_id FK)
+        test_farmer_ids = [f.id for f in self.db.query(FarmerIdentity).filter(
+            FarmerIdentity.farmer_id.like('TEST_FARMER%')
+        ).all()]
+        if test_farmer_ids:
+            self.db.query(CoffeeBatch).filter(
+                CoffeeBatch.farmer_id.in_(test_farmer_ids)
+            ).delete(synchronize_session=False)
+        
+        # Now safe to delete farmers
         self.db.query(FarmerIdentity).filter(
             FarmerIdentity.farmer_id.like('TEST_FARMER%')
         ).delete(synchronize_session=False)

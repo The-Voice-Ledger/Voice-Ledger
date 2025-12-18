@@ -398,7 +398,56 @@ async def _process_verification(
     # Clean up session
     verification_sessions.pop(user_id, None)
     
-    # TODO: Issue verifiable credential with organization DID as issuer
+    # Issue verification credential signed by cooperative
+    credential = None
+    org_id = session.get('organization_id')
+    if org_id and batch.created_by_did:
+        try:
+            from ssi.verification_credentials import issue_verification_credential
+            credential = issue_verification_credential(
+                batch_id=batch.batch_id,
+                farmer_did=batch.created_by_did,
+                organization_id=org_id,
+                verified_quantity_kg=verified_quantity,
+                claimed_quantity_kg=batch.quantity_kg,
+                variety=batch.variety,
+                origin=batch.origin,
+                quality_notes=notes,
+                verifier_did=session['user_did'],
+                verifier_name=session.get('user_name', 'Manager'),
+                has_photo_evidence=False
+            )
+            logger.info(f"Verification credential issued for batch {batch.batch_id}")
+        except Exception as e:
+            logger.error(f"Failed to issue verification credential: {e}")
+    
+    # Create verification EPCIS event (IPFS + blockchain anchored)
+    org_id = session.get('organization_id')
+    org_did = session.get('organization_did')
+    org_name = session.get('organization_name')
+    if org_id and org_did and org_name:
+        try:
+            from voice.verification.verification_events import create_verification_event
+            event = create_verification_event(
+                batch_id=batch.batch_id,
+                verifier_did=session['user_did'],
+                verifier_name=session.get('user_name', 'Manager'),
+                organization_did=org_did,
+                organization_name=org_name,
+                verified_quantity_kg=verified_quantity,
+                claimed_quantity_kg=batch.quantity_kg,
+                quality_notes=notes,
+                location=batch.origin or "",
+                has_photo_evidence=False
+            )
+            if event:
+                logger.info(
+                    f"Verification event created: IPFS={event.ipfs_cid}, "
+                    f"Blockchain={event.blockchain_tx_hash}"
+                )
+        except Exception as e:
+            logger.error(f"Failed to create verification event: {e}")
+    
     # TODO: Create farmer-cooperative relationship if first verification
     # TODO: Notify farmer of successful verification
     

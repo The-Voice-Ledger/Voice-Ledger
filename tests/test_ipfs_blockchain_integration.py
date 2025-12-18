@@ -81,12 +81,15 @@ def test_full_integration():
         print()
         
         # Step 3: Create EPCIS event
+        # NOTE: In production, commission events are automatically created via
+        # voice/command_integration.py using voice/epcis/commission_events.py
+        # This test manually creates the event for demonstration purposes
         print("Step 3: Creating EPCIS event...")
         event_json = {
             "type": "ObjectEvent",
             "eventTime": datetime.now().isoformat(),
             "eventTimeZoneOffset": "+03:00",
-            "action": "OBSERVE",
+            "action": "ADD",  # Commission events use ADD action
             "epcList": [f"urn:epc:id:sgtin:{batch.gtin}.{batch.batch_id}"],
             "bizStep": "commissioning",
             "disposition": "active",

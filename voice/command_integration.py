@@ -132,23 +132,27 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     try:
         batch = create_batch(db, batch_data)
         
-        # Issue verifiable credential if user_id provided
-        credential = None
-        if user_id and user_did:
-            try:
-                from ssi.batch_credentials import issue_batch_credential
-                credential = issue_batch_credential(
-                    batch_id=batch.batch_id,
-                    user_id=user_id,
-                    user_did=user_did,
-                    quantity_kg=batch.quantity_kg,
-                    variety=batch.variety,
-                    origin=batch.origin,
-                    processing_method=batch.processing_method
-                )
-            except Exception as e:
-                # Log error but don't fail batch creation
-                print(f"Warning: Failed to issue credential: {e}")
+        # Note: Credentials are NOT issued at batch creation
+        # They will be issued by the cooperative after verification
+        # This ensures third-party attestation rather than self-issued claims
+        
+        # Create commission EPCIS event (IPFS + blockchain anchored)
+        from voice.epcis.commission_events import create_commission_event
+        
+        event_result = create_commission_event(
+            db=db,
+            batch_id=batch.batch_id,
+            gtin=batch.gtin,
+            gln=batch.gln,
+            quantity_kg=batch.quantity_kg,
+            variety=batch.variety,
+            origin=batch.origin,
+            farmer_did=user_did,
+            processing_method=batch.processing_method,
+            quality_grade=batch.quality_grade,
+            batch_db_id=batch.id,
+            submitter_db_id=user_id
+        )
         
         # Convert to dict for JSON response
         result = {
@@ -162,8 +166,15 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
             "status": batch.status,  # NEW: Include verification status
             "verification_token": batch.verification_token,  # NEW: For QR code generation
             "verification_expires_at": batch.verification_expires_at.isoformat() if batch.verification_expires_at else None,  # NEW
-            "credential_issued": credential is not None,
-            "message": f"Successfully commissioned {quantity} {unit} of {product} from {origin}"
+            "credential_issued": False,  # Will be True after cooperative verification
+            "message": f"Successfully commissioned {quantity} {unit} of {product} from {origin}",
+            # Include EPCIS event details
+            "epcis_event": {
+                "event_hash": event_result['event_hash'][:16] + "..." if event_result else None,
+                "ipfs_cid": event_result['ipfs_cid'] if event_result else None,
+                "blockchain_tx": event_result['blockchain_tx_hash'][:16] + "..." if event_result and event_result.get('blockchain_tx_hash') else None,
+                "blockchain_confirmed": event_result.get('blockchain_confirmed', False) if event_result else False
+            } if event_result else None
         }
         
         return ("Batch created successfully", result)
@@ -172,15 +183,16 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         raise VoiceCommandError(f"Failed to create batch: {str(e)}")
 
 
-def handle_record_shipment(db: Session, entities: dict) -> Tuple[str, Dict[str, Any]]:
+def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> Tuple[str, Dict[str, Any]]:
     """
-    Handle 'record_shipment' intent - create shipping event.
+    Handle 'record_shipment' intent - create GS1 EPCIS 2.0 shipping event.
     
-    Voice example: "Ship 50 bags from Abebe to Addis warehouse"
+    Voice example: "Ship 50 bags to Addis warehouse"
     
     Args:
         db: Database session
-        entities: {batch_id, quantity, origin, destination}
+        entities: {batch_id?, quantity?, destination, origin?}
+        user_id: Optional user database ID (to find their batches)
         
     Returns:
         Tuple of (success_message, created_event_dict)
@@ -188,11 +200,105 @@ def handle_record_shipment(db: Session, entities: dict) -> Tuple[str, Dict[str, 
     Raises:
         VoiceCommandError: If required entities missing or batch not found
     """
-    # For Phase 1b, return placeholder since we need batch_id from previous step
-    raise VoiceCommandError(
-        "Shipment events require an existing batch. "
-        "Please commission a batch first, then record shipment."
+    from database.models import CoffeeBatch
+    from database.crud import get_user
+    from voice.epcis.shipment_events import create_shipment_event
+    from sqlalchemy import desc
+    
+    # Required: destination
+    destination = entities.get("destination")
+    if not destination:
+        raise VoiceCommandError(
+            "Please specify where you're shipping to. "
+            "Example: 'Ship to Addis warehouse'"
+        )
+    
+    # Try to find the batch
+    batch = None
+    batch_id = entities.get("batch_id")
+    
+    if batch_id:
+        # Explicit batch_id provided
+        batch = db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
+        if not batch:
+            raise VoiceCommandError(
+                f"Batch '{batch_id}' not found. Please check the batch ID."
+            )
+    else:
+        # No batch_id - try to find user's most recent PENDING_VERIFICATION batch
+        if user_id:
+            batch = db.query(CoffeeBatch).filter(
+                CoffeeBatch.created_by_user_id == user_id,
+                CoffeeBatch.status == "PENDING_VERIFICATION"
+            ).order_by(desc(CoffeeBatch.created_at)).first()
+            
+            if not batch:
+                # No pending batch - try any recent batch (within last 24 hours)
+                from datetime import timedelta
+                cutoff = datetime.utcnow() - timedelta(hours=24)
+                batch = db.query(CoffeeBatch).filter(
+                    CoffeeBatch.created_by_user_id == user_id,
+                    CoffeeBatch.created_at >= cutoff
+                ).order_by(desc(CoffeeBatch.created_at)).first()
+                
+        if not batch:
+            raise VoiceCommandError(
+                "No recent batch found to ship. Please create a batch first with: "
+                "'Record 50 bags from my farm', then ship it."
+            )
+    
+    # Get quantity from entities or use batch quantity
+    quantity_kg = entities.get("quantity")
+    if quantity_kg:
+        # Convert bags to kg if needed
+        unit = entities.get("unit", "kg")
+        if unit.lower() in ["bag", "bags"]:
+            quantity_kg = float(quantity_kg) * 60.0
+        else:
+            quantity_kg = float(quantity_kg)
+    else:
+        quantity_kg = batch.quantity_kg
+    
+    # Get user's DID for shipper identification
+    user = get_user(db, user_id) if user_id else None
+    shipper_did = user.did if user and hasattr(user, 'did') else "did:example:shipper"
+    
+    # Generate destination GLN (simplified for now)
+    # In production, you'd look up actual GLN from a location registry
+    destination_gln = "0614141000027"  # Default warehouse GLN
+    
+    # Create GS1 EPCIS 2.0 shipment event using dedicated module
+    event_result = create_shipment_event(
+        db=db,
+        batch_id=batch.batch_id,
+        gtin=batch.gtin,
+        source_gln=batch.gln,
+        destination_gln=destination_gln,
+        quantity_kg=quantity_kg,
+        variety=batch.variety,
+        origin=batch.origin,
+        shipper_did=shipper_did,
+        batch_db_id=batch.id,
+        submitter_db_id=user_id
     )
+    
+    if not event_result:
+        raise VoiceCommandError(
+            "Failed to create shipment event. Please try again."
+        )
+    
+    # Prepare response
+    result = {
+        "batch_id": batch.batch_id,
+        "destination": destination,
+        "quantity_kg": quantity_kg,
+        "event_hash": event_result["event_hash"][:16] + "...",
+        "ipfs_cid": event_result["ipfs_cid"],
+        "blockchain_tx": event_result["blockchain_tx_hash"][:16] + "..." if event_result["blockchain_tx_hash"] else None,
+        "message": f"Shipment recorded: {quantity_kg}kg to {destination}"
+    }
+    
+    return (f"Shipment to {destination} recorded successfully", result)
 
 
 def handle_record_receipt(db: Session, entities: dict) -> Tuple[str, Dict[str, Any]]:
@@ -295,6 +401,8 @@ def execute_voice_command(db: Session, intent: str, entities: dict, user_id: int
         # Pass user context to handlers that support it
         if intent == "record_commission":
             message, result = handler(db, entities, user_id=user_id, user_did=user_did)
+        elif intent == "record_shipment":
+            message, result = handler(db, entities, user_id=user_id)
         else:
             message, result = handler(db, entities)
         return (message, result)

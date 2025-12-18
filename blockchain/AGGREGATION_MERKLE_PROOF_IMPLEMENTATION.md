@@ -85,19 +85,41 @@ error InvalidMerkleRoot();
 ### Step 1: Create Farmer Batches (Off-Chain + Event Anchoring)
 
 ```python
-# Farmer 1 creates batch
+# Farmer 1 creates batch via voice command handler
+# In production, this automatically creates commission event:
+from voice.command_integration import handle_record_commission
+
+batch_result = handle_record_commission(
+    db=db,
+    entities={'quantity': 50, 'unit': 'bags', 'product': 'Arabica', 'origin': 'Yirgacheffe'},
+    user_id=farmer1.id,
+    user_did=farmer1.did
+)
+# Commission event is automatically created, pinned to IPFS, and anchored to blockchain
+
+# Alternatively, create batch directly (testing/migration):
 batch1 = create_batch(db, {
     "batch_id": "FARM-001",
     "quantity_kg": 500,
     "farmer_id": farmer1.id
 })
 
-# Generate commissioning event
-event1 = generate_commissioning_event(batch1)
-event1_hash = hash_event(event1)
-
-# Anchor event hash
-epcis_anchor.anchorEvent(event1_hash, "FARM-001", "commissioning")
+# For direct batch creation, manually create commission event:
+from voice.epcis.commission_events import create_commission_event
+event1_result = create_commission_event(
+    db=db,
+    batch_id=batch1.batch_id,
+    gtin=batch1.gtin,
+    gln=batch1.gln or "0614141000000",
+    quantity_kg=batch1.quantity_kg,
+    variety=batch1.variety,
+    origin=batch1.origin,
+    farmer_did=farmer1.did,
+    processing_method=batch1.processing_method,
+    batch_db_id=batch1.id,
+    submitter_db_id=farmer1.id
+)
+# Returns: event_hash, ipfs_cid, blockchain_tx_hash
 
 # Compute batch data hash (for merkle tree)
 batch1_data_hash = keccak256(abi.encodePacked(

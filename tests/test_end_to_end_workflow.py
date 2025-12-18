@@ -160,7 +160,12 @@ def create_farmer_identity():
 
 
 def create_coffee_batch(farmer_id: int, nlu_data: dict):
-    """Create coffee batch from NLU data."""
+    """Create coffee batch from NLU data.
+    
+    Note: This test creates batches directly via database.
+    In production, batches created via voice/command_integration.py
+    automatically create commission EPCIS events (voice/epcis/commission_events.py)
+    """
     print_step(4, "Create Coffee Batch")
     
     batch_id = f"BATCH-E2E-{datetime.now().strftime('%Y%m%d%H%M%S')}"
