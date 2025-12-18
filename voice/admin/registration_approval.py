@@ -4,7 +4,7 @@ Admin endpoints for registration approval
 
 from fastapi import APIRouter, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-from database.models import SessionLocal, PendingRegistration, UserIdentity, Organization
+from database.models import SessionLocal, PendingRegistration, UserIdentity, Organization, Exporter, Buyer, UserReputation
 from ssi.org_identity import generate_organization_did
 from ssi.user_identity import get_or_create_user_identity
 from datetime import datetime
@@ -373,6 +373,45 @@ async def list_registrations():
                     <div class="field-label">Registration Number</div>
                     <div class="field-value">{reg.registration_number or 'Not provided'}</div>
                 </div>
+"""
+                
+                # Add role-specific fields
+                if reg.requested_role == 'EXPORTER':
+                    html += f"""
+                <div class="field">
+                    <div class="field-label">Export License</div>
+                    <div class="field-value">{reg.export_license or 'Not provided'}</div>
+                </div>
+                
+                <div class="field">
+                    <div class="field-label">Primary Port</div>
+                    <div class="field-value">{reg.port_access or 'Not provided'}</div>
+                </div>
+                
+                <div class="field">
+                    <div class="field-label">Shipping Capacity</div>
+                    <div class="field-value">{reg.shipping_capacity_tons or 'Not provided'} tons/year</div>
+                </div>
+"""
+                elif reg.requested_role == 'BUYER':
+                    html += f"""
+                <div class="field">
+                    <div class="field-label">Business Type</div>
+                    <div class="field-value">{(reg.business_type or 'Not provided').replace('_', ' ').title()}</div>
+                </div>
+                
+                <div class="field">
+                    <div class="field-label">Country</div>
+                    <div class="field-value">{reg.country or 'Not provided'}</div>
+                </div>
+                
+                <div class="field">
+                    <div class="field-label">Target Volume</div>
+                    <div class="field-value">{reg.target_volume_tons_annual or 'Not provided'} tons/year</div>
+                </div>
+"""
+                
+                html += """
             </div>
             
             {f'''
@@ -460,6 +499,7 @@ async def approve_registration(registration_id: int):
                 type=org_type,
                 location=registration.location,
                 phone_number=registration.phone_number,
+                registration_number=registration.registration_number,
                 did=org_identity['did'],
                 public_key=org_identity['public_key'],
                 encrypted_private_key=org_identity['encrypted_private_key']
@@ -468,6 +508,32 @@ async def approve_registration(registration_id: int):
             db.flush()
             organization_id = new_org.id
             logger.info(f"Created organization: {new_org.name} (ID: {new_org.id}, DID: {new_org.did[:30]}...)")
+            
+            # Create role-specific records
+            if registration.requested_role == 'EXPORTER':
+                exporter = Exporter(
+                    organization_id=organization_id,
+                    export_license=registration.export_license,
+                    port_access=registration.port_access,
+                    shipping_capacity_tons=registration.shipping_capacity_tons,
+                    active_shipping_lines=[],
+                    customs_clearance_capability=False
+                )
+                db.add(exporter)
+                logger.info(f"Created exporter record for org {organization_id}")
+                
+            elif registration.requested_role == 'BUYER':
+                buyer = Buyer(
+                    organization_id=organization_id,
+                    business_type=registration.business_type,
+                    country=registration.country,
+                    target_volume_tons_annual=registration.target_volume_tons_annual,
+                    quality_preferences=registration.quality_preferences,
+                    import_licenses=[],
+                    certifications_required=[]
+                )
+                db.add(buyer)
+                logger.info(f"Created buyer record for org {organization_id}")
         
         # Get or create user identity with DID
         # This ensures every user has a DID (personal identity) AND links to organization DID (for verification authority)
@@ -490,6 +556,21 @@ async def approve_registration(registration_id: int):
         user.is_approved = True
         user.approved_at = datetime.utcnow()
         logger.info(f"Updated user: {user.telegram_first_name} - Role: {user.role}, Org: {organization_id}")
+        
+        # Initialize reputation record for user
+        existing_reputation = db.query(UserReputation).filter_by(user_id=user.id).first()
+        if not existing_reputation:
+            reputation = UserReputation(
+                user_id=user.id,
+                completed_transactions=0,
+                total_volume_kg=0,
+                on_time_deliveries=0,
+                quality_disputes=0,
+                average_rating=None,
+                reputation_level='BRONZE'
+            )
+            db.add(reputation)
+            logger.info(f"Initialized reputation record for user {user.id}")
         
         # Update registration status
         registration.status = 'APPROVED'

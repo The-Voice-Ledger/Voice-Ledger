@@ -159,12 +159,20 @@ def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[
         else:
             language = detect_language(audio_file_path)
         
+        # Ensure we have a valid language (fallback to english if detection failed)
+        if not language:
+            language = 'english'
+            logger.warning("Language detection returned None, defaulting to English")
+        
         # Route to appropriate model
-        if language == 'am':  # Amharic
-            logger.info("Routing to Amharic Whisper model")
+        # OpenAI returns full language names like "amharic", "english"
+        # but also accepts ISO codes like "am", "en"
+        if language.lower() in ['am', 'amharic']:  # Amharic
+            logger.info(f"Routing to Amharic Whisper model (detected: {language})")
             transcript = transcribe_with_amharic_model(audio_file_path)
+            language = 'amharic'  # Normalize to full name
         else:  # English or other languages
-            logger.info("Routing to OpenAI Whisper API")
+            logger.info(f"Routing to OpenAI Whisper API (detected: {language})")
             with open(audio_path, "rb") as audio_file:
                 transcript = client.audio.transcriptions.create(
                     model="whisper-1",

@@ -102,6 +102,11 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     else:
         quantity_kg = float(quantity)
     
+    # Generate verification token and expiration
+    from voice.verification.verification_tokens import generate_verification_token, get_verification_expiration
+    verification_token = generate_verification_token(batch_id)
+    verification_expires_at = get_verification_expiration(hours=48)  # 48-hour expiration
+    
     # Prepare batch data with correct field names from CoffeeBatch model
     batch_data = {
         "batch_id": batch_id,
@@ -115,7 +120,12 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         "quality_grade": "A",  # Default quality grade (A, B, C, etc.)
         "created_at": datetime.utcnow(),
         "created_by_user_id": user_id,  # Track user ownership
-        "created_by_did": user_did  # Denormalized for fast queries
+        "created_by_did": user_did,  # Denormalized for fast queries
+        # Verification workflow fields
+        "status": "PENDING_VERIFICATION",  # Batch awaits verification
+        "verification_token": verification_token,
+        "verification_expires_at": verification_expires_at,
+        "verification_used": False
     }
     
     # Create batch in database
@@ -149,6 +159,9 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
             "quantity_kg": batch.quantity_kg,
             "origin": batch.origin,
             "variety": batch.variety,
+            "status": batch.status,  # NEW: Include verification status
+            "verification_token": batch.verification_token,  # NEW: For QR code generation
+            "verification_expires_at": batch.verification_expires_at.isoformat() if batch.verification_expires_at else None,  # NEW
             "credential_issued": credential is not None,
             "message": f"Successfully commissioned {quantity} {unit} of {product} from {origin}"
         }

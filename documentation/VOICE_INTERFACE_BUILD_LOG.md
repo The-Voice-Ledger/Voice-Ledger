@@ -1,10 +1,10 @@
-# Voice Ledger - Lab 7: Voice Interface Integration
+# Voice Ledger - Voice Interface Build Guide (Lab 7)
 
 **Branch:** `feature/voice-interface`  
 **Start Date:** December 14, 2025  
 **Implementation Reference:** [VOICE_INTERFACE_IMPLEMENTATION_PLAN.md](documentation/VOICE_INTERFACE_IMPLEMENTATION_PLAN.md)
 
-This lab document tracks every step to add voice input capability to Voice Ledger, transforming it from a backend-only system to a true voice-enabled traceability platform.
+This build guide provides complete step-by-step instructions to reproduce the voice interface implementation, transforming Voice Ledger from a backend-only system to a true voice-enabled traceability platform.
 
 ---
 
@@ -98,6 +98,36 @@ openai-whisper                # Local Whisper models
 torch                         # PyTorch runtime
 torchaudio                    # Audio preprocessing
 ```
+
+---
+
+## 📑 Table of Contents
+
+### Phase 1: Minimal Voice API (Days 1-2)
+- [Step 1: Branch Setup](#step-1-branch-setup)
+- [Step 2: Install Core Audio Processing Packages](#step-2-install-core-audio-processing-packages)
+- [Step 3: Install FFmpeg (System Dependency)](#step-3-install-ffmpeg-system-dependency)
+- [Step 4: Update requirements.txt](#step-4-update-requirementstxt)
+- [Step 5: Examine Existing Voice Modules](#step-5-examine-existing-voice-modules)
+- [Step 6: Design Voice API Architecture](#step-6-design-voice-api-architecture)
+- [Step 7: Create Audio Utilities Module](#step-7-create-audio-utilities-module)
+- [Step 8: Implement Enhanced Voice API Endpoints](#step-8-implement-enhanced-voice-api-endpoints)
+- [Step 9: Test Voice API Endpoints](#step-9-test-voice-api-endpoints)
+
+### Phase 1a: Extended Testing
+- [Step 10: Comprehensive Voice API Testing](#step-10-test-voice-api-endpoints)
+
+### Phase 1b: Database Integration
+- [Step 11: Examine Database CRUD Operations](#step-11-examine-database-crud-operations)
+- [Step 12: Create Voice Command Integration Module](#step-12-create-voice-command-integration-module)
+- [Step 13: Integrate Command Module into Voice API](#step-13-integrate-command-module-into-voice-api)
+- [Step 14: Test Database Integration](#step-14-test-database-integration)
+
+### Phase 2: Production-Ready Async Processing
+- [Step 15: Install Celery and Redis](#step-15-install-celery-and-redis)
+- [Step 16: Create Celery Tasks](#step-16-create-celery-tasks)
+- [Step 17: Add Async Endpoints](#step-17-add-async-endpoints)
+- [Step 18: Test Async Processing](#step-18-test-async-processing)
 
 ---
 
@@ -2281,3 +2311,215 @@ A: Yes, fully production-ready with async processing and error handling
 
 **Q: Do I need Phase 3 (IVR)?**  
 A: Only if targeting farmers without smartphones who use basic phones
+
+---
+
+## 🎯 Complete Build Summary
+
+### Quick Reference: Reproduce the Entire Build
+
+**Prerequisites:**
+```bash
+# Ensure you have:
+- Python 3.9+ with venv
+- PostgreSQL database (Neon or local)
+- OpenAI API key for Whisper + GPT-3.5
+- Homebrew (macOS) or apt (Linux)
+- Git repository initialized
+```
+
+**Environment Setup:**
+```bash
+# Add to .env
+OPENAI_API_KEY=sk-...
+DATABASE_URL=postgresql://...
+```
+
+**Phase 1: Basic Voice API (2 hours)**
+```bash
+# 1. Create branch
+git checkout -b feature/voice-interface
+
+# 2. Install dependencies
+pip install pydub soundfile aiofiles
+brew install ffmpeg  # or: apt install ffmpeg
+
+# 3. Update requirements.txt
+echo "pydub==0.25.1" >> requirements.txt
+echo "soundfile==0.12.1" >> requirements.txt
+echo "aiofiles==23.2.1" >> requirements.txt
+
+# 4. Create audio utilities (see Step 7)
+# Create: voice/utils/audio_utils.py
+
+# 5. Implement voice API (see Step 8)
+# Update: voice/service/api.py
+
+# 6. Test endpoints
+uvicorn voice.service.api:app --reload
+curl http://localhost:8000/voice/health
+```
+
+**Phase 1b: Database Integration (1 hour)**
+```bash
+# 1. Create command integration module (see Step 12)
+# Create: voice/integration/command_handler.py
+
+# 2. Update API with /process-command (see Step 13)
+# Update: voice/service/api.py
+
+# 3. Test database integration
+curl -X POST http://localhost:8000/voice/process-command \
+  -F "audio=@test_audio.wav"
+```
+
+**Phase 2: Async Processing (2 hours)**
+```bash
+# 1. Install Celery + Redis
+pip install celery redis
+brew install redis  # or: apt install redis-server
+
+# 2. Start Redis
+redis-server
+
+# 3. Create Celery tasks (see Step 16)
+# Create: voice/tasks/celery_app.py
+# Create: voice/tasks/voice_tasks.py
+
+# 4. Start Celery worker
+celery -A voice.tasks.celery_app worker --loglevel=info
+
+# 5. Add async endpoints (see Step 17)
+# Update: voice/service/api.py (add /upload-async, /status)
+
+# 6. Test async processing
+curl -X POST http://localhost:8000/voice/upload-async \
+  -F "audio=@test_audio.wav"
+```
+
+**Start the Complete System:**
+```bash
+# Terminal 1: Redis
+redis-server
+
+# Terminal 2: Celery Worker
+source venv/bin/activate
+celery -A voice.tasks.celery_app worker --loglevel=info
+
+# Terminal 3: FastAPI Server
+source venv/bin/activate
+uvicorn voice.service.api:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 4: Test
+curl http://localhost:8000/voice/health
+```
+
+### Key Files Created/Modified
+
+**Phase 1:**
+- `voice/utils/audio_utils.py` - Audio processing utilities (300 lines)
+- `voice/service/api.py` - FastAPI endpoints (500 lines)
+- `requirements.txt` - Added audio processing packages
+
+**Phase 1b:**
+- `voice/integration/command_handler.py` - Voice → Database mapper (400 lines)
+- `voice/service/api.py` - Added /process-command endpoint
+
+**Phase 2:**
+- `voice/tasks/celery_app.py` - Celery configuration (50 lines)
+- `voice/tasks/voice_tasks.py` - Async task definitions (200 lines)
+- `voice/service/api.py` - Added /upload-async and /status endpoints
+
+### Testing Checklist
+
+**Phase 1 Tests:**
+- [ ] FFmpeg installed and working (`ffmpeg -version`)
+- [ ] Audio utilities validate formats correctly
+- [ ] `/voice/transcribe` returns transcription
+- [ ] `/voice/health` shows service status
+- [ ] Multi-format support (WAV, MP3, M4A)
+
+**Phase 1b Tests:**
+- [ ] `/voice/process-command` creates database batch
+- [ ] Intent extraction working (record_commission)
+- [ ] Entity extraction working (quantity, variety, origin)
+- [ ] Error handling for unsupported intents
+- [ ] Database shows new batches
+
+**Phase 2 Tests:**
+- [ ] Redis server running (`redis-cli ping`)
+- [ ] Celery worker started and ready
+- [ ] `/voice/upload-async` returns task_id immediately
+- [ ] `/voice/status/{task_id}` shows progress
+- [ ] Async processing completes successfully
+- [ ] Response time < 100ms
+
+### Troubleshooting
+
+**Issue: FFmpeg not found**
+```bash
+# Check installation
+which ffmpeg
+
+# Install if missing
+brew install ffmpeg  # macOS
+apt install ffmpeg   # Linux
+
+# Verify
+ffmpeg -version
+```
+
+**Issue: Redis connection failed**
+```bash
+# Check if Redis running
+redis-cli ping
+# Should return: PONG
+
+# Start Redis if not running
+redis-server
+
+# Check port
+lsof -i :6379
+```
+
+**Issue: Celery worker not starting**
+```bash
+# Check imports
+python -c "from voice.tasks.celery_app import app; print(app)"
+
+# Check Redis connection
+python -c "import redis; r = redis.Redis(); print(r.ping())"
+
+# Start with verbose logging
+celery -A voice.tasks.celery_app worker --loglevel=debug
+```
+
+**Issue: Audio processing errors**
+```bash
+# Check audio file format
+file your_audio.wav
+
+# Test conversion manually
+ffmpeg -i your_audio.mp3 your_audio.wav
+
+# Check pydub import
+python -c "from pydub import AudioSegment; print('OK')"
+```
+
+**Issue: OpenAI API errors**
+```bash
+# Check API key
+echo $OPENAI_API_KEY
+
+# Test connection
+python -c "import openai; print(openai.Model.list())"
+```
+
+---
+
+**🚀 Voice Ledger now has production-ready voice input capability!**
+
+**Achievement Unlocked:** The system finally lives up to its name - farmers can use their voice!
+
+**Next Lab:** Proceed to Lab 8 (IVR/Phone System) - see [VOICE_IVR_BUILD_LOG.md](VOICE_IVR_BUILD_LOG.md)
+

@@ -28,6 +28,17 @@ STATE_PHONE = 5
 STATE_REG_NUMBER = 6
 STATE_REASON = 7
 
+# Exporter-specific states
+STATE_EXPORT_LICENSE = 8
+STATE_PORT_ACCESS = 9
+STATE_SHIPPING_CAPACITY = 10
+
+# Buyer-specific states
+STATE_BUSINESS_TYPE = 11
+STATE_COUNTRY = 12
+STATE_TARGET_VOLUME = 13
+STATE_QUALITY_PREFS = 14
+
 
 async def handle_register_command(user_id: int, username: str, first_name: str, last_name: str) -> Dict[str, Any]:
     """
@@ -124,9 +135,17 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         conversation_states[user_id]['data']['role'] = role
         conversation_states[user_id]['state'] = STATE_FULL_NAME
         
+        # Role-specific welcome message
+        role_info = {
+            'COOPERATIVE_MANAGER': 'You will manage coffee batches from farmers and coordinate verification.',
+            'EXPORTER': 'You will have access to verified batches and export documentation tools.',
+            'BUYER': 'You will be able to browse verified inventory and place purchase orders.'
+        }
+        
         return {
             'message': (
-                f"Selected: *{role.replace('_', ' ').title()}*\n\n"
+                f"✅ Selected: *{role.replace('_', ' ').title()}*\n\n"
+                f"{role_info.get(role, '')}\n\n"
                 f"What is your full name?"
             ),
             'parse_mode': 'Markdown'
@@ -152,6 +171,49 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         
         conversation_states[user_id]['data']['reason'] = None
         return await submit_registration(user_id)
+    
+    # Business type selection (Buyer)
+    if callback_data.startswith('reg_business_'):
+        business_type = callback_data.replace('reg_business_', '')
+        
+        if user_id not in conversation_states:
+            return {'message': "❌ Session expired. Please /register again."}
+        
+        conversation_states[user_id]['data']['business_type'] = business_type
+        conversation_states[user_id]['state'] = STATE_COUNTRY
+        
+        return {
+            'message': (
+                f"Selected: *{business_type.replace('_', ' ').title()}*\n\n"
+                f"What country are you based in?\n"
+                f"(e.g., 'United States', 'Germany', 'Japan')"
+            ),
+            'parse_mode': 'Markdown'
+        }
+    
+    # Port selection (Exporter)
+    if callback_data.startswith('reg_port_'):
+        port = callback_data.replace('reg_port_', '')
+        
+        if user_id not in conversation_states:
+            return {'message': "❌ Session expired. Please /register again."}
+        
+        if port == 'OTHER':
+            conversation_states[user_id]['state'] = STATE_PORT_ACCESS
+            return {
+                'message': "Please type the name of your primary export port:"
+            }
+        else:
+            conversation_states[user_id]['data']['port_access'] = port
+            conversation_states[user_id]['state'] = STATE_SHIPPING_CAPACITY
+            return {
+                'message': (
+                    f"Selected: *{port}*\n\n"
+                    f"What is your annual shipping capacity? (in tons)\n"
+                    f"(e.g., '100' for 100 tons per year)"
+                ),
+                'parse_mode': 'Markdown'
+            }
     
     return {'message': "❌ Unknown callback data."}
 
@@ -206,14 +268,39 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: PHONE
     if state == STATE_PHONE:
         data['phone_number'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_REG_NUMBER
-        return {
-            'message': (
-                "Do you have a registration or license number?\n"
-                "(Optional - click Skip if you don't have one)"
-            ),
-            'inline_keyboard': [[{'text': "⏭️ Skip", 'callback_data': 'reg_skip_reg_number'}]]
-        }
+        
+        # Route to role-specific questions
+        role = data.get('role')
+        
+        if role == 'EXPORTER':
+            conversation_states[user_id]['state'] = STATE_EXPORT_LICENSE
+            return {
+                'message': (
+                    "What is your export license number?\n"
+                    "(e.g., 'EXP-2024-1234' or similar official license)"
+                )
+            }
+        elif role == 'BUYER':
+            conversation_states[user_id]['state'] = STATE_BUSINESS_TYPE
+            return {
+                'message': "What type of business are you?",
+                'inline_keyboard': [
+                    [{'text': "☕ Coffee Roaster", 'callback_data': 'reg_business_ROASTER'}],
+                    [{'text': "📦 Importer", 'callback_data': 'reg_business_IMPORTER'}],
+                    [{'text': "🏪 Wholesaler", 'callback_data': 'reg_business_WHOLESALER'}],
+                    [{'text': "🛒 Retailer", 'callback_data': 'reg_business_RETAILER'}],
+                    [{'text': "☕ Cafe Chain", 'callback_data': 'reg_business_CAFE_CHAIN'}]
+                ]
+            }
+        else:  # COOPERATIVE_MANAGER
+            conversation_states[user_id]['state'] = STATE_REG_NUMBER
+            return {
+                'message': (
+                    "Do you have a registration or license number?\n"
+                    "(Optional - click Skip if you don't have one)"
+                ),
+                'inline_keyboard': [[{'text': "⏭️ Skip", 'callback_data': 'reg_skip_reg_number'}]]
+            }
     
     # State: REG_NUMBER
     if state == STATE_REG_NUMBER:
@@ -232,6 +319,90 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
         data['reason'] = text.strip()
         return await submit_registration(user_id)
     
+    # Exporter-specific states
+    if state == STATE_EXPORT_LICENSE:
+        data['export_license'] = text.strip()
+        conversation_states[user_id]['state'] = STATE_PORT_ACCESS
+        return {
+            'message': "Which port do you primarily use for exports?",
+            'inline_keyboard': [
+                [{'text': "🚢 Djibouti", 'callback_data': 'reg_port_DJIBOUTI'}],
+                [{'text': "🚢 Berbera", 'callback_data': 'reg_port_BERBERA'}],
+                [{'text': "🚢 Mombasa", 'callback_data': 'reg_port_MOMBASA'}],
+                [{'text': "🚢 Other", 'callback_data': 'reg_port_OTHER'}]
+            ]
+        }
+    
+    if state == STATE_PORT_ACCESS:
+        # User typed custom port name (after selecting "Other")
+        data['port_access'] = text.strip()
+        conversation_states[user_id]['state'] = STATE_SHIPPING_CAPACITY
+        return {
+            'message': (
+                "What is your annual shipping capacity? (in tons)\n"
+                "(e.g., '100' for 100 tons per year)"
+            )
+        }
+    
+    if state == STATE_SHIPPING_CAPACITY:
+        try:
+            capacity = float(text.strip())
+            data['shipping_capacity_tons'] = capacity
+            conversation_states[user_id]['state'] = STATE_REASON
+            return {
+                'message': (
+                    "Why are you registering with Voice Ledger?\n"
+                    "(Optional - helps us understand your needs)"
+                ),
+                'inline_keyboard': [[{'text': "⏭️ Skip", 'callback_data': 'reg_skip_reason'}]]
+            }
+        except ValueError:
+            return {'message': "Please enter a valid number (e.g., 100 for 100 tons per year)"}
+    
+    # Buyer-specific states
+    if state == STATE_COUNTRY:
+        data['country'] = text.strip()
+        conversation_states[user_id]['state'] = STATE_TARGET_VOLUME
+        return {
+            'message': (
+                "What is your annual target volume? (in tons)\n"
+                "(e.g., '50' for 50 tons per year, or type 'Skip' if unsure)"
+            )
+        }
+    
+    if state == STATE_TARGET_VOLUME:
+        if text.strip().lower() == 'skip':
+            data['target_volume_tons_annual'] = None
+        else:
+            try:
+                volume = float(text.strip())
+                data['target_volume_tons_annual'] = volume
+            except ValueError:
+                return {'message': "Please enter a valid number (e.g., 50) or type 'Skip'"}
+        
+        conversation_states[user_id]['state'] = STATE_QUALITY_PREFS
+        return {
+            'message': (
+                "What quality/certifications do you typically look for?\n"
+                "(e.g., 'Grade 1, Organic certified, cup score 85+' or type 'Skip')"
+            )
+        }
+    
+    if state == STATE_QUALITY_PREFS:
+        if text.strip().lower() == 'skip':
+            data['quality_preferences'] = None
+        else:
+            data['quality_preferences'] = {'description': text.strip()}
+        
+        conversation_states[user_id]['state'] = STATE_REASON
+        return {
+            'message': (
+                "Why are you registering with Voice Ledger?\n"
+                "(Optional - helps us understand your needs)"
+            ),
+            'inline_keyboard': [[{'text': "⏭️ Skip", 'callback_data': 'reg_skip_reason'}]]
+        }
+    
     return {'message': "❌ Unknown registration state. Please /register again."}
 
 
@@ -248,7 +419,7 @@ async def submit_registration(user_id: int) -> Dict[str, Any]:
     db = SessionLocal()
     
     try:
-        # Create pending registration
+        # Create pending registration with common fields
         pending = PendingRegistration(
             telegram_user_id=user_id,
             telegram_username=data.get('telegram_username'),
@@ -264,6 +435,17 @@ async def submit_registration(user_id: int) -> Dict[str, Any]:
             status='PENDING'
         )
         
+        # Add role-specific fields
+        if data['role'] == 'EXPORTER':
+            pending.export_license = data.get('export_license')
+            pending.port_access = data.get('port_access')
+            pending.shipping_capacity_tons = data.get('shipping_capacity_tons')
+        elif data['role'] == 'BUYER':
+            pending.business_type = data.get('business_type')
+            pending.country = data.get('country')
+            pending.target_volume_tons_annual = data.get('target_volume_tons_annual')
+            pending.quality_preferences = data.get('quality_preferences')
+        
         db.add(pending)
         db.commit()
         db.refresh(pending)
@@ -272,14 +454,30 @@ async def submit_registration(user_id: int) -> Dict[str, Any]:
         conversation_states.pop(user_id, None)
         
         # Notify admin via Telegram
-        await notify_admin_new_registration(pending.id, {
+        notification_data = {
             'role': pending.requested_role,
             'full_name': pending.full_name,
             'organization_name': pending.organization_name,
             'location': pending.location,
             'phone_number': pending.phone_number,
             'registration_number': pending.registration_number
-        })
+        }
+        
+        # Add role-specific data
+        if pending.requested_role == 'EXPORTER':
+            notification_data.update({
+                'export_license': pending.export_license,
+                'port_access': pending.port_access,
+                'shipping_capacity': pending.shipping_capacity_tons
+            })
+        elif pending.requested_role == 'BUYER':
+            notification_data.update({
+                'business_type': pending.business_type,
+                'country': pending.country,
+                'target_volume': pending.target_volume_tons_annual
+            })
+        
+        await notify_admin_new_registration(pending.id, notification_data)
         
         return {
             'message': (
@@ -329,6 +527,7 @@ async def notify_admin_new_registration(registration_id: int, registration_data:
         role_display = registration_data['role'].replace('_', ' ').title()
         base_url = os.getenv('BASE_URL', 'http://localhost:8000')
         
+        # Build message with role-specific fields
         message = f"""📋 *New Registration Request*
 
 ID: `REG-{registration_id:04d}`
@@ -337,7 +536,25 @@ Name: {registration_data['full_name']}
 Organization: {registration_data['organization_name']}
 Location: {registration_data['location']}
 Phone: {registration_data['phone_number']}
-Registration #: {registration_data.get('registration_number', 'N/A')}
+Registration #: {registration_data.get('registration_number', 'N/A')}"""
+
+        # Add role-specific details
+        if registration_data['role'] == 'EXPORTER':
+            message += f"""
+
+*Exporter Details:*
+Export License: {registration_data.get('export_license', 'N/A')}
+Primary Port: {registration_data.get('port_access', 'N/A')}
+Shipping Capacity: {registration_data.get('shipping_capacity', 'N/A')} tons/year"""
+        elif registration_data['role'] == 'BUYER':
+            message += f"""
+
+*Buyer Details:*
+Business Type: {registration_data.get('business_type', 'N/A').replace('_', ' ').title()}
+Country: {registration_data.get('country', 'N/A')}
+Target Volume: {registration_data.get('target_volume', 'N/A')} tons/year"""
+        
+        message += f"""
 
 Review and approve at:
 {base_url}/admin/registrations"""
@@ -366,10 +583,18 @@ __all__ = [
     'handle_registration_text',
     'conversation_states',
     'STATE_NONE',
+    'STATE_ROLE',
     'STATE_FULL_NAME',
     'STATE_ORG_NAME',
     'STATE_LOCATION',
     'STATE_PHONE',
     'STATE_REG_NUMBER',
-    'STATE_REASON'
+    'STATE_REASON',
+    'STATE_EXPORT_LICENSE',
+    'STATE_PORT_ACCESS',
+    'STATE_SHIPPING_CAPACITY',
+    'STATE_BUSINESS_TYPE',
+    'STATE_COUNTRY',
+    'STATE_TARGET_VOLUME',
+    'STATE_QUALITY_PREFS'
 ]

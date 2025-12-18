@@ -86,13 +86,24 @@ class PendingRegistration(Base):
     
     requested_role = Column(String(50), nullable=False)  # COOPERATIVE_MANAGER, EXPORTER, BUYER
     
-    # Registration form answers
+    # Common registration form answers
     full_name = Column(String(200), nullable=False)
     organization_name = Column(String(200), nullable=False)
     location = Column(String(200), nullable=False)
     phone_number = Column(String(20), nullable=False)
     registration_number = Column(String(100))
     reason = Column(Text)
+    
+    # Exporter-specific fields
+    export_license = Column(String(100))
+    port_access = Column(String(100))
+    shipping_capacity_tons = Column(Float)
+    
+    # Buyer-specific fields
+    business_type = Column(String(50))  # ROASTER, IMPORTER, WHOLESALER, etc.
+    country = Column(String(100))
+    target_volume_tons_annual = Column(Float)
+    quality_preferences = Column(JSON)
     
     status = Column(String(20), default='PENDING', index=True)  # PENDING, APPROVED, REJECTED
     reviewed_by_admin_id = Column(Integer)
@@ -268,6 +279,64 @@ class VerifiableCredential(Base):
     
     # Relationships
     farmer = relationship("FarmerIdentity", back_populates="credentials")
+
+class Exporter(Base):
+    """Exporter-specific details for organizations"""
+    __tablename__ = "exporters"
+    
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), unique=True, nullable=False, index=True)
+    export_license = Column(String(100), nullable=False)
+    port_access = Column(String(100))  # Primary port (Djibouti, Berbera, Mombasa)
+    shipping_capacity_tons = Column(Float)
+    active_shipping_lines = Column(JSON)  # Array of shipping line names
+    customs_clearance_capability = Column(Boolean, default=False)
+    certifications = Column(JSON)  # Array of certifications
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    organization = relationship("Organization", foreign_keys=[organization_id])
+
+class Buyer(Base):
+    """Buyer-specific details for organizations"""
+    __tablename__ = "buyers"
+    
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), unique=True, nullable=False, index=True)
+    business_type = Column(String(50), nullable=False, index=True)  # ROASTER, IMPORTER, WHOLESALER, RETAILER, CAFE_CHAIN
+    country = Column(String(100), nullable=False, index=True)
+    target_volume_tons_annual = Column(Float)
+    quality_preferences = Column(JSON)  # {min_cup_score: 85, certifications: ['organic']}
+    payment_terms = Column(String(50))  # NET30, NET60, LC, PREPAY
+    import_licenses = Column(JSON)  # Array of license numbers
+    certifications_required = Column(JSON)  # Array of required certifications
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    organization = relationship("Organization", foreign_keys=[organization_id])
+
+class UserReputation(Base):
+    """Reputation tracking for all users across transactions"""
+    __tablename__ = "user_reputation"
+    
+    user_id = Column(Integer, ForeignKey("user_identities.id"), primary_key=True)
+    completed_transactions = Column(Integer, default=0)
+    total_volume_kg = Column(Float, default=0)
+    on_time_deliveries = Column(Integer, default=0)
+    quality_disputes = Column(Integer, default=0)
+    average_rating = Column(Float)  # 0.00 to 5.00
+    reputation_level = Column(String(20), default='BRONZE', index=True)  # BRONZE, SILVER, GOLD, PLATINUM
+    last_transaction_at = Column(DateTime)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = relationship("UserIdentity", foreign_keys=[user_id])
 
 class OfflineQueue(Base):
     __tablename__ = "offline_queue"

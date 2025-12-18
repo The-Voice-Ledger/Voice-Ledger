@@ -16,11 +16,15 @@ Endpoints:
 
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for database imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -74,6 +78,14 @@ try:
     ADMIN_AVAILABLE = True
 except ImportError as e:
     ADMIN_AVAILABLE = False
+    print(f"ℹ️  Admin module not available - Phase 5 endpoints disabled: {e}")
+
+# Import Batch Verification router (Lab 10 - batch verification workflow)
+try:
+    from voice.verification.batch_verify_api import router as batch_verify_router
+    BATCH_VERIFY_AVAILABLE = True
+except ImportError as e:
+    ADMIN_AVAILABLE = False
     print(f"ℹ️  Admin module not available - registration approval disabled: {e}")
 
 app = FastAPI(
@@ -102,6 +114,11 @@ if ADMIN_AVAILABLE:
     app.include_router(admin_router, prefix="/admin")
     print("✅ Admin endpoints registered at /admin/*")
 
+# Include Batch Verification router (Lab 10)
+if BATCH_VERIFY_AVAILABLE:
+    app.include_router(batch_verify_router)
+    print("✅ Batch verification endpoints registered at /verify/*")
+
 # Allow local tools and UIs
 app.add_middleware(
     CORSMiddleware,
@@ -116,6 +133,7 @@ app.add_middleware(
 class TranscriptionResponse(BaseModel):
     """Response for transcription-only endpoint."""
     transcript: str
+    language: str
     audio_metadata: dict
     
 
@@ -248,14 +266,13 @@ async def transcribe_audio(
         # Run ASR (audio → text)
         asr_result = run_asr(wav_path)
         
-        # Handle both dict and string returns (backwards compatibility)
-        if isinstance(asr_result, dict):
-            transcript = asr_result.get('text', '')
-        else:
-            transcript = asr_result
+        # Extract transcript and language from ASR result
+        transcript = asr_result['text']
+        language = asr_result['language']
         
         return {
             "transcript": transcript,
+            "language": language,
             "audio_metadata": metadata
         }
         
@@ -335,8 +352,11 @@ async def process_voice_command(
         # Validate and convert to WAV
         wav_path, metadata = validate_and_convert_audio(str(temp_path))
         
-        # Run ASR (audio → text)
-        transcript = run_asr(wav_path)
+        # Run ASR (audio → text with language detection)
+        asr_result = run_asr(wav_path)
+        transcript = asr_result['text']
+        language = asr_result['language']
+        logger.info(f"ASR detected language: {language}")
         
         # Run NLU (text → intent + entities)
         nlu_result = infer_nlu_json(transcript)
@@ -434,8 +454,11 @@ async def asr_nlu_endpoint(
             content = await file.read()
             f.write(content)
 
-        # Run ASR (audio → text)
-        transcript = run_asr(str(temp_path))
+        # Run ASR (audio → text with language detection)
+        asr_result = run_asr(str(temp_path))
+        transcript = asr_result['text']
+        language = asr_result['language']
+        logger.info(f"IVR ASR detected language: {language}")
         
         # Run NLU (text → intent + entities)
         result = infer_nlu_json(transcript)

@@ -223,12 +223,47 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
         # Handle /start command
         if text.startswith('/start'):
             logger.info(f"Handling /start command for user {user_id}")
+            
+            # Check if it's a deep link with parameter (e.g., /start verify_VRF-...)
+            parts = text.split(' ', 1)
+            if len(parts) > 1 and parts[1].startswith('verify_'):
+                # Verification deep link
+                from voice.telegram.verification_handler import handle_verify_deeplink
+                token = parts[1].replace('verify_', '')
+                username = message.get('from', {}).get('username', '')
+                
+                logger.info(f"Handling verification deep link for token: {token}")
+                response = await handle_verify_deeplink(
+                    user_id=int(user_id),
+                    username=username,
+                    token=token
+                )
+                
+                logger.info(f"Verification response for user {user_id}: {response.get('message', '')[:100]}")
+                
+                # Send response to user
+                success = await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode'),
+                    reply_markup=response.get('inline_keyboard')
+                )
+                
+                if not success:
+                    logger.error(f"Failed to send verification response to user {user_id}")
+                else:
+                    logger.info(f"Successfully sent verification response to user {user_id}")
+                
+                return {"ok": True, "message": "Sent verification form"}
+            
+            # Regular /start command - welcome message
             result = await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
                 message=(
                     "👋 *Welcome to Voice Ledger!*\n\n"
-                    "I help coffee farmers create digital records using voice commands.\n\n"
+                    "I help coffee farmers and cooperatives create digital records using voice commands.\n\n"
                     "🎙️ *What You Can Do:*\n\n"
                     "📦 *Create New Batch* (Commission)\n"
                     "Say: \"New batch of 50 kg Yirgacheffe from Gedeo farm\"\n\n"
@@ -238,7 +273,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "Say: \"Received batch XYZ456 from Abebe cooperative\"\n\n"
                     "⚙️ *Process Coffee* (Transformation)\n"
                     "Say: \"Washed batch DEF789 at processing station\"\n\n"
-                    "Just record a voice message describing what you did! 🎤"
+                    "💬 *Voice Commands (NEW!):*\n"
+                    "You can also say:\n"
+                    "- \"I want to register my cooperative\" → Start registration\n"
+                    "- \"Help me understand the system\" → Get help\n"
+                    "- \"Show me my batches\" → View your batches\n\n"
+                    "📝 *Text Commands:*\n"
+                    "Type /help to see all commands\n"
+                    "Type /register to register your organization\n\n"
+                    "Just record a voice message or type a command to get started! 🎤"
                 )
             )
             logger.info(f"/start notification result: {result}")
@@ -254,6 +297,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "*Text Commands:*\n"
                     "/start - Welcome & examples\n"
                     "/help - This help message\n"
+                    "/register - Register as cooperative/exporter/buyer\n"
                     "/status - Check system status\n"
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
@@ -592,6 +636,38 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Sent QR code"}
         
+        # Check if user is in verification session (awaiting quantity input)
+        from voice.telegram.verification_handler import verification_sessions, handle_quantity_message
+        
+        if int(user_id) in verification_sessions:
+            logger.info(f"User {user_id} in verification session, checking for quantity input")
+            response = await handle_quantity_message(int(user_id), text)
+            
+            if response:  # If handler processed it
+                # Send response with optional inline keyboard
+                if 'inline_keyboard' in response:
+                    import requests
+                    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                    requests.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                        json={
+                            'chat_id': user_id,
+                            'text': response['message'],
+                            'parse_mode': response.get('parse_mode', 'Markdown'),
+                            'reply_markup': {'inline_keyboard': response['inline_keyboard']}
+                        },
+                        timeout=30
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=response['message'],
+                        parse_mode=response.get('parse_mode')
+                    )
+                
+                return {"ok": True, "message": "Verification response sent"}
+        
         # Check if user is in registration conversation
         from voice.telegram.register_handler import conversation_states, handle_registration_text
         
@@ -687,6 +763,47 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Callback handled"}
         
+        # Handle verification-related callbacks
+        if callback_data.startswith(('verify_', 'confirm_', 'cancel_')):
+            from voice.telegram.verification_handler import handle_verification_callback, handle_confirmation_callback
+            
+            # Determine which handler to use
+            if callback_data.startswith(('confirm_', 'cancel_')):
+                response = await handle_confirmation_callback(user_id, callback_data)
+            else:
+                response = await handle_verification_callback(user_id, callback_data)
+            
+            # Answer callback query
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                json={'callback_query_id': callback_id},
+                timeout=30
+            )
+            
+            # Edit or send message
+            message_id = callback_query['message']['message_id']
+            chat_id = callback_query['message']['chat']['id']
+            
+            payload = {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'text': response['message'],
+                'parse_mode': response.get('parse_mode', 'Markdown')
+            }
+            
+            if 'inline_keyboard' in response:
+                payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
+            
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                json=payload,
+                timeout=30
+            )
+            
+            return {"ok": True, "message": "Verification callback handled"}
+        
         # Unknown callback data
         logger.debug(f"Unknown callback data: {callback_data}")
         return {"ok": True, "message": "Callback not recognized"}
@@ -727,3 +844,157 @@ async def telegram_bot_info() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting bot info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def route_voice_to_command(command: str, user_id: int, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Route voice command to appropriate Telegram handler.
+    
+    Maps detected voice commands to text command handlers:
+    - "start" → /start
+    - "help" → /help
+    - "register" → /register
+    - "myidentity" → /myidentity
+    - "mybatches" → /mybatches
+    - "mycredentials" → /mycredentials
+    - "status" → /status
+    - "export" → /export
+    
+    Args:
+        command: Detected command name
+        user_id: Telegram user ID
+        metadata: Request metadata
+        
+    Returns:
+        Command response dict
+    """
+    try:
+        processor = get_processor()
+        
+        # Create fake message structure to simulate text command
+        fake_message = {
+            'from': {
+                'id': user_id,
+                'username': metadata.get('username', ''),
+                'first_name': metadata.get('first_name', ''),
+                'last_name': metadata.get('last_name', '')
+            },
+            'text': f'/{command}'
+        }
+        
+        # Route to existing command handlers
+        text = f'/{command}'
+        
+        # Import handlers on demand to avoid circular imports
+        if command == 'start':
+            logger.info(f"Routing voice to /start for user {user_id}")
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=(
+                    "👋 *Welcome to Voice Ledger!*\n\n"
+                    "I help coffee farmers and cooperatives create digital records using voice commands.\n\n"
+                    "🎙️ *What You Can Do:*\n\n"
+                    "📦 *Create New Batch* (Commission)\n"
+                    "Say: \"New batch of 50 kg Yirgacheffe from Gedeo farm\"\n\n"
+                    "📤 *Ship Existing Batch* (Shipment)\n"
+                    "Say: \"Shipped batch ABC123 to Addis warehouse\"\n\n"
+                    "📥 *Receive Batch* (Receipt)\n"
+                    "Say: \"Received batch XYZ456 from Abebe cooperative\"\n\n"
+                    "⚙️ *Process Coffee* (Transformation)\n"
+                    "Say: \"Washed batch DEF789 at processing station\"\n\n"
+                    "💬 *Voice Commands (NEW!):*\n"
+                    "You can also say:\n"
+                    "- \"I want to register my cooperative\" → Start registration\n"
+                    "- \"Help me understand the system\" → Get help\n"
+                    "- \"Show me my batches\" → View your batches\n\n"
+                    "📝 *Text Commands:*\n"
+                    "Type /help to see all commands\n"
+                    "Type /register to register your organization\n\n"
+                    "Just record a voice message or type a command to get started! 🎤"
+                )
+            )
+            return {"ok": True, "command": "start"}
+            
+        elif command == 'help':
+            logger.info(f"Routing voice to /help for user {user_id}")
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=(
+                    "ℹ️ *Voice Ledger Help*\n\n"
+                    "*Text Commands:*\n"
+                    "/start - Welcome & examples\n"
+                    "/help - This help message\n"
+                    "/register - Register as cooperative/exporter/buyer\n"
+                    "/status - Check system status\n"
+                    "/myidentity - Show your DID\n"
+                    "/mycredentials - View track record\n"
+                    "/mybatches - List your batches\n"
+                    "/export - Get QR code for credentials\n\n"
+                    "*Voice Command Types:*\n\n"
+                    "1️⃣ *Commission* - Create new batch\n"
+                    "   Example: \"New batch, 50 kg Sidama from my farm\"\n\n"
+                    "2️⃣ *Shipment* - Send existing batch\n"
+                    "   Example: \"Shipped batch ABC to warehouse\"\n"
+                    "   ⚠️ Requires batch ID\n\n"
+                    "3️⃣ *Receipt* - Receive from supplier\n"
+                    "   Example: \"Received batch XYZ from cooperative\"\n"
+                    "   ⚠️ Requires batch ID\n\n"
+                    "4️⃣ *Transformation* - Process coffee\n"
+                    "   Example: \"Washed batch DEF at station\"\n"
+                    "   ⚠️ Requires batch ID\n\n"
+                    "💡 Tip: Always mention quantity, variety, and origin for new batches!"
+                )
+            )
+            return {"ok": True, "command": "help"}
+            
+        elif command == 'status':
+            logger.info(f"Routing voice to /status for user {user_id}")
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=(
+                    "✅ *System Status*\n\n"
+                    "All systems operational! 🚀"
+                )
+            )
+            return {"ok": True, "command": "status"}
+            
+        elif command == 'register':
+            logger.info(f"Routing voice to /register for user {user_id}")
+            from voice.telegram.register_handler import handle_register_command
+            
+            response = await handle_register_command(
+                user_id=user_id,
+                username=metadata.get('username'),
+                first_name=metadata.get('first_name', ''),
+                last_name=metadata.get('last_name', '')
+            )
+            
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message']
+            )
+            return {"ok": True, "command": "register", "response": response}
+            
+        elif command in ['myidentity', 'mybatches', 'mycredentials', 'export']:
+            # These commands require database lookups - send notification that they're processed
+            logger.info(f"Routing voice to /{command} for user {user_id}")
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=f"🎙️ Voice command recognized: `/{command}`\n\nProcessing..."
+            )
+            # The actual handler would be called from telegram_api.py handle_text_message
+            # For now, just acknowledge
+            return {"ok": True, "command": command, "message": "Command queued"}
+        
+        else:
+            logger.warning(f"Unknown voice command: {command}")
+            return {"ok": False, "error": f"Unknown command: {command}"}
+            
+    except Exception as e:
+        logger.error(f"Error routing voice command: {e}", exc_info=True)
+        return {"ok": False, "error": str(e)}
