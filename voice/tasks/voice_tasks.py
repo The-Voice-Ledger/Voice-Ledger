@@ -22,6 +22,7 @@ from voice.nlu.nlu_infer import infer_nlu_json
 from voice.audio_utils import validate_and_convert_audio, cleanup_temp_file, AudioValidationError
 from database.connection import get_db
 from voice.command_integration import execute_voice_command, VoiceCommandError
+from voice.tasks.voice_command_detector import detect_voice_command
 
 # Import SMS notifier for IVR notifications
 try:
@@ -147,6 +148,62 @@ def process_voice_command_task(
             logger.error(f"ASR failed: {e}")
             raise self.retry(exc=e, countdown=60)
         
+        # Check for voice commands (simple pattern matching)
+        voice_command_result = detect_voice_command(transcript, metadata)
+        if voice_command_result:
+            command = voice_command_result['command']
+            logger.info(f"Voice command detected: {command}")
+            
+            # Route to Telegram command handler
+            if metadata and metadata.get("channel") == "telegram":
+                user_id = metadata.get("user_id")
+                if user_id:
+                    try:
+                        import asyncio
+                        from voice.telegram.telegram_api import route_voice_to_command
+                        
+                        # Run async function in event loop - let it complete fully
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            # Execute the async function and wait for completion
+                            response = loop.run_until_complete(
+                                route_voice_to_command(command, int(user_id), metadata)
+                            )
+                            
+                            # Give any background tasks time to finish (e.g., HTTP requests)
+                            # This ensures httpx connections are properly closed
+                            loop.run_until_complete(asyncio.sleep(0.1))
+                            
+                            result = {
+                                "status": "success",
+                                "transcript": transcript,
+                                "command": command,
+                                "response": response,
+                                "audio_metadata": metadata
+                            }
+                        finally:
+                            # Shutdown async generators and cancel any remaining tasks
+                            try:
+                                if hasattr(loop, 'shutdown_asyncgens'):
+                                    loop.run_until_complete(loop.shutdown_asyncgens())
+                            except Exception as e:
+                                logger.debug(f"Async generator shutdown warning: {e}")
+                            
+                            try:
+                                loop.close()
+                            except Exception as e:
+                                logger.debug(f"Loop close warning: {e}")
+                        
+                        return result
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to route voice command: {e}")
+                        # Fall back to returning the detection result
+                        return voice_command_result
+            
+            return voice_command_result
+        
         # Update task state: extracting
         self.update_state(
             state='EXTRACTING',
@@ -236,23 +293,25 @@ def process_voice_command_task(
                 try:
                     # Telegram notifications (simple and reliable)
                     if channel == "telegram":
-                        from voice.telegram.notifier import send_batch_confirmation, send_error_notification
+                        from voice.telegram.notifier import send_batch_verification_qr, send_error_notification
                         
                         # Use chat_id if available, otherwise user_id
                         target_id = chat_id if chat_id else int(user_id) if isinstance(user_id, str) else user_id
                         
                         if not error and db_result:
-                            # Success notification
+                            # Success notification with verification QR code
                             batch_info = {
-                                "id": db_result.get("batch_id") or db_result.get("gtin"),
+                                "batch_id": db_result.get("batch_id"),
                                 "variety": db_result.get("variety") or entities.get("product", "Unknown"),
-                                "quantity": db_result.get("quantity_kg") or entities.get("quantity", 0),
-                                "farm": db_result.get("origin") or entities.get("origin", "Unknown"),
+                                "quantity_kg": db_result.get("quantity_kg") or entities.get("quantity", 0),
+                                "origin": db_result.get("origin") or entities.get("origin", "Unknown"),
                                 "gtin": db_result.get("gtin"),
-                                "gln": db_result.get("gln")  # Include GLN for notification display
+                                "gln": db_result.get("gln"),
+                                "status": db_result.get("status", "PENDING_VERIFICATION"),
+                                "verification_token": db_result.get("verification_token")
                             }
-                            logger.info(f"Sending batch confirmation to Telegram chat {target_id}")
-                            success = send_batch_confirmation(target_id, batch_info)
+                            logger.info(f"Sending batch verification QR code to Telegram chat {target_id}")
+                            success = send_batch_verification_qr(target_id, batch_info)
                             if success:
                                 logger.info(f"Notification sent successfully to {target_id}")
                             else:
