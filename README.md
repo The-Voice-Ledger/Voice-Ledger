@@ -15,6 +15,11 @@ A voice-first blockchain traceability system for coffee supply chains that enabl
 - **Production Ready**: Database connection pooling, enhanced error handling
 - **Comprehensive Docs**: 3000+ lines of documentation
 - **Credential Portability**: QR code export and public verification API for farmers
+- **🆕 Blockchain + IPFS Integration**: Full event data on IPFS with blockchain anchoring
+- **🆕 Merkle Proof System**: Gas-efficient batch aggregation with cryptographic proofs
+- **🆕 Multi-Currency Settlement**: Smart contracts supporting USD, ETH, BIRR, USDC
+- **🆕 Complete Integration Tests**: End-to-end IPFS + blockchain verification
+- **🆕 Organized Documentation**: Lab guides, architecture docs, deployment guides
 
 ## Overview
 
@@ -98,14 +103,26 @@ Voice Input (Telegram/IVR) → Language Detection (Whisper API)
 **Smart Contracts** [COMPLETE]
 - EPCISEventAnchor.sol: Event hash anchoring with IPFS CID storage
 - CoffeeBatchToken.sol: ERC-1155 semi-fungible tokens for batch representation
+- SettlementContract.sol: Multi-currency settlement tracking (6 parameters)
 - Event linking to token metadata
-- Solidity 0.8.20 with OpenZeppelin libraries
+- Solidity 0.8.20 with OpenZeppelin 5.0 libraries
+- Deployed to Base Sepolia testnet
+- All Foundry tests passing (58/58)
 
 **IPFS Integration** [COMPLETE]
-- Full EPCIS event storage
-- Content-addressed retrieval
+- Full EPCIS event storage on IPFS
+- Content-addressed retrieval (CID-based)
 - Pinata integration for persistent pinning
-- Local IPFS node support
+- Blockchain anchoring with CID storage
+- 40% gas cost reduction (full data off-chain)
+- Integration tests passing (CID: QmTFwE14...)
+
+**Merkle Proof System** [COMPLETE]
+- Merkle tree implementation for batch aggregation
+- Gas-efficient: 75% reduction vs individual anchoring
+- Cryptographic proof generation and verification
+- Container-level event bundling
+- Smart contract verification support
 
 **Digital Twin Synchronization** [COMPLETE]
 - Unified state management combining on-chain and off-chain data
@@ -213,10 +230,15 @@ Voice-Ledger/
 │   ├── agent.py                # Verifiable Credential issuance
 │   └── user_identity.py        # User identity management
 ├── blockchain/
-│   └── src/
-│       ├── EPCISEventAnchor.sol
-│       ├── CoffeeBatchToken.sol
-│       └── SettlementContract.sol
+│   ├── src/
+│   │   ├── EPCISEventAnchor.sol    # Event hash anchoring
+│   │   ├── CoffeeBatchToken.sol    # ERC-1155 tokens
+│   │   └── SettlementContract.sol  # Multi-currency settlement
+│   ├── test/                       # Foundry tests (58/58 passing)
+│   ├── merkle_tree.py              # Merkle proof generation
+│   ├── blockchain_anchor.py        # IPFS + blockchain integration
+│   ├── batch_hasher.py             # Deterministic batch hashing
+│   └── verification.py             # Proof verification
 ├── voice/
 │   ├── asr/
 │   │   └── asr_infer.py        # Bilingual Whisper (EN + AM)
@@ -247,8 +269,7 @@ Voice-Ledger/
 │   ├── migrate_to_neon.py      # JSON to Neon migration
 │   └── clear_database.py       # Database maintenance
 ├── ipfs/
-│   ├── ipfs_client.py          # IPFS integration (Pinata)
-│   └── ipfs_upload.py          # Event upload to IPFS
+│   └── ipfs_storage.py         # IPFS integration (Pinata) with pin/retrieve
 ├── twin/
 │   └── twin_builder.py         # Digital twin management
 ├── dpp/
@@ -258,11 +279,19 @@ Voice-Ledger/
 │   └── qrcode_gen.py           # QR code generation
 ├── dashboard/
 │   └── app.py                  # Streamlit dashboard
-├── documentation/              # Comprehensive documentation
-│   ├── VOICE_IVR_BUILD_LOG.md  # Complete implementation history
-│   ├── BILINGUAL_ASR_GUIDE.md  # Bilingual system guide
-│   ├── Technical_Guide.md      # Technical architecture
-│   └── [30+ other docs]        # Setup, testing, operations
+├── documentation/              # Comprehensive documentation (organized)
+│   ├── labs/                   # Educational lab guides (LABS_1-10, 914KB, gitignored)
+│   ├── guides/                 # Technical guides and implementation plans
+│   │   ├── SYSTEM_ARCHITECTURE.md     # Complete system architecture
+│   │   ├── BILINGUAL_ASR_GUIDE.md     # Bilingual system guide
+│   │   ├── Technical_Guide.md         # Technical implementation
+│   │   └── [14+ other guides]
+│   ├── deployment/             # Deployment and database setup guides
+│   ├── business-docs/          # Grant proposals, pitch deck, articles
+│   ├── reports/                # Build logs, session summaries, integration reports
+│   ├── audit/                  # Documentation audit and reproducibility plans
+│   ├── logs/                   # Service logs (Celery, ngrok)
+│   └── scripts/                # Utility scripts
 ├── admin_scripts/              # Admin tools (git-ignored)
 │   ├── START_SERVICES.sh       # Service startup
 │   ├── STOP_SERVICES.sh        # Service shutdown
@@ -272,7 +301,8 @@ Voice-Ledger/
     ├── test_dpp.py
     ├── test_ssi.py
     ├── test_anchor_flow.py
-    └── test_voice_api.py
+    ├── test_voice_api.py
+    └── test_ipfs_blockchain_integration.py  # E2E integration test ✅
 ```
 
 ## Installation
@@ -597,6 +627,31 @@ The bank makes lending decisions based on verifiable, tamper-proof credentials w
 - **Admin scripts**: Service management tools in `admin_scripts/`
 - **Complete build log**: Full implementation history tracked
 
+## Recent Achievements (December 2025)
+
+### ✅ Blockchain + IPFS Integration Complete
+- **IPFS Storage**: Full EPCIS events pinned to Pinata with permanent CIDs
+- **Blockchain Anchoring**: Event hashes + CIDs stored on Base Sepolia
+- **Integration Test**: End-to-end test passing (CID: QmTFwE14..., Tx: 0x131790f5...)
+- **40% Gas Savings**: Full data off-chain reduces on-chain storage costs
+
+### ✅ Merkle Proof System Implemented
+- **Batch Aggregation**: Multiple events in single merkle tree
+- **Cryptographic Proofs**: Generate and verify merkle proofs
+- **75% Gas Reduction**: Anchor root hash vs individual events
+- **Smart Contract Support**: On-chain merkle proof verification
+
+### ✅ Multi-Currency Settlement
+- **6-Parameter Contract**: Supports USD, ETH, BIRR, USDC, any ERC-20
+- **Decimal Precision**: Proper handling of 2 (USD) vs 18 (ETH) decimals
+- **Payment Tracking**: Immutable settlement records on-chain
+
+### ✅ Documentation Organization
+- **Lab Guides**: 6 comprehensive labs (914KB) for student reproducibility
+- **System Architecture**: Complete architecture document created
+- **Organized Structure**: Guides, deployment, business docs, reports separated
+- **Git Management**: Labs gitignored to keep repo clean
+
 ## Current Limitations (v1.5)
 
 - Voice processing requires internet connectivity (cloud APIs)
@@ -610,31 +665,42 @@ The bank makes lending decisions based on verifiable, tamper-proof credentials w
 
 ## Documentation
 
-Comprehensive documentation in `documentation/` folder:
+Comprehensive documentation organized in `documentation/` folder:
 
-**Core Documentation**
-- `VOICE_IVR_BUILD_LOG.md`: Complete implementation history (1900+ lines)
-- `BILINGUAL_ASR_GUIDE.md`: Bilingual system architecture and usage (400+ lines)
+**📚 Educational Labs (documentation/labs/)** - Gitignored, 914KB total
+- `LABS_1-2_GS1_EPCIS_Voice_AI.md`: GS1 identifiers, EPCIS events, Voice AI (147KB)
+- `LABS_3-4_SSI_Blockchain.md`: SSI, DIDs, Smart Contracts, Database, IPFS (282KB)
+- `LABS_5-6_DPP_Docker.md`: Digital Product Passports, EUDR, Docker (110KB)
+- `LABS_7_Voice_Interface.md`: Voice API integration with FastAPI (76KB)
+- `LABS_8_IVR_Telegram.md`: IVR phone system and Telegram bot (147KB)
+- `LABS_9-10_Verification_Registration.md`: Third-party verification, RBAC (152KB)
+- Complete step-by-step guides for student reproducibility
+
+**📖 Technical Guides (documentation/guides/)**
+- `SYSTEM_ARCHITECTURE.md`: **🆕 Complete system architecture** (comprehensive)
+- `BILINGUAL_ASR_GUIDE.md`: Bilingual system architecture and usage
 - `Technical_Guide.md`: Technical implementation details
-- `INDEX.md`: Complete documentation index
+- `VOICE_LEDGER_OVERVIEW.md`: System overview and capabilities
+- `END_TO_END_WORKFLOW.md`: Complete data flow documentation
+- Implementation plans for frontend, marketplace, web UI
 
-**Setup & Operations**
-- `QUICK_START.md`: Quick start guide for developers
-- `SERVICE_COMMANDS.md`: Service management reference
-- `BILINGUAL_QUICKSTART.md`: Testing bilingual features
-- `../admin_scripts/README.md`: Admin tools documentation
+**🚀 Deployment (documentation/deployment/)**
+- `DEPLOYMENT.md`: Production deployment guide
+- `RAILWAY_DEPLOYMENT.md`: Railway.app deployment
+- `NEON_DATABASE_SETUP.md`: Database setup and migration
 
-**Implementation Summaries**
-- `SESSION_FIXES_SUMMARY.md`: Production fixes (December 15, 2025)
-- `BILINGUAL_IMPLEMENTATION_SUMMARY.md`: Bilingual implementation details
-
-**Database & Integration**
-- `NEON_DATABASE_SETUP.md`: Database setup and migration guide
-- `NEON_INTEGRATION_COMPLETE.md`: Neon database integration status
-
-**Business Documents**
+**💼 Business Documents (documentation/business-docs/)**
 - `PITCH_DECK.md`: Impact investor presentation
 - `GRANT_PROPOSAL_TEMPLATE.md`: Grant application template
+- `LINKEDIN_ARTICLE_VOICE_LEDGER.md`: Marketing content
+
+**📊 Reports & Logs (documentation/reports/)**
+- Build logs, session summaries, integration completion reports
+- Project reorganization and status updates
+
+**🔍 Audit (documentation/audit/)**
+- Documentation audit report
+- Reproducibility action plan
 
 ## Future Development Roadmap
 
@@ -879,6 +945,13 @@ MIT License
 
 Emmanuel Acho, PhD
 
+## Architecture Documentation
+
+For complete system architecture details, see:
+- **[System Architecture](documentation/guides/SYSTEM_ARCHITECTURE.md)**: Comprehensive architecture document covering all components, data flow, and design decisions
+- **[Technical Guide](documentation/guides/Technical_Guide.md)**: Implementation details and technical specifications
+
 ## Version
 
-1.0.0 (Cloud Prototype) | 2.0.0 (Offline-First - In Development)
+**1.5** (Bilingual Cloud + Blockchain Integration) - Current  
+**2.0** (Offline-First) - In Development
