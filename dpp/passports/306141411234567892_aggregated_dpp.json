@@ -1,0 +1,106 @@
+{
+  "passportId": "DPP-AGGREGATED-306141411234567892",
+  "containerId": "306141411234567892",
+  "version": "2.0.0",
+  "issuedAt": "2025-12-19T13:03:04.615289+00:00",
+  "type": "AggregatedProductPassport",
+  "productInformation": {
+    "productName": "Multi-Origin Coffee Blend",
+    "containerID": "306141411234567892",
+    "totalQuantity": "1000.0 kg",
+    "numberOfContributors": 3,
+    "unit": "kg"
+  },
+  "traceability": {
+    "contributors": [
+      {
+        "farmer": "Abebe Tadesse",
+        "did": "did:key:farmer1test",
+        "contribution": 500.0,
+        "origin": {
+          "lat": 6.1234,
+          "lon": 38.5678,
+          "region": "Yirgacheffe",
+          "country": "ET"
+        },
+        "organic": false,
+        "batchId": "TEST-BATCH-001",
+        "ipfsCid": null,
+        "contributionPercent": "50.0%"
+      },
+      {
+        "farmer": "Tigist Alemu",
+        "did": "did:key:farmer2test",
+        "contribution": 300.0,
+        "origin": {
+          "lat": 6.2345,
+          "lon": 38.6789,
+          "region": "Yirgacheffe",
+          "country": "ET"
+        },
+        "organic": false,
+        "batchId": "TEST-BATCH-002",
+        "ipfsCid": null,
+        "contributionPercent": "30.0%"
+      },
+      {
+        "farmer": "Kebede Worku",
+        "did": "did:key:farmer3test",
+        "contribution": 200.0,
+        "origin": {
+          "lat": 6.3456,
+          "lon": 38.789,
+          "region": "Gedeo",
+          "country": "ET"
+        },
+        "organic": false,
+        "batchId": "TEST-BATCH-003",
+        "ipfsCid": null,
+        "contributionPercent": "20.0%"
+      }
+    ],
+    "aggregationEvents": [
+      {
+        "eventType": "AggregationEvent",
+        "eventHash": "e7bd98f3a0e810d8af8c0c3eaf220733d949e52526ef41d0e8e057ee72c5195b",
+        "ipfsCid": "QmaCzYX8hQTPHDfuHaEQkPp8Joe3LsbCnjYDbKtBvF18Xo",
+        "blockchainTx": null,
+        "timestamp": "2025-12-19T13:03:03.016068"
+      }
+    ]
+  },
+  "dueDiligence": {
+    "eudrCompliant": true,
+    "allFarmersGeolocated": true,
+    "riskAssessment": {
+      "deforestationRisk": "none",
+      "assessmentDate": "2025-12-19",
+      "assessor": "Voice Ledger Platform v2.0",
+      "methodology": "Multi-farmer aggregation + blockchain traceability"
+    }
+  },
+  "blockchain": {
+    "network": "Base Sepolia",
+    "aggregationProofs": [
+      {
+        "eventType": "AggregationEvent",
+        "eventHash": "e7bd98f3a0e810d8af8c0c3eaf220733d949e52526ef41d0e8e057ee72c5195b",
+        "ipfsCid": "QmaCzYX8hQTPHDfuHaEQkPp8Joe3LsbCnjYDbKtBvF18Xo",
+        "blockchainTx": null,
+        "timestamp": "2025-12-19T13:03:03.016068"
+      }
+    ],
+    "anchors": [
+      {
+        "eventType": "AggregationEvent",
+        "eventHash": "e7bd98f3a0e810d8af8c0c3eaf220733d949e52526ef41d0e8e057ee72c5195b",
+        "ipfsCid": "QmaCzYX8hQTPHDfuHaEQkPp8Joe3LsbCnjYDbKtBvF18Xo",
+        "blockchainTx": null,
+        "timestamp": "2025-12-19T13:03:03.016068"
+      }
+    ]
+  },
+  "qrCode": {
+    "url": "https://dpp.voiceledger.io/container/306141411234567892"
+  }
+}

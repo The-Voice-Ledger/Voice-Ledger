@@ -351,6 +351,30 @@ class OfflineQueue(Base):
     synced_at = Column(DateTime)
     error_message = Column(Text)
 
+class AggregationRelationship(Base):
+    """Parent-child relationships for EPCIS AggregationEvents"""
+    __tablename__ = "aggregation_relationships"
+    
+    id = Column(Integer, primary_key=True)
+    parent_sscc = Column(String(18), nullable=False, index=True)
+    child_identifier = Column(String(100), nullable=False, index=True)
+    child_type = Column(String(20), nullable=False)  # 'batch', 'sscc', 'pallet'
+    contribution_kg = Column(Float)  # Quantity contributed from child (for partial aggregation)
+    
+    aggregation_event_id = Column(Integer, ForeignKey("epcis_events.id"))
+    disaggregation_event_id = Column(Integer, ForeignKey("epcis_events.id"))
+    
+    aggregated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    disaggregated_at = Column(DateTime)
+    is_active = Column(Boolean, nullable=False, default=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    aggregation_event = relationship("EPCISEvent", foreign_keys=[aggregation_event_id])
+    disaggregation_event = relationship("EPCISEvent", foreign_keys=[disaggregation_event_id])
+
 # Database connection
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)

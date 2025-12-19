@@ -79,8 +79,8 @@ def create_verification_event(
         
         # Format proper GS1 identifiers
         # SGTIN format: urn:epc:id:sgtin:CompanyPrefix.ItemRefAndIndicator.SerialNumber
-        # Using batch_id as serial number
-        sgtin = f"urn:epc:id:sgtin:{gtin}.{batch_id}"
+        from gs1.identifiers import gtin_to_sgtin_urn
+        sgtin = gtin_to_sgtin_urn(gtin, batch_id)
         
         # LGTIN format for quantity list (no serial)
         lgtin = f"urn:epc:class:lgtin:{gtin}"

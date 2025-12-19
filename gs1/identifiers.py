@@ -99,3 +99,37 @@ def sscc(serial: str) -> str:
     # SSCC: extension (1) + company prefix (7) + serial ref (9) + check digit (1) = 18 total
     base = "0" + PREFIX + serial.zfill(9)
     return base + calculate_check_digit(base)
+
+
+def gtin_to_sgtin_urn(gtin_14: str, serial_number: str) -> str:
+    """
+    Convert GTIN-14 to SGTIN URN format per GS1 EPCIS 2.0 standard.
+    
+    SGTIN URN Format: urn:epc:id:sgtin:CompanyPrefix.ItemRefAndIndicator.SerialNumber
+    
+    GTIN-14 Structure: [Indicator(1)][CompanyPrefix(7)][ItemRef(5)][CheckDigit(1)]
+    
+    For SGTIN URN:
+    - CompanyPrefix: digits 1-7 (skip indicator digit 0)
+    - ItemRefAndIndicator: digits 7-13 (item ref + check digit)
+    - SerialNumber: batch_id or serial
+    
+    Args:
+        gtin_14: 14-digit GTIN (e.g., "00614141165623")
+        serial_number: Batch ID or serial number (e.g., "BATCH-001")
+    
+    Returns:
+        GS1-compliant SGTIN URN
+    
+    Example:
+        >>> gtin_to_sgtin_urn("00614141165623", "BATCH-001")
+        'urn:epc:id:sgtin:0614141.165623.BATCH-001'
+    """
+    if len(gtin_14) != 14:
+        raise ValueError(f"GTIN must be 14 digits, got {len(gtin_14)}")
+    
+    # Extract components (skip indicator digit at position 0)
+    company_prefix = gtin_14[1:8]  # 7 digits
+    item_ref_and_check = gtin_14[8:14]  # 5 digits item ref + 1 check digit
+    
+    return f"urn:epc:id:sgtin:{company_prefix}.{item_ref_and_check}.{serial_number}"

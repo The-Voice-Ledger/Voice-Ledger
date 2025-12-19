@@ -89,10 +89,11 @@ def create_shipment_event(
     """
     
     from database.crud import create_event
+    from gs1.identifiers import gtin_to_sgtin_urn
     
     # Generate GS1 URN identifiers following EPCIS 2.0 spec
     # SGTIN: Serialized Global Trade Item Number (individual batch)
-    sgtin = f"urn:epc:id:sgtin:{gtin[:13]}.{gtin[13]}.{batch_id}"
+    sgtin = gtin_to_sgtin_urn(gtin, batch_id)
     
     # LGTIN: Lot/Batch Global Trade Item Number (for quantity)
     lgtin = f"urn:epc:class:lgtin:{gtin[:13]}.{gtin[13]}.{batch_id}"
@@ -185,12 +186,16 @@ def create_shipment_event(
     # The create_event function handles IPFS and blockchain automatically
     result = create_event(
         db=db,
-        event_hash=event_hash,
-        event_type="ObjectEvent",
-        event_json=epcis_event,
-        biz_step="shipping",
-        batch_id=batch_db_id,
-        submitter_id=submitter_db_id,
+        event_data={
+            "event_type": "ObjectEvent",
+            "event_json": epcis_event,
+            "event_hash": event_hash,
+            "event_time": datetime.fromisoformat(event_time.replace('Z', '+00:00')),
+            "canonical_nquads": event_json,
+            "biz_step": "shipping",
+            "batch_id": batch_db_id,
+            "submitter_id": submitter_db_id
+        },
         pin_to_ipfs=True,
         anchor_to_blockchain=True
     )
@@ -200,9 +205,9 @@ def create_shipment_event(
     
     return {
         "event_hash": event_hash,
-        "ipfs_cid": result.get("ipfs_cid"),
-        "blockchain_tx_hash": result.get("blockchain_tx_hash"),
-        "blockchain_confirmed": result.get("blockchain_confirmed", False),
+        "ipfs_cid": result.ipfs_cid if hasattr(result, 'ipfs_cid') else None,
+        "blockchain_tx_hash": result.blockchain_tx_hash if hasattr(result, 'blockchain_tx_hash') else None,
+        "blockchain_confirmed": result.blockchain_confirmed if hasattr(result, 'blockchain_confirmed') else False,
         "event": epcis_event
     }
 

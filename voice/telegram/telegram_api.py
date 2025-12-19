@@ -263,25 +263,40 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 user_id=user_id,
                 message=(
                     "👋 *Welcome to Voice Ledger!*\n\n"
-                    "I help coffee farmers and cooperatives create digital records using voice commands.\n\n"
-                    "🎙️ *What You Can Do:*\n\n"
-                    "📦 *Create New Batch* (Commission)\n"
-                    "Say: \"New batch of 50 kg Yirgacheffe from Gedeo farm\"\n\n"
-                    "📤 *Ship Existing Batch* (Shipment)\n"
-                    "Say: \"Shipped batch ABC123 to Addis warehouse\"\n\n"
-                    "📥 *Receive Batch* (Receipt)\n"
-                    "Say: \"Received batch XYZ456 from Abebe cooperative\"\n\n"
-                    "⚙️ *Process Coffee* (Transformation)\n"
-                    "Say: \"Washed batch DEF789 at processing station\"\n\n"
-                    "💬 *Voice Commands (NEW!):*\n"
-                    "You can also say:\n"
-                    "- \"I want to register my cooperative\" → Start registration\n"
-                    "- \"Help me understand the system\" → Get help\n"
-                    "- \"Show me my batches\" → View your batches\n\n"
-                    "📝 *Text Commands:*\n"
-                    "Type /help to see all commands\n"
-                    "Type /register to register your organization\n\n"
-                    "Just record a voice message or type a command to get started! 🎤"
+                    "I help coffee farmers and cooperatives create digital records using voice or text commands.\n\n"
+                    "📝 *System Commands:*\n"
+                    "/start - This welcome message\n"
+                    "/help - Detailed help & examples\n"
+                    "/register - Register your organization\n"
+                    "/status - Check system status\n"
+                    "/myidentity - Show your DID\n"
+                    "/mycredentials - View track record\n"
+                    "/mybatches - List your batches\n"
+                    "/export - Get QR code for credentials\n\n"
+                    "🎙️ *Voice Commands:*\n"
+                    "Record a voice message saying:\n"
+                    "• \"Commission 50 kg Yirgacheffe\"\n"
+                    "• \"Ship batch ABC123 to Addis\"\n"
+                    "• \"Received batch XYZ456\"\n"
+                    "• \"Roast batch DEF789 output 850kg\"\n"
+                    "• \"Pack batches A B C into pallet\"\n"
+                    "• \"Split batch into 600kg and 400kg\"\n\n"
+                    "📋 *Text Alternatives: For Developers (testing)*\n"
+                    "/commission <qty> <variety> <origin>\n"
+                    "  Example: /commission 500 Sidama MyFarm\n"
+                    "/ship <batch_id> <destination>\n"
+                    "  Example: /ship BATCH_123 AddisWarehouse\n"
+                    "/receive <batch_id> [condition]\n"
+                    "  Example: /receive BATCH_123 good\n"
+                    "/transform <batch_id> <type> <output_kg>\n"
+                    "  Example: /transform BATCH_123 roasting 850\n"
+                    "/pack <batch1> <batch2> ... <container>\n"
+                    "  Example: /pack BATCH_1 BATCH_2 PALLET-001\n"
+                    "/unpack <container_id>\n"
+                    "  Example: /unpack PALLET-001\n"
+                    "/split <batch_id> <qty1> <qty2> [dest1] [dest2]\n"
+                    "  Example: /split BATCH_123 600 400 EUR ASIA\n\n"
+                    "Type /help for detailed examples! 🎤"
                 )
             )
             logger.info(f"/start notification result: {result}")
@@ -294,31 +309,456 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 user_id=user_id,
                 message=(
                     "ℹ️ *Voice Ledger Help*\n\n"
-                    "*Text Commands:*\n"
-                    "/start - Welcome & examples\n"
+                    "*System Commands:*\n"
+                    "/start - Welcome message\n"
                     "/help - This help message\n"
                     "/register - Register as cooperative/exporter/buyer\n"
                     "/status - Check system status\n"
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
                     "/mybatches - List your batches\n"
+                    "/dpp <container\\_id> - Generate Digital Product Passport\n"
                     "/export - Get QR code for credentials\n\n"
-                    "*Voice Command Types:*\n\n"
+                    "*Supply Chain Commands (Text):*\n"
+                    "/commission <qty> <variety> <origin> - Create batch\n"
+                    "/ship <batch\\_id> <destination> - Ship batch\n"
+                    "/receive <batch\\_id> <condition> - Receive batch\n"
+                    "/transform <batch\\_id> <type> <output\\_qty> - Process\n"
+                    "/pack <batch1> <batch2> <container> - Aggregate\n"
+                    "/unpack <container\\_id> - Disaggregate\n"
+                    "/split <batch\\_id> <qty1> <qty2> - Split batch\n\n"
+                    "*Voice Commands (Preferred):*\n\n"
                     "1️⃣ *Commission* - Create new batch\n"
-                    "   Example: \"New batch, 50 kg Sidama from my farm\"\n\n"
+                    "   🎙️ \"Commission 50 kg Sidama from my farm\"\n"
+                    "   📝 /commission 50 Sidama MyFarm\n\n"
                     "2️⃣ *Shipment* - Send existing batch\n"
-                    "   Example: \"Shipped batch ABC to warehouse\"\n"
-                    "   ⚠️ Requires batch ID\n\n"
+                    "   🎙️ \"Ship batch ABC123 to warehouse\"\n"
+                    "   📝 /ship ABC123 warehouse\n\n"
                     "3️⃣ *Receipt* - Receive from supplier\n"
-                    "   Example: \"Received batch XYZ from cooperative\"\n"
-                    "   ⚠️ Requires batch ID\n\n"
+                    "   🎙️ \"Received batch XYZ in good condition\"\n"
+                    "   📝 /receive XYZ good\n\n"
                     "4️⃣ *Transformation* - Process coffee\n"
-                    "   Example: \"Washed batch DEF at station\"\n"
-                    "   ⚠️ Requires batch ID\n\n"
-                    "💡 Tip: Always mention quantity, variety, and origin for new batches!"
-                )
+                    "   🎙️ \"Roast batch DEF producing 850kg\"\n"
+                    "   📝 /transform DEF roasting 850\n\n"
+                    "5️⃣ *Pack* - Aggregate batches\n"
+                    "   🎙️ \"Pack batches A and B into pallet\"\n"
+                    "   📝 /pack A B PALLET-001\n\n"
+                    "6️⃣ *Unpack* - Disaggregate container\n"
+                    "   🎙️ \"Unpack container PALLET-001\"\n"
+                    "   📝 /unpack PALLET-001\n\n"
+                    "7️⃣ *Split* - Divide batch\n"
+                    "   🎙️ \"Split batch into 600kg and 400kg\"\n"
+                    "   📝 /split ABC 600 400\n\n"
+                    "💡 Voice is preferred - text commands for dev/testing!"
+                ),
+                parse_mode=None
             )
             return {"ok": True, "message": "Sent help message"}
+        
+        # Handle text commands for supply chain operations (dev/testing alternatives to voice)
+        if text.startswith('/commission '):
+            logger.info(f"Handling /commission command for user {user_id}: {text}")
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /commission <qty> <variety> <origin>
+            parts = text.split(maxsplit=3)
+            if len(parts) < 4:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /commission <quantity> <variety> <origin>\nExample: /commission 500 Sidama MyFarm"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                entities = {
+                    'quantity': parts[1],
+                    'unit': 'kg',
+                    'product': parts[2],
+                    'origin': parts[3]
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='record_commission',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                logger.info(f"Commission response: {response_text[:100]}")
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            except Exception as e:
+                logger.error(f"Error processing /commission: {e}", exc_info=True)
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=f"❌ Error: {str(e)}"
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Commission processed"}
+        
+        if text.startswith('/ship '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /ship <batch_id> <destination>
+            parts = text.split(maxsplit=2)
+            if len(parts) < 3:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /ship <batch_id> <destination>\nExample: /ship ABC123 Addis_Warehouse"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                entities = {
+                    'batch_id': parts[1],
+                    'destination': parts[2]
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='record_shipment',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Shipment processed"}
+        
+        if text.startswith('/receive '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /receive <batch_id> <condition>
+            parts = text.split(maxsplit=2)
+            if len(parts) < 2:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /receive <batch_id> [condition]\nExample: /receive ABC123 good"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                entities = {
+                    'batch_id': parts[1],
+                    'condition': parts[2] if len(parts) > 2 else 'good'
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='record_receipt',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Receipt processed"}
+        
+        if text.startswith('/transform '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /transform <batch_id> <type> <output_qty>
+            parts = text.split(maxsplit=3)
+            if len(parts) < 4:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /transform <batch_id> <type> <output_kg>\nExample: /transform ABC123 roasting 850"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                entities = {
+                    'batch_id': parts[1],
+                    'transformation_type': parts[2],
+                    'output_quantity': parts[3],
+                    'output_unit': 'kg'
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='record_transformation',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Transformation processed"}
+        
+        if text.startswith('/pack '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /pack <batch1> <batch2> ... <container_id>
+            parts = text.split()
+            if len(parts) < 3:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /pack <batch1> <batch2> ... <container_id>\nExample: /pack ABC123 DEF456 PALLET-001"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                # Last part is container_id, rest are batch_ids
+                batch_ids = parts[1:-1]
+                container_id = parts[-1]
+                
+                entities = {
+                    'batch_ids': batch_ids,
+                    'container_id': container_id
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='pack_batches',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Pack processed"}
+        
+        if text.startswith('/unpack '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /unpack <container_id>
+            parts = text.split()
+            if len(parts) < 2:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /unpack <container_id>\nExample: /unpack PALLET-001"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                entities = {
+                    'container_id': parts[1]
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='unpack_batches',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Unpack processed"}
+        
+        if text.startswith('/split '):
+            from database.models import SessionLocal
+            from voice.command_integration import execute_voice_command
+            from ssi.user_identity import get_or_create_user_identity
+            
+            # Parse: /split <batch_id> <qty1> <qty2> ...
+            parts = text.split()
+            if len(parts) < 3:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /split <batch_id> <qty1> <qty2> [dest1] [dest2]\nExample: /split ABC123 600 400\nOr: /split ABC123 600 400 EUR ASIA"
+                )
+                return {"ok": True}
+            
+            db = SessionLocal()
+            try:
+                username = message.get('from', {}).get('username')
+                first_name = message.get('from', {}).get('first_name')
+                last_name = message.get('from', {}).get('last_name')
+                
+                identity = get_or_create_user_identity(
+                    telegram_user_id=user_id,
+                    telegram_username=username,
+                    telegram_first_name=first_name,
+                    telegram_last_name=last_name,
+                    db_session=db
+                )
+                
+                batch_id = parts[1]
+                quantities = []
+                destinations = []
+                
+                # Parse quantities and optional destinations
+                i = 2
+                while i < len(parts):
+                    try:
+                        qty = float(parts[i])
+                        quantities.append(qty)
+                        # Check if next part is destination (non-numeric)
+                        if i + 1 < len(parts):
+                            try:
+                                float(parts[i + 1])
+                                destinations.append(f"SPLIT_{i-1}")
+                                i += 1
+                            except ValueError:
+                                destinations.append(parts[i + 1])
+                                i += 2
+                        else:
+                            destinations.append(f"SPLIT_{i-1}")
+                            i += 1
+                    except ValueError:
+                        break
+                
+                # Build splits array
+                splits = [
+                    {'quantity_kg': qty, 'destination': dest}
+                    for qty, dest in zip(quantities, destinations)
+                ]
+                
+                entities = {
+                    'batch_id': batch_id,
+                    'splits': splits
+                }
+                
+                response_text, response_data = execute_voice_command(
+                    db=db,
+                    intent='split_batch',
+                    entities=entities,
+                    user_id=identity.get('user_id'),
+                    user_did=identity['did']
+                )
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_text
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Split processed"}
         
         # Handle /status command
         if text.startswith('/status'):
@@ -545,6 +985,98 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             finally:
                 db.close()
             return {"ok": True, "message": "Sent batches"}
+        
+        # Handle /dpp command - Generate Digital Product Passport for aggregated container
+        if text.startswith('/dpp '):
+            from dpp.dpp_builder import build_aggregated_dpp
+            from database.models import SessionLocal, CoffeeBatch
+            import json
+            
+            # Parse: /dpp <container_id>
+            parts = text.split(maxsplit=1)
+            if len(parts) < 2:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Usage: /dpp <container_id>\nExample: /dpp 306141411234567892"
+                )
+                return {"ok": True}
+            
+            container_id = parts[1].strip()
+            
+            db = SessionLocal()
+            try:
+                # Verify container exists by checking if it has aggregation relationships
+                from database.models import AggregationRelationship
+                relationships = db.query(AggregationRelationship).filter(
+                    AggregationRelationship.parent_sscc == container_id,
+                    AggregationRelationship.is_active == True
+                ).first()
+                
+                if not relationships:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=f"❌ Container/SSCC not found or has no batches: {container_id}"
+                    )
+                    return {"ok": True}
+                
+                # Build aggregated DPP (container_id is an SSCC, not a batch_id)
+                logger.info(f"Building aggregated DPP for SSCC {container_id}")
+                dpp = build_aggregated_dpp(container_id)
+                
+                # Format response with key information
+                contributors = dpp.get('traceability', {}).get('contributors', [])
+                num_contributors = len(contributors)
+                total_qty = dpp.get('productInformation', {}).get('totalQuantity', 'Unknown')
+                eudr_compliant = dpp.get('dueDiligence', {}).get('eudrCompliant', False)
+                all_geolocated = dpp.get('dueDiligence', {}).get('allFarmersGeolocated', False)
+                
+                # Build contributors list
+                contributor_lines = []
+                for c in contributors[:5]:  # Show first 5 farmers
+                    farmer_name = c.get('farmer', 'Unknown')
+                    contribution = c.get('contributionPercent', '0%')
+                    region = c.get('origin', {}).get('region', 'Unknown')
+                    contributor_lines.append(
+                        f"  • {farmer_name} - {contribution} ({region})"
+                    )
+                
+                if num_contributors > 5:
+                    contributor_lines.append(f"  ... and {num_contributors - 5} more farmers")
+                
+                contributors_text = "\n".join(contributor_lines)
+                
+                # Send formatted DPP summary
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        f"📄 *Digital Product Passport*\n\n"
+                        f"*Container:* `{container_id}`\n"
+                        f"*Total Quantity:* {total_qty}\n"
+                        f"*Contributors:* {num_contributors} farmers\n\n"
+                        f"*Farmer Contributions:*\n{contributors_text}\n\n"
+                        f"*EUDR Compliance:* {'✅ Yes' if eudr_compliant else '❌ No'}\n"
+                        f"*All Farmers Geolocated:* {'✅ Yes' if all_geolocated else '❌ No'}\n\n"
+                        f"*QR Code:* {dpp.get('qrCode', {}).get('url', 'N/A')}\n\n"
+                        f"Full DPP generated with blockchain proofs and farmer lineage."
+                    )
+                )
+                
+                logger.info(f"Successfully generated DPP for {container_id} with {num_contributors} contributors")
+                
+            except Exception as e:
+                logger.error(f"Error generating DPP for {container_id}: {e}", exc_info=True)
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=f"❌ Error generating DPP: {str(e)}"
+                )
+            finally:
+                db.close()
+            
+            return {"ok": True, "message": "Generated DPP"}
         
         # /export - Generate QR code with verifiable credentials
         if text.startswith('/export'):

@@ -84,9 +84,11 @@ def create_commission_event(
         ...     print(f"Event: {event['event_hash']}")
     """
     try:
+        from gs1.identifiers import gtin_to_sgtin_urn
+        
         # Build GS1 URN identifiers (EPCIS 2.0 compliant)
         # SGTIN: Serialized Global Trade Item Number
-        sgtin = f"urn:epc:id:sgtin:{gtin}.{batch_id}"
+        sgtin = gtin_to_sgtin_urn(gtin, batch_id)
         
         # LGTIN: Lot/Global Trade Item Number (for quantity)
         lgtin = f"urn:epc:class:lgtin:{gtin}"
