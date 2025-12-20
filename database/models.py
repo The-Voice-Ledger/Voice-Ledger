@@ -379,6 +379,23 @@ class AggregationRelationship(Base):
     aggregation_event = relationship("EPCISEvent", foreign_keys=[aggregation_event_id])
     disaggregation_event = relationship("EPCISEvent", foreign_keys=[disaggregation_event_id])
 
+class ProductFarmerLineage(Base):
+    """Materialized view for fast farmer lineage queries across aggregations"""
+    __tablename__ = "product_farmer_lineage"
+    __table_args__ = {'info': {'is_view': True}}  # Mark as view, not a regular table
+    
+    product_id = Column(String(100), primary_key=True)
+    farmer_id = Column(Integer, primary_key=True)
+    farmer_identifier = Column(String(50))
+    farmer_name = Column(String(200))
+    farmer_did = Column(String(200))
+    total_contribution_kg = Column(Float)
+    origin_region = Column(String(100))
+    origin_country = Column(String(2))
+    latitude = Column(Float)
+    longitude = Column(Float)
+    max_depth = Column(Integer)
+
 # Database connection
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)
