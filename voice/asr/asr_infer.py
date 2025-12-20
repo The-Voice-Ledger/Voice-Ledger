@@ -122,9 +122,72 @@ def transcribe_with_amharic_model(audio_file_path: str) -> str:
     return transcription.strip()
 
 
+def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Dict[str, str]:
+    """
+    Transcribe audio based on user's language preference (not detection).
+    
+    This function routes audio directly to the appropriate model based on
+    the user's chosen language during registration, without relying on
+    potentially unreliable language detection.
+    
+    Args:
+        audio_file_path: Path to the audio file (supports WAV, MP3, M4A, etc.)
+        user_language: User's preferred language ('en' or 'am')
+        
+    Returns:
+        Dictionary with 'text' and 'language' keys
+        
+    Raises:
+        FileNotFoundError: If audio file doesn't exist
+        Exception: If transcription fails
+        
+    Example:
+        >>> result = run_asr_with_user_preference("voice.wav", "am")
+        >>> print(f"Language: {result['language']}, Text: {result['text']}")
+        Language: am, Text: አዲስ ቢራ 50 ኪሎ ከገዴኦ እርሻ
+    """
+    audio_path = Path(audio_file_path)
+    
+    if not audio_path.exists():
+        raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+    
+    try:
+        logger.info(f"Transcribing with user preference: {user_language}")
+        
+        # Route based on user's language choice
+        if user_language.lower() in ['am', 'amharic']:
+            # Use local Amharic model
+            logger.info("Routing to local Amharic Whisper model")
+            transcript = transcribe_with_amharic_model(audio_file_path)
+            language = 'am'
+        else:
+            # Use OpenAI Whisper API for English
+            logger.info("Routing to OpenAI Whisper API (English)")
+            with open(audio_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+            transcript = transcript.strip()
+            language = 'en'
+        
+        return {
+            'text': transcript,
+            'language': language
+        }
+        
+    except Exception as e:
+        logger.error(f"ASR failed: {str(e)}")
+        raise Exception(f"ASR failed: {str(e)}")
+
+
 def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[str, str]:
     """
     Transcribe audio file with automatic language detection and routing.
+    
+    DEPRECATED: Use run_asr_with_user_preference() instead for conversational AI.
+    This function is kept for backward compatibility and fallback scenarios.
     
     This function intelligently routes audio to the appropriate model:
     - Amharic audio → Local fine-tuned Whisper model (b1n1yam/shook-medium-amharic-2k)

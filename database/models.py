@@ -65,6 +65,10 @@ class UserIdentity(Base):
     approved_at = Column(DateTime)
     approved_by_admin_id = Column(Integer)
     
+    # Language preference for conversational AI
+    preferred_language = Column(String(2), default='en', nullable=False, index=True)  # 'en' or 'am'
+    language_set_at = Column(DateTime, default=datetime.utcnow)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = Column(DateTime, default=datetime.utcnow)

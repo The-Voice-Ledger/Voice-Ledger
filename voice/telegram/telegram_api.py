@@ -262,27 +262,31 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 channel_name='telegram',
                 user_id=user_id,
                 message=(
-                    "👋 *Welcome to Voice Ledger!*\n\n"
-                    "I help coffee farmers and cooperatives create digital records using voice or text commands.\n\n"
-                    "📝 *System Commands:*\n"
+                    "👋 Welcome to Voice Ledger!\n\n"
+                    "I help coffee farmers, cooperatives, exporters, and buyers create digital supply chain records using natural conversation in English or Amharic.\n\n"
+                    "🗣️ Just talk naturally! I'll ask questions if I need more details.\n\n"
+                    "📝 System Commands:\n"
                     "/start - This welcome message\n"
                     "/help - Detailed help & examples\n"
-                    "/register - Register your organization\n"
+                    "/register - Register as farmer/manager/exporter/buyer\n"
                     "/status - Check system status\n"
+                    "/language - Show voice language preference\n"
+                    "/english - Switch to English voice commands\n"
+                    "/amharic - Switch to Amharic voice commands\n"
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
                     "/mybatches - List your batches\n"
                     "/verify - Verify a batch (managers only)\n"
                     "/export - Get QR code for credentials\n\n"
-                    "🎙️ *Voice Commands:*\n"
-                    "Record a voice message saying:\n"
-                    "• \"Commission 50 kg Yirgacheffe\"\n"
-                    "• \"Ship batch ABC123 to Addis\"\n"
-                    "• \"Received batch XYZ456\"\n"
-                    "• \"Roast batch DEF789 output 850kg\"\n"
-                    "• \"Pack batches A B C into pallet\"\n"
-                    "• \"Split batch into 600kg and 400kg\"\n\n"
-                    "📋 *Text Alternatives: For Developers (testing)*\n"
+                    "🎙️ Conversational Voice Commands:\n"
+                    "Just send a voice message in natural language:\n"
+                    "• Farmers: \"I harvested 50 kg coffee from Gedeo\"\n"
+                    "• Managers: \"Ship batch ABC123 to Addis warehouse\"\n"
+                    "• Exporters: \"Received batch XYZ456 in good condition\"\n"
+                    "• Buyers: \"Roast batch DEF789, output 850kg\"\n"
+                    "• Anyone: \"Pack batches A B C into pallet\"\n\n"
+                    "💬 I'll have a conversation with you to collect any missing information!\n\n"
+                    "📋 Text Alternatives: For Developers (testing)\n"
                     "/commission <qty> <variety> <origin>\n"
                     "  Example: /commission 500 Sidama MyFarm\n"
                     "/ship <batch_id> <destination>\n"
@@ -291,7 +295,6 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "  Example: /receive BATCH_123 good\n"
                     "/transform <batch_id> <type> <output_kg>\n"
                     "  Example: /transform 00614141852251 roasting 850\n"
-                    "  Note: You can use GTIN or batch_id\n"
                     "/pack <batch1> <batch2> ... <container>\n"
                     "  Example: /pack BATCH_1 BATCH_2 PALLET-001\n"
                     "/unpack <container_id>\n"
@@ -299,7 +302,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/split <batch_id> <qty1> <qty2> [dest1] [dest2]\n"
                     "  Example: /split BATCH_123 600 400 EUR ASIA\n\n"
                     "Type /help for detailed examples! 🎤"
-                )
+                ),
+                parse_mode=None
             )
             logger.info(f"/start notification result: {result}")
             return {"ok": True, "message": "Sent welcome message"}
@@ -314,15 +318,36 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "*System Commands:*\n"
                     "/start - Welcome message\n"
                     "/help - This help message\n"
-                    "/register - Register as cooperative/exporter/buyer\n"
+                    "/register - Register as farmer/manager/exporter/buyer\n"
                     "/status - Check system status\n"
+                    "/language - Show voice language preference\n"
+                    "/english - Switch to English voice commands\n"
+                    "/amharic - Switch to Amharic voice commands\n"
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
                     "/mybatches - List your batches\n"
                     "/verify <gtin> <qty> [notes] - Verify batch (managers)\n"
                     "/dpp <container\\_id> - Generate Digital Product Passport\n"
                     "/export - Get QR code for credentials\n\n"
-                    "*Supply Chain Commands (Text):*\n"
+                    "*Conversational Voice (Preferred):*\n\n"
+                    "🗣️ Just send voice messages naturally! I'll have a conversation with you to gather all the details I need.\n\n"
+                    "Examples:\n"
+                    "👨‍🌾 *Farmers:*\n"
+                    "   🎙️ \"I harvested 50 kg coffee from Gedeo\"\n"
+                    "   💬 I'll ask: What variety? What product type?\n\n"
+                    "📦 *Managers:*\n"
+                    "   🎙️ \"Ship batch ABC123 to warehouse\"\n"
+                    "   💬 I'll ask: Which warehouse location?\n\n"
+                    "🏭 *Exporters:*\n"
+                    "   🎙️ \"Received batch XYZ456\"\n"
+                    "   💬 I'll ask: What's the condition?\n\n"
+                    "☕ *Buyers/Roasters:*\n"
+                    "   🎙️ \"Roast batch DEF789\"\n"
+                    "   💬 I'll ask: What's the output quantity?\n\n"
+                    "📊 *Advanced:*\n"
+                    "   🎙️ \"Pack batches A and B into pallet\"\n"
+                    "   🎙️ \"Split batch into 600kg and 400kg\"\n\n"
+                    "*Supply Chain Commands (Text - Dev/Testing):*\n"
                     "/commission <qty> <variety> <origin> - Create batch\n"
                     "/ship <batch\\_id> <destination> - Ship batch\n"
                     "/receive <batch\\_id> <condition> - Receive batch\n"
@@ -330,34 +355,74 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/pack <batch1> <batch2> <container> - Aggregate\n"
                     "/unpack <container\\_id> - Disaggregate\n"
                     "/split <batch\\_id> <qty1> <qty2> - Split batch\n\n"
-                    "*Voice Commands (Preferred):*\n\n"
-                    "1️⃣ *Commission* - Create new batch\n"
-                    "   🎙️ \"Commission 50 kg Sidama from my farm\"\n"
-                    "   📝 /commission 50 Sidama MyFarm\n\n"
-                    "2️⃣ *Shipment* - Send existing batch\n"
-                    "   🎙️ \"Ship batch ABC123 to warehouse\"\n"
-                    "   📝 /ship ABC123 warehouse\n\n"
-                    "3️⃣ *Receipt* - Receive from supplier\n"
-                    "   🎙️ \"Received batch XYZ in good condition\"\n"
-                    "   📝 /receive XYZ good\n\n"
-                    "4️⃣ *Transformation* - Process coffee\n"
-                    "   🎙️ \"Roast batch DEF producing 850kg\"\n"
-                    "   📝 /transform 00614141852251 roasting 850\n"
-                    "   💡 Tip: Use GTIN (shorter) instead of batch\\_id\n\n"
-                    "5️⃣ *Pack* - Aggregate batches\n"
-                    "   🎙️ \"Pack batches A and B into pallet\"\n"
-                    "   📝 /pack A B PALLET-001\n\n"
-                    "6️⃣ *Unpack* - Disaggregate container\n"
-                    "   🎙️ \"Unpack container PALLET-001\"\n"
-                    "   📝 /unpack PALLET-001\n\n"
-                    "7️⃣ *Split* - Divide batch\n"
-                    "   🎙️ \"Split batch into 600kg and 400kg\"\n"
-                    "   📝 /split ABC 600 400\n\n"
-                    "💡 Voice is preferred - text commands for dev/testing!"
+                    "💡 Voice in your preferred language (EN/AM) is the easiest way!"
                 ),
                 parse_mode=None
             )
             return {"ok": True, "message": "Sent help message"}
+        
+        # Handle /admin command - show pending registrations
+        if text.startswith('/admin'):
+            logger.info(f"Handling /admin command for user {user_id}")
+            from database.models import SessionLocal, PendingRegistration
+            from ssi.user_identity import get_user_by_telegram_id
+            
+            db = SessionLocal()
+            try:
+                # Check if user is admin
+                user = get_user_by_telegram_id(user_id, db)
+                if not user or user.role != 'ADMIN':
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="❌ You must be an admin to use this command."
+                    )
+                    return {"ok": True}
+                
+                # Get pending registrations
+                pending = db.query(PendingRegistration).filter(
+                    PendingRegistration.status == 'pending'
+                ).order_by(PendingRegistration.created_at.desc()).limit(10).all()
+                
+                if not pending:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="✅ No pending registrations!"
+                    )
+                    return {"ok": True}
+                
+                # Format pending registrations
+                message = f"📋 Pending Registrations ({len(pending)}):\n\n"
+                for reg in pending:
+                    message += (
+                        f"👤 {reg.full_name}\n"
+                        f"   Role: {reg.requested_role}\n"
+                        f"   Org: {reg.organization_name}\n"
+                        f"   Location: {reg.location}\n"
+                        f"   Date: {reg.created_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+                    )
+                
+                base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+                message += f"\n🌐 Review & approve: {base_url}/admin/registrations"
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=message
+                )
+                return {"ok": True}
+                
+            except Exception as e:
+                logger.error(f"Error in /admin command: {e}", exc_info=True)
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ Error retrieving pending registrations."
+                )
+                return {"ok": True}
+            finally:
+                db.close()
         
         # Handle text commands for supply chain operations (dev/testing alternatives to voice)
         if text.startswith('/commission '):
@@ -820,6 +885,107 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
             
             return {"ok": True, "message": "Registration started"}
+        
+        # Handle /language command - show current language
+        if text.startswith('/language'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from database.models import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                user = get_user_by_telegram_id(user_id, db)
+                if user:
+                    lang_name = "English 🇺🇸" if user.preferred_language == 'en' else "Amharic (አማርኛ) 🇪🇹"
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            f"🌍 *Current Language*\n\n"
+                            f"Your voice command language: *{lang_name}*\n\n"
+                            f"To change language:\n"
+                            f"• /english - Switch to English\n"
+                            f"• /amharic - Switch to Amharic"
+                        ),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="Please register first: /register"
+                    )
+            finally:
+                db.close()
+            
+            return {"ok": True, "message": "Language info sent"}
+        
+        # Handle /english command - switch to English
+        if text.startswith('/english'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from database.models import SessionLocal
+            from voice.integrations import ConversationManager
+            
+            db = SessionLocal()
+            try:
+                user = get_user_by_telegram_id(user_id, db)
+                if user:
+                    user.preferred_language = 'en'
+                    user.language_set_at = datetime.utcnow()
+                    db.commit()
+                    
+                    # Clear conversation history
+                    ConversationManager.clear_conversation(user.id)
+                    
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="✅ Language switched to English 🇺🇸\n\nYour voice commands will now be processed in English.",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="Please register first: /register"
+                    )
+            finally:
+                db.close()
+            
+            return {"ok": True, "message": "Language switched to English"}
+        
+        # Handle /amharic command - switch to Amharic
+        if text.startswith('/amharic'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from database.models import SessionLocal
+            from voice.integrations import ConversationManager
+            
+            db = SessionLocal()
+            try:
+                user = get_user_by_telegram_id(user_id, db)
+                if user:
+                    user.preferred_language = 'am'
+                    user.language_set_at = datetime.utcnow()
+                    db.commit()
+                    
+                    # Clear conversation history
+                    ConversationManager.clear_conversation(user.id)
+                    
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="✅ ቋንቋ ወደ አማርኛ ተቀይሯል 🇪🇹\n\nየድምጽ ትዕዛዞችዎ አሁን በአማርኛ ይሰራሉ።",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="እባክዎን መጀመሪያ ይመዝገቡ: /register"
+                    )
+            finally:
+                db.close()
+            
+            return {"ok": True, "message": "Language switched to Amharic"}
         
         # Handle /myidentity command - show user's DID
         if text.startswith('/myidentity'):

@@ -551,11 +551,22 @@ async def approve_registration(registration_id: int):
             telegram_user_id=str(registration.telegram_user_id)
         ).first()
         
+        # Extract language preference from reason field
+        preferred_language = 'en'  # Default
+        if registration.reason and registration.reason.startswith('[LANG:'):
+            try:
+                lang_marker = registration.reason.split(']')[0]
+                preferred_language = lang_marker.replace('[LANG:', '')
+            except:
+                pass
+        
         user.role = registration.requested_role
         user.organization_id = organization_id
         user.is_approved = True
         user.approved_at = datetime.utcnow()
-        logger.info(f"Updated user: {user.telegram_first_name} - Role: {user.role}, Org: {organization_id}")
+        user.preferred_language = preferred_language
+        user.language_set_at = datetime.utcnow()
+        logger.info(f"Updated user: {user.telegram_first_name} - Role: {user.role}, Org: {organization_id}, Lang: {preferred_language}")
         
         # Initialize reputation record for user
         existing_reputation = db.query(UserReputation).filter_by(user_id=user.id).first()

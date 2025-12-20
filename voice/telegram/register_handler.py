@@ -20,24 +20,25 @@ conversation_states: Dict[int, Dict[str, Any]] = {}
 
 # Conversation states
 STATE_NONE = 0
-STATE_ROLE = 1
-STATE_FULL_NAME = 2
-STATE_ORG_NAME = 3
-STATE_LOCATION = 4
-STATE_PHONE = 5
-STATE_REG_NUMBER = 6
-STATE_REASON = 7
+STATE_LANGUAGE = 1  # NEW: Ask for language preference
+STATE_ROLE = 2
+STATE_FULL_NAME = 3
+STATE_ORG_NAME = 4
+STATE_LOCATION = 5
+STATE_PHONE = 6
+STATE_REG_NUMBER = 7
+STATE_REASON = 8
 
 # Exporter-specific states
-STATE_EXPORT_LICENSE = 8
-STATE_PORT_ACCESS = 9
-STATE_SHIPPING_CAPACITY = 10
+STATE_EXPORT_LICENSE = 9
+STATE_PORT_ACCESS = 10
+STATE_SHIPPING_CAPACITY = 11
 
 # Buyer-specific states
-STATE_BUSINESS_TYPE = 11
-STATE_COUNTRY = 12
-STATE_TARGET_VOLUME = 13
-STATE_QUALITY_PREFS = 14
+STATE_BUSINESS_TYPE = 12
+STATE_COUNTRY = 13
+STATE_TARGET_VOLUME = 14
+STATE_QUALITY_PREFS = 15
 
 
 async def handle_register_command(user_id: int, username: str, first_name: str, last_name: str) -> Dict[str, Any]:
@@ -80,9 +81,9 @@ async def handle_register_command(user_id: int, username: str, first_name: str, 
                 'parse_mode': 'Markdown'
             }
         
-        # Initialize conversation state
+        # Initialize conversation state - start with language selection
         conversation_states[user_id] = {
-            'state': STATE_ROLE,
+            'state': STATE_LANGUAGE,
             'data': {
                 'telegram_username': username,
                 'telegram_first_name': first_name,
@@ -90,17 +91,17 @@ async def handle_register_command(user_id: int, username: str, first_name: str, 
             }
         }
         
-        # Show role selection with inline keyboard
+        # Show language selection first
         return {
             'message': (
-                "📋 *Voice Ledger Registration*\n\n"
-                "Please select your role in the coffee supply chain:"
+                "🌍 *Welcome to Voice Ledger*\n\n"
+                "Please select your preferred language for voice commands:\n"
+                "የድምጽ ትዕዛዞችዎን ቋንቋ ይምረጡ:"
             ),
             'parse_mode': 'Markdown',
             'inline_keyboard': [
-                [{'text': "🏢 Cooperative Manager", 'callback_data': 'reg_role_COOPERATIVE_MANAGER'}],
-                [{'text': "📦 Exporter", 'callback_data': 'reg_role_EXPORTER'}],
-                [{'text': "🛒 Buyer", 'callback_data': 'reg_role_BUYER'}],
+                [{'text': "🇺🇸 English", 'callback_data': 'reg_lang_en'}],
+                [{'text': "🇪🇹 Amharic (አማርኛ)", 'callback_data': 'reg_lang_am'}],
                 [{'text': "❌ Cancel", 'callback_data': 'reg_cancel'}]
             ]
         }
@@ -116,7 +117,7 @@ async def handle_register_command(user_id: int, username: str, first_name: str, 
 
 async def handle_registration_callback(user_id: int, callback_data: str) -> Dict[str, Any]:
     """
-    Handle callback queries during registration (role selection, skip buttons).
+    Handle callback queries during registration (language, role selection, skip buttons).
     
     Returns dict with message to send back.
     """
@@ -124,6 +125,35 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     if callback_data == 'reg_cancel':
         conversation_states.pop(user_id, None)
         return {'message': "Registration cancelled."}
+    
+    # Language selection (NEW)
+    if callback_data.startswith('reg_lang_'):
+        language = callback_data.replace('reg_lang_', '')
+        
+        if user_id not in conversation_states:
+            return {'message': "❌ Session expired. Please /register again."}
+        
+        conversation_states[user_id]['data']['preferred_language'] = language
+        conversation_states[user_id]['state'] = STATE_ROLE
+        
+        lang_name = "English" if language == 'en' else "Amharic (አማርኛ)"
+        
+        # Show role selection
+        return {
+            'message': (
+                f"✅ Language set to: *{lang_name}*\n\n"
+                "📋 *Voice Ledger Registration*\n\n"
+                "Please select your role in the coffee supply chain:"
+            ),
+            'parse_mode': 'Markdown',
+            'inline_keyboard': [
+                [{'text': "👨‍🌾 Farmer", 'callback_data': 'reg_role_FARMER'}],
+                [{'text': "🏢 Cooperative Manager", 'callback_data': 'reg_role_COOPERATIVE_MANAGER'}],
+                [{'text': "📦 Exporter", 'callback_data': 'reg_role_EXPORTER'}],
+                [{'text': "🛒 Buyer", 'callback_data': 'reg_role_BUYER'}],
+                [{'text': "❌ Cancel", 'callback_data': 'reg_cancel'}]
+            ]
+        }
     
     # Role selection
     if callback_data.startswith('reg_role_'):
@@ -137,11 +167,67 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         
         # Role-specific welcome message
         role_info = {
+            'FARMER': 'You will be able to record coffee batches using voice commands.',
             'COOPERATIVE_MANAGER': 'You will manage coffee batches from farmers and coordinate verification.',
             'EXPORTER': 'You will have access to verified batches and export documentation tools.',
             'BUYER': 'You will be able to browse verified inventory and place purchase orders.'
         }
         
+        # Farmers get simplified registration (auto-approved)
+        if role == 'FARMER':
+            from database.models import SessionLocal, UserIdentity
+            from ssi.user_identity import get_or_create_user_identity
+            
+            db = SessionLocal()
+            try:
+                # Create/update user with language preference
+                identity = get_or_create_user_identity(
+                    telegram_user_id=str(user_id),
+                    telegram_username=conversation_states[user_id]['data'].get('telegram_username'),
+                    telegram_first_name=conversation_states[user_id]['data'].get('telegram_first_name'),
+                    telegram_last_name=conversation_states[user_id]['data'].get('telegram_last_name'),
+                    db_session=db
+                )
+                
+                # Update language preference
+                user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+                if user:
+                    user.preferred_language = conversation_states[user_id]['data'].get('preferred_language', 'en')
+                    user.role = 'FARMER'
+                    user.is_approved = True  # Farmers are auto-approved
+                    from datetime import datetime
+                    user.language_set_at = datetime.utcnow()
+                    db.commit()
+                
+                # Clear conversation state
+                conversation_states.pop(user_id, None)
+                
+                lang_name = "English" if user.preferred_language == 'en' else "Amharic (አማርኛ)"
+                return {
+                    'message': (
+                        f"✅ *Registration Complete!*\n\n"
+                        f"Role: *Farmer*\n"
+                        f"Language: *{lang_name}*\n\n"
+                        f"You can now record coffee batches using voice messages!\n\n"
+                        f"🎤 Try saying:\n"
+                        f"• \"I harvested 50 kg of coffee from Gedeo\"\n"
+                        f"• \"Record 100 kilograms Sidama\"\n\n"
+                        f"Commands:\n"
+                        f"/language - Change language\n"
+                        f"/mybatches - View your batches\n"
+                        f"/help - Get help"
+                    ),
+                    'parse_mode': 'Markdown'
+                }
+            except Exception as e:
+                logger.error(f"Error creating farmer registration: {e}", exc_info=True)
+                return {
+                    'message': "❌ Registration failed. Please try again with /register"
+                }
+            finally:
+                db.close()
+        
+        # Non-farmers continue with full registration flow
         return {
             'message': (
                 f"✅ Selected: *{role.replace('_', ' ').title()}*\n\n"
@@ -434,6 +520,14 @@ async def submit_registration(user_id: int) -> Dict[str, Any]:
             reason=data.get('reason'),
             status='PENDING'
         )
+        
+        # Store language preference in reason field temporarily (since PendingRegistration doesn't have language field)
+        # Admin will see this and it will be set when approved
+        language_pref = data.get('preferred_language', 'en')
+        if pending.reason:
+            pending.reason = f"[LANG:{language_pref}] {pending.reason}"
+        else:
+            pending.reason = f"[LANG:{language_pref}]"
         
         # Add role-specific fields
         if data['role'] == 'EXPORTER':

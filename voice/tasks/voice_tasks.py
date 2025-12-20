@@ -17,12 +17,13 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from voice.tasks.celery_app import app
-from voice.asr.asr_infer import run_asr
+from voice.asr.asr_infer import run_asr, run_asr_with_user_preference
 from voice.nlu.nlu_infer import infer_nlu_json
 from voice.audio_utils import validate_and_convert_audio, cleanup_temp_file, AudioValidationError
 from database.connection import get_db
 from voice.command_integration import execute_voice_command, VoiceCommandError
 from voice.tasks.voice_command_detector import detect_voice_command
+from voice.integrations import ConversationManager, process_english_conversation, process_amharic_conversation
 
 # Import SMS notifier for IVR notifications
 try:
@@ -133,20 +134,104 @@ def process_voice_command_task(
         # Update task state: transcribing
         self.update_state(
             state='TRANSCRIBING',
-            meta={'stage': 'Transcribing audio with Whisper (auto-detecting language)', 'progress': 30}
+            meta={'stage': 'Transcribing audio with Whisper', 'progress': 30}
         )
         
-        # Run ASR (Whisper) with automatic language detection
+        # Get user to determine language preference
+        user_db_id = None  # Store user's database ID (not the object)
+        user_language = 'en'  # Default to English
+        user_telegram_id = None
+        
+        with get_db() as db:
+            try:
+                from ssi.user_identity import get_user_by_telegram_id
+                
+                if metadata and metadata.get("channel") == "telegram":
+                    user_telegram_id = metadata.get("user_id")
+                    if user_telegram_id:
+                        user_identity = get_user_by_telegram_id(user_telegram_id, db)
+                        if user_identity:
+                            # Check if user is approved
+                            if not user_identity.is_approved:
+                                logger.warning(f"User {user_telegram_id} not approved yet")
+                                # Send notification to user
+                                from voice.service.notification_processor import NotificationProcessor
+                                processor = NotificationProcessor()
+                                import asyncio
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    loop.run_until_complete(
+                                        processor.send_notification(
+                                            channel_name='telegram',
+                                            user_id=user_telegram_id,
+                                            message="⏳ Your registration is pending admin approval. You'll be notified once approved!"
+                                        )
+                                    )
+                                finally:
+                                    loop.close()
+                                
+                                return {
+                                    "status": "error",
+                                    "error": "User not approved",
+                                    "message": "Registration pending approval"
+                                }
+                            
+                            user_db_id = user_identity.id  # Store the ID, not the object
+                            user_language = user_identity.preferred_language or 'en'
+                            logger.info(f"User {user_db_id} language preference: {user_language}")
+                        else:
+                            logger.warning(f"User {user_telegram_id} not found in database - needs registration")
+            except Exception as e:
+                logger.warning(f"Could not get user language preference: {e}")
+        
+        # ENFORCE REGISTRATION: Reject if user not found
+        if not user_db_id:
+            logger.error(f"User {user_telegram_id} not registered")
+            # Send notification to user
+            from voice.service.notification_processor import NotificationProcessor
+            processor = NotificationProcessor()
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(
+                    processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_telegram_id,
+                        message=(
+                            "🔒 Please register first!\n\n"
+                            "Send /register to create your account and select your language preference."
+                        )
+                    )
+                )
+            finally:
+                loop.close()
+            
+            return {
+                "status": "error",
+                "error": "User not registered",
+                "message": "Please register first using /register"
+            }
+        
+        # Run ASR with user's language preference (NEW: no auto-detection)
         try:
-            asr_result = run_asr(wav_path)
+            asr_result = run_asr_with_user_preference(wav_path, user_language)
             transcript = asr_result['text']
             detected_language = asr_result['language']
             metadata['detected_language'] = detected_language
-            logger.info(f"ASR detected language: {detected_language}, transcript: {transcript[:50]}...")
+            logger.info(f"ASR with language '{detected_language}': {transcript[:50]}...")
         except Exception as e:
-            # Retry on ASR failures (could be API rate limit)
-            logger.error(f"ASR failed: {e}")
-            raise self.retry(exc=e, countdown=60)
+            # Fallback to old detection-based ASR
+            logger.warning(f"New ASR failed, falling back to detection: {e}")
+            try:
+                asr_result = run_asr(wav_path)
+                transcript = asr_result['text']
+                detected_language = asr_result['language']
+                metadata['detected_language'] = detected_language
+            except Exception as asr_error:
+                logger.error(f"ASR failed: {asr_error}")
+                raise self.retry(exc=asr_error, countdown=60)
         
         # Check for voice commands (simple pattern matching)
         voice_command_result = detect_voice_command(transcript, metadata)
@@ -208,20 +293,83 @@ def process_voice_command_task(
         self.update_state(
             state='EXTRACTING',
             meta={
-                'stage': f'Extracting intent and entities (Language: {detected_language})', 
+                'stage': f'Processing conversation (Language: {detected_language})', 
                 'progress': 60
             }
         )
         
-        # Run NLU (GPT-3.5) - works for both English and Amharic
+        # Route to conversational AI based on user language (NEW: multi-turn conversation)
         try:
-            nlu_result = infer_nlu_json(transcript)
-            intent = nlu_result.get("intent")
-            entities = nlu_result.get("entities", {})
-        except Exception as e:
-            # Retry on NLU failures
-            logger.error(f"NLU failed: {e}")
-            raise self.retry(exc=e, countdown=60)
+            # Ensure we have user_db_id for conversational tracking
+            if not user_db_id:
+                logger.warning("No user identity, falling back to single-shot NLU")
+                raise Exception("User not registered")
+            
+            # Import async processing
+            import asyncio
+            
+            # Process conversation based on language
+            if user_language == 'am':
+                # Amharic conversation with Addis AI
+                logger.info(f"Processing Amharic conversation for user {user_db_id}")
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    conversation_result = loop.run_until_complete(
+                        process_amharic_conversation(user_db_id, transcript)
+                    )
+                    loop.run_until_complete(asyncio.sleep(0.1))
+                finally:
+                    try:
+                        if hasattr(loop, 'shutdown_asyncgens'):
+                            loop.run_until_complete(loop.shutdown_asyncgens())
+                    except:
+                        pass
+                    loop.close()
+            else:
+                # English conversation with GPT-4
+                logger.info(f"Processing English conversation for user {user_db_id}")
+                conversation_result = process_english_conversation(user_db_id, transcript)
+            
+            # Check if conversation is ready to execute
+            if not conversation_result.get('ready_to_execute'):
+                # Conversation needs more information - send follow-up question
+                follow_up_message = conversation_result.get('message', 'Please provide more information.')
+                logger.info(f"Conversation not ready, sending follow-up: {follow_up_message}")
+                
+                # Send follow-up via Telegram if available
+                if metadata and metadata.get("channel") == "telegram":
+                    user_id = metadata.get("user_id")
+                    if user_id:
+                        try:
+                            from voice.telegram.notifier import send_telegram_notification
+                            send_telegram_notification(int(user_id), follow_up_message)
+                        except Exception as msg_error:
+                            logger.error(f"Failed to send follow-up message: {msg_error}")
+                
+                return {
+                    "status": "awaiting_response",
+                    "transcript": transcript,
+                    "message": follow_up_message,
+                    "conversation_active": True,
+                    "audio_metadata": metadata
+                }
+            
+            # Conversation ready - extract intent and entities
+            intent = conversation_result.get('intent')
+            entities = conversation_result.get('entities', {})
+            logger.info(f"Conversation ready: intent={intent}, entities={entities}")
+            
+        except Exception as conv_error:
+            # Fallback to single-shot NLU (GPT-3.5) if conversational AI fails
+            logger.warning(f"Conversational AI failed, falling back to single-shot: {conv_error}")
+            try:
+                nlu_result = infer_nlu_json(transcript)
+                intent = nlu_result.get("intent")
+                entities = nlu_result.get("entities", {})
+            except Exception as nlu_error:
+                logger.error(f"NLU fallback also failed: {nlu_error}")
+                raise self.retry(exc=nlu_error, countdown=60)
         
         # Update task state: executing
         self.update_state(
@@ -339,6 +487,14 @@ def process_voice_command_task(
                 
                 except Exception as e:
                     logger.error(f"Failed to send notification: {e}", exc_info=True)
+        
+        # Clear conversation history after successful execution
+        if not error and user_db_id:
+            try:
+                ConversationManager.clear_conversation(user_db_id)
+                logger.info(f"Cleared conversation for user {user_db_id}")
+            except Exception as clear_error:
+                logger.warning(f"Failed to clear conversation: {clear_error}")
         
         # Return complete result
         return {
