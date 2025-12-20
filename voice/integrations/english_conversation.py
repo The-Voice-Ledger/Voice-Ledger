@@ -48,17 +48,24 @@ SUPPLY CHAIN OPERATIONS:
    Required: batch_id or GTIN, transformation_type (roasting/milling/drying), output_quantity_kg
    Example: "Roasted batch ABC123, output 850kg"
 
-5. **pack_batches** (Aggregate multiple batches):
-   Required: batch_ids (list), container_id
-   Example: "Pack batches A B C into pallet P001"
+5. **aggregate_batches** (Pack multiple batches into container - EPCIS AggregationEvent):
+   Required: batch_ids (list of GTINs or batch_ids), parent_container_id (SSCC)
+   Keywords: pack, combine, load, aggregate, put into container, fill pallet
+   Example: "Pack batches BATCH-001, BATCH-002, and BATCH-003 into container C100"
+   Example: "Load batches into shipping container SSCC-306141411234567892"
+   Note: Accepts GTINs (14-digit like 00614141165623) or batch_ids (like BATCH-001)
 
-6. **unpack_batches** (Disaggregate container):
-   Required: container_id
-   Example: "Unpack container P001"
+6. **disaggregate_batches** (Unpack container - EPCIS AggregationEvent with action=DELETE):
+   Required: parent_container_id (SSCC or container_id)
+   Keywords: unpack, unload, remove from container, empty pallet
+   Example: "Unpack container C100"
+   Example: "Remove batches from pallet P001"
 
-7. **split_batch** (Divide batch):
-   Required: parent_batch_id, splits (list of quantities)
+7. **split_batch** (Divide batch into sub-batches - EPCIS TransformationEvent):
+   Required: parent_batch_id (GTIN or batch_id), child_quantities (list of kg amounts)
+   Keywords: split, divide, separate, break up
    Example: "Split batch ABC into 600kg and 400kg"
+   Example: "Divide GTIN 00614141165623 into three lots: 2000kg, 1500kg, 500kg"
 
 CONVERSATION GUIDELINES:
 - Be warm, encouraging, and patient
@@ -229,6 +236,32 @@ def format_success_message(intent: str, entities: Dict[str, Any], batch_id: str 
             f"• Batch: {entities.get('batch_id')}\n"
             f"• Destination: {entities.get('destination')}\n\n"
             f"The batch is now in transit."
+        )
+    elif intent == 'aggregate_batches' or intent == 'pack_batches':
+        batch_count = len(entities.get('batch_ids', []))
+        container = entities.get('container_id', 'container')
+        return (
+            f"✅ Aggregation successful!\n\n"
+            f"• Packed {batch_count} batches into {container}\n"
+            f"• Batches: {', '.join(entities.get('batch_ids', []))}\n\n"
+            f"Container is ready for shipment. EPCIS AggregationEvent recorded on blockchain."
+        )
+    elif intent == 'disaggregate_batches' or intent == 'unpack_batches':
+        container = entities.get('container_id', 'container')
+        return (
+            f"✅ Disaggregation successful!\n\n"
+            f"• Unpacked container {container}\n\n"
+            f"Batches are now available individually."
+        )
+    elif intent == 'split_batch':
+        splits = entities.get('child_quantities', [])
+        parent = entities.get('parent_batch_id', 'batch')
+        return (
+            f"✅ Batch split successful!\n\n"
+            f"• Original batch: {parent}\n"
+            f"• Split into {len(splits)} sub-batches\n"
+            f"• Quantities: {', '.join(f'{q}kg' for q in splits)}\n\n"
+            f"EPCIS TransformationEvent recorded on blockchain."
         )
     elif intent == 'record_receipt':
         return (

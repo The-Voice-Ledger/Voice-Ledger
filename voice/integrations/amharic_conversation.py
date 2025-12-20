@@ -50,17 +50,24 @@ SYSTEM_PROMPT_AM = """አንተ ለኢትዮጵያ የቡና ገበሬዎች እ
    የሚያስፈልግ: batch_id ወይም GTIN, transformation_type (ማብሰል/መፍጨት/ማድረቅ), output_quantity_kg
    ምሳሌ: "ባች ABC123ን አብስያለሁ፣ ውጤት 850ኪ.ግ"
 
-5. **pack_batches** (በርካታ ባችዎችን ማጠራቀም):
-   የሚያስፈልግ: batch_ids (ዝርዝር), container_id
-   ምሳሌ: "ባች A B C ወደ ፓሌት P001 ጨምር"
+5. **aggregate_batches** (በርካታ ባችዎችን ወደ ኮንቴይነር ማስገባት - EPCIS AggregationEvent):
+   የሚያስፈልግ: batch_ids (የGTINs ወይም batch_ids ዝርዝር), parent_container_id (SSCC)
+   ቁልፍ ቃላት: ማሸግ, ማጣመር, መጫን, ወደ ኮንቴይነር ማስገባት, ፓሌት መሙላት
+   ምሳሌ: "ባች BATCH-001፣ BATCH-002 እና BATCH-003ን ወደ ኮንቴይነር C100 ጨምር"
+   ምሳሌ: "ባችዎችን ወደ የመላኪያ ኮንቴይነር SSCC-306141411234567892 ጫን"
+   ማስታወሻ: GTINs (እንደ 00614141165623 ያሉ 14-አሃዝ) ወይም batch_ids (እንደ BATCH-001) ይቀበላል
 
-6. **unpack_batches** (ኮንቴይነርን ማፍረስ):
-   የሚያስፈልግ: container_id
-   ምሳሌ: "ኮንቴይነር P001ን ፍታ"
+6. **disaggregate_batches** (ኮንቴይነርን ማፍታት - EPCIS AggregationEvent action=DELETE ጋር):
+   የሚያስፈልግ: parent_container_id (SSCC ወይም container_id)
+   ቁልፍ ቃላት: ማፍታት, ማውረድ, ከኮንቴይነር ማስወገድ, ፓሌት ማጥፋት
+   ምሳሌ: "ኮንቴይነር C100ን ፍታ"
+   ምሳሌ: "ባችዎችን ከፓሌት P001 አውጣ"
 
-7. **split_batch** (ባችን መከፋፈል):
-   የሚያስፈልግ: parent_batch_id, splits (የብዛቶች ዝርዝር)
+7. **split_batch** (ባችን ወደ ንዑስ-ባችዎች መከፋፈል - EPCIS TransformationEvent):
+   የሚያስፈልግ: parent_batch_id (GTIN ወይም batch_id), child_quantities (የኪ.ግ መጠኖች ዝርዝር)
+   ቁልፍ ቃላት: መክፈል, መከፋፈል, መለየት, መሰባበር
    ምሳሌ: "ባች ABCን ወደ 600ኪ.ግ እና 400ኪ.ግ ክፈል"
+   ምሳሌ: "GTIN 00614141165623ን ወደ ሶስት ክፍሎች ከፋፍል: 2000ኪ.ግ, 1500ኪ.ግ, 500ኪ.ግ"
 
 የውይይት መመሪያዎች:
 - ሞቅ ያለ፣ አበረታች እና ትዕግስተኛ ሁን
@@ -355,6 +362,32 @@ def format_success_message_am(intent: str, entities: Dict[str, Any], batch_id: s
             f"• ባች: {entities.get('batch_id')}\n"
             f"• መድረሻ: {entities.get('destination')}\n\n"
             f"ባቹ አሁን በጉዞ ላይ ነው።"
+        )
+    elif intent == 'aggregate_batches' or intent == 'pack_batches':
+        batch_count = len(entities.get('batch_ids', []))
+        container = entities.get('container_id', 'ኮንቴይነር')
+        return (
+            f"✅ ማሸግ በተሳካ ሁኔታ ተጠናቀቀ!\n\n"
+            f"• {batch_count} ባችዎች ወደ {container} ተሸግተዋል\n"
+            f"• ባችዎች: {', '.join(entities.get('batch_ids', []))}\n\n"
+            f"ኮንቴይነሩ ለማጓጓዣ ዝግጁ ነው። EPCIS AggregationEvent በብሎክቼይን ተመዝግቧል።"
+        )
+    elif intent == 'disaggregate_batches' or intent == 'unpack_batches':
+        container = entities.get('container_id', 'ኮንቴይነር')
+        return (
+            f"✅ ማፍታት በተሳካ ሁኔታ ተጠናቀቀ!\n\n"
+            f"• ኮንቴይነር {container} ተፈታል\n\n"
+            f"ባችዎች አሁን በተናጠል ይገኛሉ።"
+        )
+    elif intent == 'split_batch':
+        splits = entities.get('child_quantities', [])
+        parent = entities.get('parent_batch_id', 'ባች')
+        return (
+            f"✅ ባች መከፋፈል በተሳካ ሁኔታ ተጠናቀቀ!\n\n"
+            f"• ዋና ባች: {parent}\n"
+            f"• ወደ {len(splits)} ንዑስ-ባችዎች ተከፋፍሏል\n"
+            f"• ብዛቶች: {', '.join(f'{q}ኪ.ግ' for q in splits)}\n\n"
+            f"EPCIS TransformationEvent በብሎክቼይን ተመዝግቧል።"
         )
     elif intent == 'record_receipt':
         return (

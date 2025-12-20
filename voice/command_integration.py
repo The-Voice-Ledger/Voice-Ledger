@@ -776,7 +776,9 @@ INTENT_HANDLERS = {
     "record_receipt": handle_record_receipt,
     "record_transformation": handle_record_transformation,
     "pack_batches": handle_pack_batches,
+    "aggregate_batches": handle_pack_batches,  # Alias for conversational AI
     "unpack_batches": handle_unpack_batches,
+    "disaggregate_batches": handle_unpack_batches,  # Alias for conversational AI
     "split_batch": handle_split_batch,
 }
 
