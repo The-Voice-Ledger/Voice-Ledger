@@ -272,6 +272,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
                     "/mybatches - List your batches\n"
+                    "/verify - Verify a batch (managers only)\n"
                     "/export - Get QR code for credentials\n\n"
                     "🎙️ *Voice Commands:*\n"
                     "Record a voice message saying:\n"
@@ -289,7 +290,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/receive <batch_id> [condition]\n"
                     "  Example: /receive BATCH_123 good\n"
                     "/transform <batch_id> <type> <output_kg>\n"
-                    "  Example: /transform BATCH_123 roasting 850\n"
+                    "  Example: /transform 00614141852251 roasting 850\n"
+                    "  Note: You can use GTIN or batch_id\n"
                     "/pack <batch1> <batch2> ... <container>\n"
                     "  Example: /pack BATCH_1 BATCH_2 PALLET-001\n"
                     "/unpack <container_id>\n"
@@ -317,6 +319,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/myidentity - Show your DID\n"
                     "/mycredentials - View track record\n"
                     "/mybatches - List your batches\n"
+                    "/verify <gtin> <qty> [notes] - Verify batch (managers)\n"
                     "/dpp <container\\_id> - Generate Digital Product Passport\n"
                     "/export - Get QR code for credentials\n\n"
                     "*Supply Chain Commands (Text):*\n"
@@ -339,7 +342,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "   📝 /receive XYZ good\n\n"
                     "4️⃣ *Transformation* - Process coffee\n"
                     "   🎙️ \"Roast batch DEF producing 850kg\"\n"
-                    "   📝 /transform DEF roasting 850\n\n"
+                    "   📝 /transform 00614141852251 roasting 850\n"
+                    "   💡 Tip: Use GTIN (shorter) instead of batch\\_id\n\n"
                     "5️⃣ *Pack* - Aggregate batches\n"
                     "   🎙️ \"Pack batches A and B into pallet\"\n"
                     "   📝 /pack A B PALLET-001\n\n"
@@ -429,7 +433,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /ship <batch_id> <destination>\nExample: /ship ABC123 Addis_Warehouse"
+                    message="❌ Usage: /ship <gtin\_or\_batch\_id> <destination>\nExample: /ship 00614141852251 Addis\_Warehouse"
                 )
                 return {"ok": True}
             
@@ -480,7 +484,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /receive <batch_id> [condition]\nExample: /receive ABC123 good"
+                    message="❌ Usage: /receive <gtin\_or\_batch\_id> [condition]\nExample: /receive 00614141852251 good"
                 )
                 return {"ok": True}
             
@@ -531,7 +535,9 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /transform <batch_id> <type> <output_kg>\nExample: /transform ABC123 roasting 850"
+                    message="❌ Usage: /transform <batch_id_or_gtin> <type> <output_kg>\n"
+                           "Example: /transform 00614141852251 roasting 850\n"
+                           "💡 Tip: GTINs are shorter than batch IDs!"
                 )
                 return {"ok": True}
             
@@ -552,7 +558,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 entities = {
                     'batch_id': parts[1],
                     'transformation_type': parts[2],
-                    'output_quantity': parts[3],
+                    'output_quantity_kg': float(parts[3]),  # Convert to float
                     'output_unit': 'kg'
                 }
                 
@@ -985,6 +991,172 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             finally:
                 db.close()
             return {"ok": True, "message": "Sent batches"}
+        
+        # Handle /verify command - Verify a batch (COOPERATIVE_MANAGER only)
+        if text.startswith('/verify'):
+            from ssi.user_identity import get_user_by_telegram_id
+            from database.models import SessionLocal
+            from database import get_batch_by_id_or_gtin
+            from datetime import datetime
+            
+            db = SessionLocal()
+            try:
+                # Check authorization
+                user = get_user_by_telegram_id(user_id, db_session=db)
+                if not user:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="❌ No identity found. Use /register to create one."
+                    )
+                    return {"ok": True}
+                
+                if user.role != 'COOPERATIVE_MANAGER':
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "❌ *Permission Denied*\n\n"
+                            "Only cooperative managers can verify batches.\n"
+                            f"Your role: {user.role.replace('_', ' ').title()}"
+                        )
+                    )
+                    return {"ok": True}
+                
+                if not user.is_approved:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "⏳ *Approval Pending*\n\n"
+                            "Your account is pending approval. Please contact an administrator."
+                        )
+                    )
+                    return {"ok": True}
+                
+                # Parse: /verify <gtin_or_batch_id> <verified_quantity> [notes]
+                parts = text.split(maxsplit=3)
+                if len(parts) < 3:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "❌ *Usage:* /verify <gtin\\_or\\_batch\\_id> <verified\\_quantity> [notes]\n\n"
+                            "*Examples:*\n"
+                            "`/verify 00614141852251 600`\n"
+                            "`/verify BATCH_123 485 Quality excellent`"
+                        )
+                    )
+                    return {"ok": True}
+                
+                identifier = parts[1]
+                try:
+                    verified_quantity = float(parts[2])
+                except ValueError:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=f"❌ Invalid quantity: {parts[2]}. Must be a number."
+                    )
+                    return {"ok": True}
+                
+                notes = parts[3] if len(parts) > 3 else None
+                
+                # Look up batch
+                batch = get_batch_by_id_or_gtin(db, identifier)
+                if not batch:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            f"❌ Batch not found: {identifier}\n"
+                            "Use GTIN (e.g., 00614141852251) or batch_id"
+                        )
+                    )
+                    return {"ok": True}
+                
+                # Check if already verified
+                if batch.status == 'VERIFIED':
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            f"ℹ️ *Already Verified*\n\n"
+                            f"📦 {batch.batch_id}\n"
+                            f"   {batch.quantity_kg} kg {batch.variety}\n"
+                            f"   Verified by: {batch.verifying_organization.name if batch.verifying_organization else 'Unknown'}\n"
+                            f"   Verified at: {batch.verified_at.strftime('%Y-%m-%d %H:%M') if batch.verified_at else 'Unknown'}"
+                        )
+                    )
+                    return {"ok": True}
+                
+                # Verify batch
+                batch.status = "VERIFIED"
+                batch.verified_quantity = verified_quantity
+                batch.verification_notes = notes
+                batch.verified_by_did = user.did
+                batch.verifying_organization_id = user.organization_id
+                batch.verified_at = datetime.utcnow()
+                batch.verification_used = True
+                
+                db.commit()
+                
+                logger.info(
+                    f"Batch {batch.batch_id} verified by {user.telegram_first_name} "
+                    f"(role={user.role}, did={user.did})"
+                )
+                
+                # Issue verification credential signed by cooperative
+                credential = None
+                if user.organization_id and batch.created_by_did:
+                    try:
+                        from ssi.verification_credentials import issue_verification_credential
+                        credential = issue_verification_credential(
+                            batch_id=batch.batch_id,
+                            farmer_did=batch.created_by_did,
+                            organization_id=user.organization_id,
+                            verified_quantity_kg=verified_quantity,
+                            claimed_quantity_kg=batch.quantity_kg,
+                            variety=batch.variety,
+                            origin=batch.origin,
+                            gtin=batch.gtin,
+                            verification_date=datetime.utcnow().isoformat(),
+                            notes=notes
+                        )
+                        logger.info(f"Issued verification credential for batch {batch.batch_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to issue verification credential: {e}")
+                
+                # Send success message
+                diff = verified_quantity - batch.quantity_kg
+                diff_text = ""
+                if abs(diff) > 0.1:
+                    diff_sign = "+" if diff > 0 else ""
+                    diff_text = f"\n   Difference: {diff_sign}{diff:.1f} kg ({diff_sign}{(diff/batch.quantity_kg)*100:.1f}%)"
+                
+                # Escape Markdown special characters in batch_id
+                safe_batch_id = batch.batch_id.replace('_', '\\_')
+                notes_line = f"   Notes: {notes}\n" if notes else ""
+                credential_line = "✅ Verification credential issued" if credential else ""
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        f"✅ *Batch Verified*\n\n"
+                        f"📦 {safe_batch_id}\n"
+                        f"   GTIN: {batch.gtin}\n"
+                        f"   Claimed: {batch.quantity_kg} kg\n"
+                        f"   Verified: {verified_quantity} kg{diff_text}\n"
+                        f"   Variety: {batch.variety}\n"
+                        f"   Origin: {batch.origin}\n"
+                        f"{notes_line}\n"
+                        f"{credential_line}"
+                    )
+                )
+            finally:
+                db.close()
+            return {"ok": True, "message": "Batch verified"}
         
         # Handle /dpp command - Generate Digital Product Passport for aggregated container
         if text.startswith('/dpp '):

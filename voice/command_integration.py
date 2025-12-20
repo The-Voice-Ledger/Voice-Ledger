@@ -13,7 +13,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from database.crud import create_batch, create_event, get_farmer_by_farmer_id, get_batch_by_batch_id
+from database.crud import create_batch, create_event, get_farmer_by_farmer_id, get_batch_by_batch_id, get_batch_by_id_or_gtin, get_batch_by_id_or_gtin
 from sqlalchemy.orm import Session
 
 # Import GS1 and EPCIS utilities
@@ -218,11 +218,11 @@ def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> 
     batch_id = entities.get("batch_id")
     
     if batch_id:
-        # Explicit batch_id provided
-        batch = db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
+        # Explicit batch_id or GTIN provided
+        batch = get_batch_by_id_or_gtin(db, batch_id)
         if not batch:
             raise VoiceCommandError(
-                f"Batch '{batch_id}' not found. Please check the batch ID."
+                f"Batch '{batch_id}' not found. Use GTIN (e.g., 00614141852251) or batch_id."
             )
     else:
         # No batch_id - try to find user's most recent PENDING_VERIFICATION batch
@@ -333,10 +333,10 @@ def handle_record_receipt(db: Session, entities: dict, user_id: int = None, user
     if not batch_id:
         raise VoiceCommandError("No batch ID specified. Please specify which batch was received.")
     
-    # Get batch from database
-    batch = db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
+    # Get batch from database using GTIN or batch_id
+    batch = get_batch_by_id_or_gtin(db, batch_id)
     if not batch:
-        raise VoiceCommandError(f"Batch {batch_id} not found")
+        raise VoiceCommandError(f"Batch {batch_id} not found. Use GTIN (e.g., 00614141852251) or batch_id.")
     
     # Use batch quantity if not specified
     if not quantity_kg:
@@ -431,13 +431,15 @@ def handle_record_transformation(db: Session, entities: dict, user_id: int = Non
     if not output_quantity:
         raise VoiceCommandError("No output quantity specified. Example: '850kg roasted coffee'")
     
-    # Get input batch
-    input_batch = db.query(CoffeeBatch).filter(
-        CoffeeBatch.batch_id == input_batch_id
-    ).first()
+    # Get input batch (accepts GTIN or batch_id)
+    from database.crud import get_batch_by_id_or_gtin
+    input_batch = get_batch_by_id_or_gtin(db, input_batch_id)
     
     if not input_batch:
-        raise VoiceCommandError(f"Input batch {input_batch_id} not found")
+        raise VoiceCommandError(
+            f"Batch '{input_batch_id}' not found. "
+            f"Use GTIN (e.g., 00614141852251) or batch_id"
+        )
     
     # Validate transformation is reasonable (allow 10-30% mass loss for roasting/milling)
     mass_loss_pct = ((input_batch.quantity_kg - output_quantity) / input_batch.quantity_kg) * 100
@@ -708,13 +710,11 @@ def handle_split_batch(db: Session, entities: dict, user_id: int = None, user_di
     if not splits or len(splits) < 2:
         raise VoiceCommandError("Need at least 2 split quantities. Example: '6000kg and 4000kg'")
     
-    # Get parent batch
-    parent_batch = db.query(CoffeeBatch).filter(
-        CoffeeBatch.batch_id == parent_batch_id
-    ).first()
+    # Get parent batch using GTIN or batch_id
+    parent_batch = get_batch_by_id_or_gtin(db, parent_batch_id)
     
     if not parent_batch:
-        raise VoiceCommandError(f"Batch {parent_batch_id} not found")
+        raise VoiceCommandError(f"Batch {parent_batch_id} not found. Use GTIN (e.g., 00614141852251) or batch_id.")
     
     # Generate child batch IDs
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")

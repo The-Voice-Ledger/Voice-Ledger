@@ -87,6 +87,30 @@ def get_batch_by_batch_id(db: Session, batch_id: str) -> Optional[CoffeeBatch]:
     """Query batch by batch_id."""
     return db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
 
+def get_batch_by_id_or_gtin(db: Session, identifier: str) -> Optional[CoffeeBatch]:
+    """
+    Query batch by GTIN or batch_id (tries GTIN first for convenience).
+    
+    Args:
+        db: Database session
+        identifier: Either a GTIN (14 digits) or batch_id (alphanumeric with underscores)
+        
+    Returns:
+        CoffeeBatch if found, None otherwise
+        
+    Examples:
+        get_batch_by_id_or_gtin(db, "00614141852251")  # GTIN
+        get_batch_by_id_or_gtin(db, "MANUFARM_HAWASA_20251219_234025")  # batch_id
+    """
+    # Try GTIN first (if it looks like a GTIN: 13-14 digits)
+    if identifier.isdigit() and 13 <= len(identifier) <= 14:
+        batch = get_batch_by_gtin(db, identifier)
+        if batch:
+            return batch
+    
+    # Fall back to batch_id
+    return get_batch_by_batch_id(db, identifier)
+
 def get_farmer_by_did(db: Session, did: str) -> Optional[FarmerIdentity]:
     """Query farmer by DID."""
     return db.query(FarmerIdentity).filter(FarmerIdentity.did == did).first()
