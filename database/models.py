@@ -402,6 +402,118 @@ class ProductFarmerLineage(Base):
     longitude = Column(Float)
     max_depth = Column(Integer)
 
+class RFQ(Base):
+    """Buyer requests for quotes (Lab 14 - RFQ Marketplace)"""
+    __tablename__ = "rfqs"
+    
+    id = Column(Integer, primary_key=True)
+    buyer_id = Column(Integer, ForeignKey("user_identities.id"), nullable=False, index=True)
+    rfq_number = Column(String(20), unique=True, nullable=False, index=True)
+    
+    # Requirements
+    quantity_kg = Column(Float, nullable=False)
+    variety = Column(String(100))
+    processing_method = Column(String(50))
+    grade = Column(String(20))
+    delivery_location = Column(String(200))
+    delivery_deadline = Column(DateTime)
+    additional_specs = Column(JSON)
+    
+    # Status
+    status = Column(String(20), default='OPEN', nullable=False, index=True)
+    
+    # Voice/text
+    voice_recording_url = Column(Text)
+    transcript = Column(Text)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    buyer = relationship("UserIdentity", foreign_keys=[buyer_id])
+    offers = relationship("RFQOffer", back_populates="rfq")
+    acceptances = relationship("RFQAcceptance", back_populates="rfq")
+    broadcasts = relationship("RFQBroadcast", back_populates="rfq")
+
+class RFQOffer(Base):
+    """Cooperative offers in response to RFQs (Lab 14 - RFQ Marketplace)"""
+    __tablename__ = "rfq_offers"
+    
+    id = Column(Integer, primary_key=True)
+    rfq_id = Column(Integer, ForeignKey("rfqs.id"), nullable=False, index=True)
+    cooperative_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    offer_number = Column(String(20), unique=True, nullable=False, index=True)
+    
+    # Offer details
+    quantity_offered_kg = Column(Float, nullable=False)
+    price_per_kg = Column(Float, nullable=False)
+    delivery_timeline = Column(String(100))
+    quality_certifications = Column(JSON)
+    sample_photos = Column(JSON)  # Array of URLs
+    voice_pitch_url = Column(Text)
+    
+    # Status
+    status = Column(String(20), default='PENDING', nullable=False, index=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    rfq = relationship("RFQ", back_populates="offers")
+    cooperative = relationship("Organization", foreign_keys=[cooperative_id])
+    acceptances = relationship("RFQAcceptance", back_populates="offer")
+
+class RFQAcceptance(Base):
+    """Buyer acceptances of cooperative offers (Lab 14 - RFQ Marketplace)"""
+    __tablename__ = "rfq_acceptances"
+    
+    id = Column(Integer, primary_key=True)
+    rfq_id = Column(Integer, ForeignKey("rfqs.id"), nullable=False, index=True)
+    offer_id = Column(Integer, ForeignKey("rfq_offers.id"), nullable=False, index=True)
+    acceptance_number = Column(String(20), unique=True, nullable=False)
+    
+    # Acceptance details
+    quantity_accepted_kg = Column(Float, nullable=False)
+    payment_terms = Column(String(50))
+    payment_status = Column(String(20), default='PENDING', index=True)
+    delivery_status = Column(String(20), default='PENDING', index=True)
+    
+    # Metadata
+    accepted_at = Column(DateTime, default=datetime.utcnow)
+    delivered_at = Column(DateTime)
+    payment_released_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    rfq = relationship("RFQ", back_populates="acceptances")
+    offer = relationship("RFQOffer", back_populates="acceptances")
+
+class RFQBroadcast(Base):
+    """Tracks which cooperatives were notified about each RFQ (Lab 14 - RFQ Marketplace)"""
+    __tablename__ = "rfq_broadcasts"
+    
+    id = Column(Integer, primary_key=True)
+    rfq_id = Column(Integer, ForeignKey("rfqs.id"), nullable=False, index=True)
+    cooperative_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    # Matching details
+    broadcast_reason = Column(String(100))
+    relevance_score = Column(Float)
+    
+    # Engagement tracking
+    notified_at = Column(DateTime, default=datetime.utcnow)
+    viewed_at = Column(DateTime)
+    responded_at = Column(DateTime)
+    
+    # Relationships
+    rfq = relationship("RFQ", back_populates="broadcasts")
+    cooperative = relationship("Organization", foreign_keys=[cooperative_id])
+
 # Database connection
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)
