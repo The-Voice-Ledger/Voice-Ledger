@@ -40,6 +40,14 @@ def detect_voice_command(transcript: str, metadata: Dict[str, Any]) -> Optional[
     
     # Command patterns (order matters - check specific phrases first)
     command_patterns = [
+        # RFQ/Marketplace commands (check first, most specific)
+        (r'(create|make|post|submit)\s+(an?\s+)?(rfq|request\s+for\s+quote)', 'rfq'),
+        (r'(i\s+)?(want|need|would\s+like)\s+to\s+(buy|purchase|order|get)', 'rfq_intent'),  # Triggers RFQ extraction
+        (r'(looking|searching)\s+for\s+\d+', 'rfq_intent'),  # "looking for 5000kg"
+        (r'(show|view|list|display|check)\s+(my\s+)?(rfq|rfqs|requests?)', 'myrfqs'),
+        (r'(show|view|list|display|check)\s+(available\s+)?(offer|offers)', 'offers'),
+        (r'(show|view|list|check)\s+my\s+(submitted\s+)?offers', 'myoffers'),
+        
         # Multi-word patterns first (most specific) - allow numbers in between
         (r'(show|display|get|view)\s+(my|me)\s+(my\s+)?(\d+\s+)?(identity|did)', 'myidentity'),
         (r'(show|display|get|list|view)\s+(my|me)\s+(my\s+)?(\d+\s+)?(batch(es)?)', 'mybatches'),

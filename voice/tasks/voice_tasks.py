@@ -253,6 +253,52 @@ def process_voice_command_task(
             command = voice_command_result['command']
             logger.info(f"Voice command detected: {command}")
             
+            # Special handling for RFQ intent - extract details from voice
+            if command == 'rfq_intent' and metadata and metadata.get("channel") == "telegram":
+                user_id = metadata.get("user_id")
+                if user_id:
+                    try:
+                        import asyncio
+                        from voice.marketplace.voice_rfq_extractor import extract_rfq_from_voice, format_rfq_preview
+                        from voice.telegram.rfq_handler import handle_voice_rfq_creation
+                        
+                        logger.info(f"Extracting RFQ from voice for user {user_id}")
+                        
+                        # Extract RFQ details
+                        extraction = extract_rfq_from_voice(transcript, detected_language)
+                        
+                        # Route to voice RFQ handler
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            response = loop.run_until_complete(
+                                handle_voice_rfq_creation(int(user_id), transcript, extraction, metadata)
+                            )
+                            loop.run_until_complete(asyncio.sleep(0.1))
+                            
+                            return {
+                                "status": "success",
+                                "transcript": transcript,
+                                "command": "voice_rfq",
+                                "extraction": extraction,
+                                "response": response,
+                                "audio_metadata": metadata
+                            }
+                        finally:
+                            try:
+                                if hasattr(loop, 'shutdown_asyncgens'):
+                                    loop.run_until_complete(loop.shutdown_asyncgens())
+                            except:
+                                pass
+                            try:
+                                loop.close()
+                            except:
+                                pass
+                                
+                    except Exception as e:
+                        logger.error(f"Failed to process voice RFQ: {e}", exc_info=True)
+                        # Fall through to regular command routing
+            
             # Route to Telegram command handler
             if metadata and metadata.get("channel") == "telegram":
                 user_id = metadata.get("user_id")

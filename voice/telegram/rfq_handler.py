@@ -677,3 +677,181 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
         }
     finally:
         db.close()
+
+
+async def handle_voice_rfq_creation(
+    user_id: int,
+    transcript: str,
+    extraction: Dict[str, Any],
+    metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Handle RFQ creation from voice message.
+    
+    Args:
+        user_id: Telegram user ID
+        transcript: Original voice transcript
+        extraction: Extracted RFQ data from voice_rfq_extractor
+        metadata: Request metadata
+        
+    Returns:
+        Response dict with message and optional keyboard
+    """
+    from voice.channels.processor import get_processor
+    from voice.marketplace.voice_rfq_extractor import format_rfq_preview, create_missing_field_question
+    
+    db = SessionLocal()
+    processor = get_processor()
+    
+    try:
+        # Authenticate user
+        user = db.query(UserIdentity).filter(
+            UserIdentity.telegram_user_id == str(user_id)
+        ).first()
+        
+        if not user:
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message="❌ Not registered. Use /register to get started."
+            )
+            return {"ok": False}
+        
+        if not user.is_approved:
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message="⏳ Your registration is pending admin approval."
+            )
+            return {"ok": False}
+        
+        # Check role
+        if user.role != "BUYER":
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=(
+                    "⚠️ *Access Denied*\n\n"
+                    "Only registered buyers can create RFQs.\n"
+                    f"Your role: {user.role}\n\n"
+                    "Cooperatives: Use /offers to view available RFQs."
+                ),
+                parse_mode='Markdown'
+            )
+            return {"ok": False}
+        
+        fields = extraction.get('extracted_fields', {})
+        missing = extraction.get('missing_fields', [])
+        confidence = extraction.get('confidence', 0.0)
+        
+        logger.info(f"Voice RFQ extraction: confidence={confidence}, missing={len(missing)} fields")
+        
+        # Show preview
+        preview = format_rfq_preview(extraction)
+        preview += f"\n🎤 *From voice:* {transcript[:100]}...\n"
+        
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=preview,
+            parse_mode='Markdown'
+        )
+        
+        # If confidence is low or many fields missing, start conversation flow
+        if confidence < 0.6 or len(missing) >= 3:
+            # Store partial data in session
+            rfq_sessions[user_id] = {
+                'user_id': user.id,
+                'user_role': user.role,
+                'organization_id': user.organization_id,
+                'state': STATE_QUANTITY if not fields.get('quantity_kg') else (
+                    STATE_VARIETY if not fields.get('variety') else (
+                        STATE_GRADE if not fields.get('grade') else (
+                            STATE_PROCESSING if not fields.get('processing_method') else (
+                                STATE_LOCATION if not fields.get('delivery_location') else STATE_DEADLINE
+                            )
+                        )
+                    )
+                ),
+                'data': {
+                    'quantity_kg': fields.get('quantity_kg'),
+                    'variety': fields.get('variety'),
+                    'grade': fields.get('grade'),
+                    'processing_method': fields.get('processing_method'),
+                    'delivery_location': fields.get('delivery_location'),
+                    'deadline_days': fields.get('deadline_days')
+                },
+                'started_at': datetime.utcnow(),
+                'from_voice': True
+            }
+            
+            # Ask for first missing field
+            first_missing = missing[0] if missing else 'quantity_kg'
+            question = create_missing_field_question(first_missing)
+            
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=question['message'],
+                reply_markup=question.get('keyboard')
+            )
+            
+            return {"ok": True, "needs_clarification": True}
+        
+        # High confidence - create RFQ directly
+        try:
+            from datetime import timedelta
+            
+            rfq_data = {
+                "buyer_user_id": user.id,
+                "buyer_organization_id": user.organization_id,
+                "quantity_kg": fields['quantity_kg'],
+                "variety": fields['variety'] or "Arabica",
+                "grade": fields.get('grade'),
+                "processing_method": fields.get('processing_method') or "Washed",
+                "delivery_location": fields.get('delivery_location'),
+                "deadline": (datetime.utcnow() + timedelta(days=fields['deadline_days'])).isoformat() if fields.get('deadline_days') else None,
+                "status": "OPEN"
+            }
+            
+            response = requests.post(
+                f"{API_BASE_URL}/rfq",
+                json=rfq_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                rfq = response.json()
+                
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        f"✅ *RFQ Created from Voice!*\n\n"
+                        f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
+                        f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
+                        f"☕ Variety: {rfq['variety']}\n"
+                        f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
+                        f"🔧 Processing: {rfq['processing_method']}\n"
+                        f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                        f"🔔 Relevant cooperatives will be notified!\n\n"
+                        f"Use /myrfqs to track offers."
+                    ),
+                    parse_mode='Markdown'
+                )
+                
+                return {"ok": True, "rfq_created": True, "rfq": rfq}
+            else:
+                raise Exception(f"API error: {response.status_code}")
+                
+        except Exception as api_error:
+            logger.error(f"Failed to create RFQ: {api_error}")
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=f"❌ Failed to create RFQ: {str(api_error)}\n\nPlease try using /rfq command."
+            )
+            return {"ok": False, "error": str(api_error)}
+    
+    finally:
+        db.close()
