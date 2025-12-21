@@ -85,8 +85,16 @@ try:
     from voice.verification.batch_verify_api import router as batch_verify_router
     BATCH_VERIFY_AVAILABLE = True
 except ImportError as e:
-    ADMIN_AVAILABLE = False
-    print(f"ℹ️  Admin module not available - registration approval disabled: {e}")
+    BATCH_VERIFY_AVAILABLE = False
+    print(f"ℹ️  Batch verification module not available: {e}")
+
+# Import Marketplace/RFQ router (Lab 15 - multi-actor marketplace)
+try:
+    from voice.marketplace.rfq_api import router as marketplace_router
+    MARKETPLACE_AVAILABLE = True
+except ImportError as e:
+    MARKETPLACE_AVAILABLE = False
+    print(f"ℹ️  Marketplace module not available: {e}")
 
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
@@ -118,6 +126,11 @@ if ADMIN_AVAILABLE:
 if BATCH_VERIFY_AVAILABLE:
     app.include_router(batch_verify_router)
     print("✅ Batch verification endpoints registered at /verify/*")
+
+# Include Marketplace router (Lab 15)
+if MARKETPLACE_AVAILABLE:
+    app.include_router(marketplace_router)
+    print("✅ Marketplace/RFQ endpoints registered at /api/*")
 
 # Allow local tools and UIs
 app.add_middleware(

@@ -3,7 +3,7 @@ SQLAlchemy models for Voice Ledger with Neon Postgres
 """
 
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Text, JSON, Boolean
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Text, JSON, Boolean, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 import os
@@ -451,7 +451,7 @@ class RFQOffer(Base):
     price_per_kg = Column(Float, nullable=False)
     delivery_timeline = Column(String(100))
     quality_certifications = Column(JSON)
-    sample_photos = Column(JSON)  # Array of URLs
+    sample_photos = Column(ARRAY(Text))  # Array of URLs
     voice_pitch_url = Column(Text)
     
     # Status
