@@ -419,6 +419,11 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/mybatches - List your batches\n"
                     "/verify - Verify a batch (managers only)\n"
                     "/export - Get QR code for credentials\n\n"
+                    "🛒 *Marketplace Commands:*\n"
+                    "/rfq - Create purchase request (buyers)\n"
+                    "/myrfqs - View my RFQs and offers (buyers)\n"
+                    "/offers - Browse available RFQs (cooperatives)\n"
+                    "/myoffers - Track my submitted offers (cooperatives)\n\n"
                     "🎙️ Conversational Voice Commands:\n"
                     "Just send a voice message in natural language:\n"
                     "• Farmers: \"I harvested 50 kg coffee from Gedeo\"\n"
@@ -470,6 +475,11 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "/verify <gtin> <qty> [notes] - Verify batch (managers)\n"
                     "/dpp <container\\_id> - Generate Digital Product Passport\n"
                     "/export - Get QR code for credentials\n\n"
+                    "*Marketplace Commands:*\n"
+                    "/rfq - Create purchase request (buyers only)\n"
+                    "/myrfqs - Track your RFQs and offers (buyers)\n"
+                    "/offers - Browse purchase requests (cooperatives)\n"
+                    "/myoffers - Track your submitted offers (cooperatives)\n\n"
                     "*Conversational Voice (Preferred):*\n\n"
                     "🗣️ Just send voice messages naturally! I'll have a conversation with you to gather all the details I need.\n\n"
                     "Examples:\n"
@@ -1026,6 +1036,148 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
             
             return {"ok": True, "message": "Registration started"}
+        
+        # Handle /rfq command - create RFQ (buyers)
+        if text.startswith('/rfq'):
+            from voice.telegram.rfq_handler import handle_rfq_command
+            
+            username = message.get('from', {}).get('username')
+            response = await handle_rfq_command(
+                user_id=int(user_id),
+                username=username
+            )
+            
+            # Send response with keyboard
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            reply_markup = {}
+            if 'keyboard' in response:
+                reply_markup = {'keyboard': response['keyboard'], 'resize_keyboard': True}
+            elif 'inline_keyboard' in response:
+                reply_markup = {'inline_keyboard': response['inline_keyboard']}
+            
+            if reply_markup:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': reply_markup
+                    },
+                    timeout=30
+                )
+            else:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode')
+                )
+            
+            return {"ok": True, "message": "RFQ flow started"}
+        
+        # Handle /offers command - view available RFQs (cooperatives)
+        if text.startswith('/offers'):
+            from voice.telegram.rfq_handler import handle_offers_command
+            
+            username = message.get('from', {}).get('username')
+            response = await handle_offers_command(
+                user_id=int(user_id),
+                username=username
+            )
+            
+            # Send response with keyboard
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if 'keyboard' in response:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                    },
+                    timeout=30
+                )
+            else:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode')
+                )
+            
+            return {"ok": True, "message": "Offers list sent"}
+        
+        # Handle /myoffers command - cooperative dashboard
+        if text.startswith('/myoffers'):
+            from voice.telegram.rfq_handler import handle_myoffers_command
+            
+            username = message.get('from', {}).get('username')
+            response = await handle_myoffers_command(
+                user_id=int(user_id),
+                username=username
+            )
+            
+            # Send response
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if 'keyboard' in response:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                    },
+                    timeout=30
+                )
+            else:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode')
+                )
+            
+            return {"ok": True, "message": "My offers sent"}
+        
+        # Handle /myrfqs command - buyer dashboard
+        if text.startswith('/myrfqs'):
+            from voice.telegram.rfq_handler import handle_myrfqs_command
+            
+            username = message.get('from', {}).get('username')
+            response = await handle_myrfqs_command(
+                user_id=int(user_id),
+                username=username
+            )
+            
+            # Send response
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if 'keyboard' in response:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                    },
+                    timeout=30
+                )
+            else:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode')
+                )
+            
+            return {"ok": True, "message": "My RFQs sent"}
         
         # Handle /language command - show current language
         if text.startswith('/language'):
@@ -1709,6 +1861,43 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 
                 return {"ok": True, "message": "Verification response sent"}
+        
+        # Check if user is in RFQ creation session
+        from voice.telegram.rfq_handler import rfq_sessions, handle_rfq_message
+        
+        if int(user_id) in rfq_sessions:
+            logger.info(f"User {user_id} in RFQ creation session, routing to RFQ handler")
+            response = await handle_rfq_message(int(user_id), text)
+            
+            # Send response with keyboard
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            reply_markup = {}
+            if 'keyboard' in response:
+                reply_markup = {'keyboard': response['keyboard'], 'resize_keyboard': True, 'one_time_keyboard': True}
+            elif 'inline_keyboard' in response:
+                reply_markup = {'inline_keyboard': response['inline_keyboard']}
+            
+            if reply_markup:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': reply_markup
+                    },
+                    timeout=30
+                )
+            else:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode')
+                )
+            
+            return {"ok": True, "message": "RFQ response sent"}
         
         # Check if user is in registration conversation
         from voice.telegram.register_handler import conversation_states, handle_registration_text
