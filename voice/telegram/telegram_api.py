@@ -74,6 +74,11 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
         
         message = update_data['message']
         
+        # Handle contact sharing (phone number registration)
+        if 'contact' in message:
+            logger.info("Routing to contact handler (phone registration)")
+            return await handle_contact_shared(update_data)
+        
         # Handle voice messages
         if 'voice' in message:
             logger.info("Routing to voice handler")
@@ -90,6 +95,98 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error processing Telegram webhook: {e}", exc_info=True)
         # Return ok=True to Telegram anyway to avoid retries
+        return {"ok": True, "message": f"Error: {str(e)}"}
+
+
+async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle when user shares their contact (phone number).
+    Creates/updates user identity with phone number for IVR authentication.
+    
+    Args:
+        update_data: Telegram Update dict containing contact
+        
+    Returns:
+        Response dict for Telegram
+    """
+    try:
+        message = update_data.get('message', {})
+        contact = message.get('contact', {})
+        user = message.get('from', {})
+        
+        user_id = user.get('id')
+        phone_number = contact.get('phone_number')
+        
+        if not phone_number:
+            logger.error("Contact shared but no phone number found")
+            return {"ok": True, "message": "No phone number in contact"}
+        
+        # Ensure phone is in E.164 format (+country_code + number)
+        if not phone_number.startswith('+'):
+            phone_number = '+' + phone_number
+        
+        logger.info(f"User {user_id} shared phone: {phone_number}")
+        
+        # Create or update user identity with phone number
+        from database.models import SessionLocal
+        from ssi.user_identity import get_or_create_user_identity
+        
+        db = SessionLocal()
+        try:
+            identity = get_or_create_user_identity(
+                telegram_user_id=str(user_id),
+                telegram_username=user.get('username'),
+                telegram_first_name=user.get('first_name'),
+                telegram_last_name=user.get('last_name'),
+                phone_number=phone_number,
+                db_session=db
+            )
+            
+            logger.info(f"User identity created/updated: {identity['did']}, phone: {phone_number}")
+            
+            # Send confirmation
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=(
+                    f"✅ Registration complete!\n\n"
+                    f"📱 Phone: {phone_number}\n"
+                    f"🆔 Your DID: `{identity['did'][:40]}...`\n\n"
+                    f"You can now:\n"
+                    f"• Send voice messages here in Telegram\n"
+                    f"• Call our IVR line: +41 62 539 1661\n"
+                    f"• Receive SMS notifications\n\n"
+                    f"🎙️ Try saying: \"I harvested 50 kg coffee from Gedeo\""
+                ),
+                parse_mode='Markdown'
+            )
+            
+            db.close()
+            return {"ok": True, "message": "Phone number registered"}
+            
+        except Exception as e:
+            logger.error(f"Error creating user identity: {e}", exc_info=True)
+            db.close()
+            
+            # Check if it's a duplicate phone error
+            if 'unique constraint' in str(e).lower() or 'duplicate' in str(e).lower():
+                processor = get_processor()
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        "❌ This phone number is already registered to another account.\n\n"
+                        "Each phone number can only be used once.\n"
+                        "If you need help, contact support."
+                    )
+                )
+                return {"ok": True, "message": "Duplicate phone number"}
+            
+            raise
+            
+    except Exception as e:
+        logger.error(f"Error handling contact: {e}", exc_info=True)
         return {"ok": True, "message": f"Error: {str(e)}"}
 
 
@@ -257,12 +354,56 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 
                 return {"ok": True, "message": "Sent verification form"}
             
-            # Regular /start command - welcome message
+            # Regular /start command - check if user is registered
+            from database.models import SessionLocal
+            from ssi.user_identity import get_user_by_telegram_id
+            
+            db = SessionLocal()
+            try:
+                existing_user = get_user_by_telegram_id(user_id, db)
+                
+                # If user doesn't exist or doesn't have phone number, ask for it
+                if not existing_user or not existing_user.phone_number:
+                    logger.info(f"New user or missing phone for {user_id}, requesting phone number")
+                    
+                    # Send request for phone number with Telegram contact button
+                    from voice.channels.telegram_channel import TelegramChannel
+                    telegram = TelegramChannel()
+                    
+                    # Create inline keyboard with contact button
+                    keyboard = {
+                        "keyboard": [[{"text": "📱 Share Phone Number", "request_contact": True}]],
+                        "resize_keyboard": True,
+                        "one_time_keyboard": True
+                    }
+                    
+                    message_text = (
+                        "👋 Welcome to Voice Ledger!\n\n"
+                        "📱 To get started, please share your phone number.\n\n"
+                        "This enables you to:\n"
+                        "• Create batches via Telegram voice messages\n"
+                        "• Call our IVR line: +41 62 539 1661\n"
+                        "• Receive SMS notifications\n\n"
+                        "Click the button below to share your contact 👇"
+                    )
+                    
+                    await telegram.send_message(user_id, message_text, reply_markup=keyboard)
+                    
+                    db.close()
+                    return {"ok": True, "message": "Requested phone number"}
+                
+                # User exists with phone - show welcome message
+                db.close()
+            except Exception as e:
+                logger.error(f"Error checking user registration: {e}")
+                db.close()
+            
+            # Regular welcome message for registered users
             result = await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
                 message=(
-                    "👋 Welcome to Voice Ledger!\n\n"
+                    "👋 Welcome back to Voice Ledger!\n\n"
                     "I help coffee farmers, cooperatives, exporters, and buyers create digital supply chain records using natural conversation in English or Amharic.\n\n"
                     "🗣️ Just talk naturally! I'll ask questions if I need more details.\n\n"
                     "📝 System Commands:\n"

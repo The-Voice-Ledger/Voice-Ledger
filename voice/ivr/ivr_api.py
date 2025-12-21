@@ -41,7 +41,7 @@ async def handle_incoming_call(
     Handle incoming Twilio voice call.
     
     This is the initial webhook when a call comes in.
-    Returns TwiML to greet the caller and start recording.
+    Authenticates caller by phone number before allowing recording.
     
     Args:
         lang: Language code (en, am, om)
@@ -50,13 +50,41 @@ async def handle_incoming_call(
     form_data = await request.form()
     call_data = voice_handler.parse_twilio_request(dict(form_data))
     
-    logger.info(f"Incoming call from {call_data['from_number']} to {call_data['to_number']}")
+    from_number = call_data['from_number']
+    
+    logger.info(f"Incoming call from {from_number} to {call_data['to_number']}")
     logger.info(f"Call SID: {call_data['call_sid']}, Status: {call_data['call_status']}")
     
-    # Generate welcome TwiML with recording prompt
-    twiml = voice_handler.generate_welcome_message(language=lang)
+    # AUTHENTICATE: Check if phone number is registered
+    from database.models import UserIdentity
+    from database.connection import get_db
     
-    return Response(content=twiml, media_type="application/xml")
+    with get_db() as db:
+        user = db.query(UserIdentity).filter_by(phone_number=from_number).first()
+        
+        if not user:
+            # Unregistered phone number - reject call
+            logger.warning(f"Unregistered phone attempted IVR call: {from_number}")
+            twiml = voice_handler.generate_registration_required_message()
+            return Response(content=twiml, media_type="application/xml")
+        
+        if not user.is_approved:
+            # User exists but not approved
+            logger.warning(f"Unapproved user attempted IVR call: {from_number}")
+            twiml = voice_handler.generate_approval_pending_message()
+            return Response(content=twiml, media_type="application/xml")
+        
+        # Authenticated - user exists and is approved
+        logger.info(f"Authenticated IVR call from {user.telegram_username} (ID: {user.id}, DID: {user.did[:20]}...)")
+        
+        # Generate welcome TwiML with user's name
+        user_name = user.telegram_first_name or user.telegram_username or "user"
+        twiml = voice_handler.generate_welcome_message(
+            language=lang,
+            user_name=user_name
+        )
+        
+        return Response(content=twiml, media_type="application/xml")
 
 
 @router.post("/recording")
@@ -88,6 +116,21 @@ async def handle_recording_complete(
         twiml = voice_handler.generate_error_message("no_recording")
         return Response(content=twiml, media_type="application/xml")
     
+    # AUTHENTICATE: Verify caller is registered (should have passed /incoming check)
+    from database.models import UserIdentity
+    from database.connection import get_db
+    
+    with get_db() as db:
+        user = db.query(UserIdentity).filter_by(phone_number=from_number).first()
+        
+        if not user:
+            # Shouldn't happen (we rejected in /incoming), but safety check
+            logger.error(f"Recording received from unregistered number: {from_number}")
+            twiml = voice_handler.generate_error_message("authentication_failed")
+            return Response(content=twiml, media_type="application/xml")
+        
+        logger.info(f"Processing recording from authenticated user: {user.telegram_username} (ID: {user.id})")
+    
     try:
         # Download the recording from Twilio
         # Twilio recordings need authentication
@@ -112,13 +155,19 @@ async def handle_recording_complete(
         
         logger.info(f"Recording saved to: {temp_file}")
         
-        # Queue for async processing (reuse Phase 2 infrastructure)
+        # Queue for async processing with authenticated user context
         task = process_voice_command_task.delay(
             str(temp_file),
             metadata={
                 "source": "ivr",
+                "channel": "ivr",
+                "user_id": user.id,  # Database ID for batch linking
+                "user_did": user.did,  # DID for credential issuance
+                "telegram_user_id": user.telegram_user_id,  # For notifications
+                "username": user.telegram_username,
+                "first_name": user.telegram_first_name,
+                "phone_number": from_number,
                 "call_sid": call_sid,
-                "from_number": from_number,
                 "recording_sid": recording_sid,
                 "recording_duration": call_data.get("recording_duration")
             }

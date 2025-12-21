@@ -49,12 +49,25 @@ async def handle_register_command(user_id: int, username: str, first_name: str, 
     """
     db = SessionLocal()
     try:
-        # Check if already registered with non-farmer role
+        # Check if user has done /start (basic registration)
         existing_user = db.query(UserIdentity).filter_by(
             telegram_user_id=str(user_id)
         ).first()
         
-        if existing_user and existing_user.role != 'FARMER' and existing_user.is_approved:
+        # If no user exists at all, redirect to /start first
+        if not existing_user:
+            db.close()
+            return {
+                'message': (
+                    "👋 Welcome! Please send /start first to complete basic registration.\n\n"
+                    "This will create your account and let you share your phone number.\n"
+                    "Then you can use /register for advanced roles."
+                ),
+                'parse_mode': 'Markdown'
+            }
+        
+        # Check if already registered with non-farmer role
+        if existing_user.role != 'FARMER' and existing_user.is_approved:
             return {
                 'message': (
                     f"✅ You are already registered as: *{existing_user.role.replace('_', ' ').title()}*\n"
@@ -343,15 +356,71 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: LOCATION
     if state == STATE_LOCATION:
         data['location'] = text.strip()
+        
+        # Check if user already shared phone during /start
+        db = SessionLocal()
+        try:
+            existing_user = db.query(UserIdentity).filter_by(
+                telegram_user_id=str(user_id)
+            ).first()
+            
+            if existing_user and existing_user.phone_number:
+                # User already has phone from /start - skip phone question
+                logger.info(f"Reusing phone {existing_user.phone_number} from /start for user {user_id}")
+                data['phone_number'] = existing_user.phone_number
+                
+                # Route directly to role-specific questions
+                role = data.get('role')
+                
+                if role == 'EXPORTER':
+                    conversation_states[user_id]['state'] = STATE_EXPORT_LICENSE
+                    db.close()
+                    return {
+                        'message': (
+                            "What is your export license number?\n"
+                            "(e.g., 'EXP-2024-1234' or similar official license)"
+                        )
+                    }
+                elif role == 'BUYER':
+                    conversation_states[user_id]['state'] = STATE_BUSINESS_TYPE
+                    db.close()
+                    return {
+                        'message': "What type of business are you?",
+                        'inline_keyboard': [
+                            [{'text': "☕ Coffee Roaster", 'callback_data': 'reg_business_ROASTER'}],
+                            [{'text': "📦 Importer", 'callback_data': 'reg_business_IMPORTER'}],
+                            [{'text': "🏪 Wholesaler", 'callback_data': 'reg_business_WHOLESALER'}],
+                            [{'text': "🛒 Retailer", 'callback_data': 'reg_business_RETAILER'}],
+                            [{'text': "☕ Cafe Chain", 'callback_data': 'reg_business_CAFE_CHAIN'}]
+                        ]
+                    }
+                else:
+                    # COOPERATIVE_MANAGER - go to registration number
+                    conversation_states[user_id]['state'] = STATE_REG_NUMBER
+                    db.close()
+                    return {
+                        'message': (
+                            "What is your cooperative's registration number? (optional)\n\n"
+                            "Reply with 'skip' if not applicable."
+                        )
+                    }
+            
+            db.close()
+        except Exception as e:
+            logger.error(f"Error checking existing phone: {e}")
+            db.close()
+        
+        # No phone yet - ask for it
         conversation_states[user_id]['state'] = STATE_PHONE
         return {
             'message': (
                 "What is your phone number?\n"
-                "(Include country code, e.g., +251912345678)"
+                "(Include country code, e.g., +251912345678)\n\n"
+                "💡 Tip: You can also share your contact via /start"
             )
         }
     
-    # State: PHONE
+    # State: PHONE (only reached if user didn't share phone in /start)
     if state == STATE_PHONE:
         data['phone_number'] = text.strip()
         

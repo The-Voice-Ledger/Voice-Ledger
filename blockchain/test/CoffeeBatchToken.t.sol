@@ -54,21 +54,15 @@ contract CoffeeBatchTokenTest is Test {
         assertEq(token.balanceOf(cooperative, tokenId), QUANTITY);
         assertEq(token.batchIdToTokenId(BATCH_ID_1), tokenId);
         
-        // Check batch metadata
-        (
-            string memory batchId,
-            uint256 quantity,
-            string memory metadata,
-            string memory ipfsCid,
-            uint256 createdAt,
-            bool exists
-        ) = token.batches(tokenId);
+        // Check batch metadata using getBatchMetadata
+        CoffeeBatchToken.BatchMetadata memory batchMetadata = token.getBatchMetadata(tokenId);
         
-        assertEq(batchId, BATCH_ID_1);
-        assertEq(quantity, QUANTITY);
-        assertEq(metadata, METADATA_JSON);
-        assertGt(createdAt, 0);
-        assertTrue(exists);
+        assertEq(batchMetadata.batchId, BATCH_ID_1);
+        assertEq(batchMetadata.quantity, QUANTITY);
+        assertEq(batchMetadata.metadata, METADATA_JSON);
+        assertGt(batchMetadata.createdAt, 0);
+        assertTrue(batchMetadata.exists);
+        assertFalse(batchMetadata.isAggregated);
     }
 
     function test_MintMultipleBatches() public {

@@ -6,6 +6,7 @@ It handles entity validation, required field generation, and CRUD execution.
 """
 
 import sys
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -153,6 +154,10 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
             batch_db_id=batch.id,
             submitter_db_id=user_id
         )
+        
+        # NOTE: Token minting happens AFTER cooperative verification
+        # See voice/telegram/verification_handler.py::_process_verification()
+        # This prevents unverified batches from getting on-chain representation
         
         # Convert to dict for JSON response
         result = {

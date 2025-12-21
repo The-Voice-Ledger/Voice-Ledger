@@ -17,6 +17,8 @@ contract CoffeeBatchToken is ERC1155, Ownable {
     error BatchDoesNotExist(uint256 tokenId);
     error BatchIdNotFound(string batchId);
     error NotAuthorized();
+    error ChildTokensNotBurned();
+    error InvalidQuantity();
     
     // Counter for generating unique batch token IDs
     uint256 private _nextTokenId;
@@ -34,6 +36,8 @@ contract CoffeeBatchToken is ERC1155, Ownable {
         string ipfsCid; // IPFS CID for the batch data pinned via Pinata
         uint256 createdAt;
         bool exists;
+        bool isAggregated; // true if this is a container created from multiple batches
+        uint256[] childTokenIds; // Token IDs of batches that were aggregated (if isAggregated=true)
     }
     
     event BatchMinted(
@@ -44,10 +48,24 @@ contract CoffeeBatchToken is ERC1155, Ownable {
         string metadata
     );
     
+    event ContainerMinted(
+        uint256 indexed tokenId,
+        string batchId,
+        address indexed recipient,
+        uint256 quantity,
+        uint256[] childTokenIds
+    );
+    
     event BatchTransferred(
         uint256 indexed tokenId,
         address indexed from,
         address indexed to,
+        uint256 amount
+    );
+    
+    event BatchBurned(
+        uint256 indexed tokenId,
+        address indexed from,
         uint256 amount
     );
 
@@ -101,7 +119,9 @@ contract CoffeeBatchToken is ERC1155, Ownable {
             metadata: metadata,
             ipfsCid: ipfsCid,
             createdAt: block.timestamp,
-            exists: true
+            exists: true,
+            isAggregated: false,
+            childTokenIds: new uint256[](0)
         });
         
         // Map batch ID to token ID
@@ -178,5 +198,117 @@ contract CoffeeBatchToken is ERC1155, Ownable {
         returns (uint256) 
     {
         return balanceOf(account, tokenId);
+    }
+
+    /**
+     * @notice Mint an aggregated container token from multiple child batches
+     * @dev This function burns the child tokens and mints a new container token
+     * @param recipient Address to receive the container token
+     * @param quantity Total quantity of the container (sum of child quantities)
+     * @param batchIdStr Unique container identifier
+     * @param metadata JSON string with container details
+     * @param ipfsCid IPFS CID of the container data
+     * @param childTokenIds Array of child batch token IDs being aggregated
+     * @param childHolders Array of addresses holding the child tokens (parallel to childTokenIds)
+     * @return tokenId The newly created container token ID
+     */
+    function mintContainer(
+        address recipient,
+        uint256 quantity,
+        string calldata batchIdStr,
+        string calldata metadata,
+        string calldata ipfsCid,
+        uint256[] calldata childTokenIds,
+        address[] calldata childHolders
+    ) external onlyOwner returns (uint256) {
+        if (bytes(batchIdStr).length == 0) revert BatchIdRequired();
+        if (batchIdToTokenId[batchIdStr] != 0) revert BatchIdAlreadyExists(batchIdStr);
+        if (childTokenIds.length != childHolders.length) revert InvalidQuantity();
+        
+        // Verify mass balance: sum of child quantities must equal container quantity
+        uint256 totalChildQuantity = 0;
+        for (uint256 i = 0; i < childTokenIds.length; i++) {
+            uint256 childTokenId = childTokenIds[i];
+            address holder = childHolders[i];
+            
+            // Verify child token exists
+            if (!batches[childTokenId].exists) revert BatchDoesNotExist(childTokenId);
+            
+            // Get child token quantity
+            uint256 childBalance = balanceOf(holder, childTokenId);
+            if (childBalance == 0) revert ChildTokensNotBurned();
+            
+            totalChildQuantity += childBalance;
+            
+            // Burn the child token from holder
+            _burn(holder, childTokenId, childBalance);
+            
+            emit BatchBurned(childTokenId, holder, childBalance);
+        }
+        
+        // Verify mass balance
+        if (totalChildQuantity != quantity) revert InvalidQuantity();
+        
+        // Create container token
+        uint256 tokenId = _nextTokenId++;
+        
+        // Store metadata with aggregation info
+        batches[tokenId] = BatchMetadata({
+            batchId: batchIdStr,
+            quantity: quantity,
+            metadata: metadata,
+            ipfsCid: ipfsCid,
+            createdAt: block.timestamp,
+            exists: true,
+            isAggregated: true,
+            childTokenIds: childTokenIds
+        });
+        
+        // Map batch ID to token ID
+        batchIdToTokenId[batchIdStr] = tokenId;
+        
+        // Mint the container token
+        _mint(recipient, tokenId, quantity, "");
+        
+        emit ContainerMinted(tokenId, batchIdStr, recipient, quantity, childTokenIds);
+        
+        return tokenId;
+    }
+
+    /**
+     * @notice Burn tokens (used for consumption/final sale)
+     * @param tokenId The token ID to burn
+     * @param amount Amount to burn
+     */
+    function burnBatch(uint256 tokenId, uint256 amount) external {
+        if (!batches[tokenId].exists) revert BatchDoesNotExist(tokenId);
+        
+        _burn(msg.sender, tokenId, amount);
+        
+        emit BatchBurned(tokenId, msg.sender, amount);
+    }
+
+    /**
+     * @notice Get child token IDs for an aggregated container
+     * @param tokenId The container token ID
+     * @return Array of child token IDs
+     */
+    function getChildTokenIds(uint256 tokenId) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
+        if (!batches[tokenId].exists) revert BatchDoesNotExist(tokenId);
+        return batches[tokenId].childTokenIds;
+    }
+
+    /**
+     * @notice Check if a token is an aggregated container
+     * @param tokenId The token ID to check
+     * @return bool True if token is a container
+     */
+    function isContainer(uint256 tokenId) external view returns (bool) {
+        if (!batches[tokenId].exists) revert BatchDoesNotExist(tokenId);
+        return batches[tokenId].isAggregated;
     }
 }

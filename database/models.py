@@ -58,6 +58,10 @@ class UserIdentity(Base):
     # GS1 Global Location Number for user's location
     gln = Column(String(13), nullable=True, index=True)
     
+    # Phone number for IVR authentication (E.164 format: +251912345678)
+    phone_number = Column(String(20), nullable=True, unique=True, index=True)
+    phone_verified_at = Column(DateTime)  # When phone was verified via Telegram contact share
+    
     # Role and organization (for verification system)
     role = Column(String(50), default='FARMER', index=True)  # FARMER, COOPERATIVE_MANAGER, EXPORTER, BUYER, SYSTEM_ADMIN
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
@@ -171,7 +175,6 @@ class CoffeeBatch(Base):
     
     id = Column(Integer, primary_key=True)
     batch_id = Column(String(50), unique=True, nullable=False, index=True)
-    token_id = Column(Integer, unique=True)
     gtin = Column(String(14), unique=True, nullable=False, index=True)
     gln = Column(String(13), nullable=True, index=True)  # Global Location Number
     batch_number = Column(String(50), nullable=False)
@@ -189,6 +192,9 @@ class CoffeeBatch(Base):
     process_method = Column(String(50))  # Alias for DPP compatibility
     quality_grade = Column(String(20))
     farmer_id = Column(Integer, ForeignKey("farmer_identities.id"))
+    
+    # Blockchain token tracking (v1.6 - Dec 2025)
+    token_id = Column(BigInteger, nullable=True, index=True)  # ERC-1155 token ID on CoffeeBatchToken contract
     
     # User ownership tracking (for Telegram user who created the batch)
     created_by_user_id = Column(Integer, ForeignKey("user_identities.id"))

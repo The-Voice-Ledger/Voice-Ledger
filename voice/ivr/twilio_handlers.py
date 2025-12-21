@@ -24,30 +24,43 @@ class TwilioVoiceHandler:
         self.base_url = base_url.rstrip('/')
         logger.info(f"TwilioVoiceHandler initialized with base_url: {self.base_url}")
     
-    def generate_welcome_message(self, language: str = "en") -> str:
+    def generate_welcome_message(self, language: str = "en", user_name: str = None) -> str:
         """
         Generate TwiML for the initial call greeting.
         
         Args:
             language: Language code (en, am for Amharic, etc.)
+            user_name: Optional user's name for personalized greeting
             
         Returns:
             TwiML XML string
         """
         response = VoiceResponse()
         
-        # Welcome message
+        # Personalized welcome message
         if language == "am":  # Amharic
-            message = "ሰላም። እንኳን ወደ ቮይስ ሌጀር በደህና መጡ።"
+            if user_name:
+                message = f"ሰላም {user_name}። እንኳን ወደ ቮይስ ሌጀር በደህና መጡ።"
+            else:
+                message = "ሰላም። እንኳን ወደ ቮይስ ሌጀር በደህና መጡ።"
         else:  # English (default)
-            message = (
-                "Welcome to Voice Ledger. "
-                "This system helps you record coffee batch information using your voice. "
-                "After the beep, please speak clearly and state the type of coffee, "
-                "quantity in bags, quality grade, and farmer name. "
-                "You will have up to 2 minutes to record. "
-                "Press any key when finished, or wait for the recording to end."
-            )
+            if user_name:
+                message = (
+                    f"Welcome to Voice Ledger, {user_name}! "
+                    "After the beep, please speak clearly and tell me about your coffee batch. "
+                    "Include the quantity in kilograms, the origin, and the variety. "
+                    "You will have up to 2 minutes to record. "
+                    "Press any key when finished, or wait for the recording to end."
+                )
+            else:
+                message = (
+                    "Welcome to Voice Ledger. "
+                    "This system helps you record coffee batch information using your voice. "
+                    "After the beep, please speak clearly and state the type of coffee, "
+                    "quantity in bags, quality grade, and farmer name. "
+                    "You will have up to 2 minutes to record. "
+                    "Press any key when finished, or wait for the recording to end."
+                )
         
         response.say(message, voice='alice', language='en-US')
         response.pause(length=1)
@@ -130,7 +143,7 @@ class TwilioVoiceHandler:
         Generate TwiML for error scenarios.
         
         Args:
-            error_type: Type of error (recording_failed, processing_error, etc.)
+            error_type: Type of error (recording_failed, processing_error, authentication_failed, etc.)
             
         Returns:
             TwiML XML string
@@ -141,11 +154,60 @@ class TwilioVoiceHandler:
             "recording_failed": "We could not process your recording. Please try again later.",
             "processing_error": "There was an error processing your request. Please try again.",
             "no_recording": "No recording was received. Please call back and try again.",
+            "authentication_failed": "We could not verify your phone number. Please try again later.",
             "general": "An error occurred. Please try again later."
         }
         
         message = error_messages.get(error_type, error_messages["general"])
         response.say(message, voice='alice', language='en-US')
+        response.hangup()
+        
+        return str(response)
+    
+    def generate_registration_required_message(self) -> str:
+        """
+        Generate TwiML for unregistered phone numbers.
+        Tells caller to register via Telegram first.
+        
+        Returns:
+            TwiML XML string
+        """
+        response = VoiceResponse()
+        
+        response.say(
+            "Welcome to Voice Ledger. "
+            "This phone number is not registered. "
+            "To use this service, please register first by sending a message to our Telegram bot. "
+            "Search for 'Voice Ledger Bot' on Telegram, or ask someone in your cooperative for the link. "
+            "Send the slash start command and share your phone number to register. "
+            "Thank you. Goodbye.",
+            voice='alice',
+            language='en-US'
+        )
+        
+        response.hangup()
+        
+        return str(response)
+    
+    def generate_approval_pending_message(self) -> str:
+        """
+        Generate TwiML for users whose registration is pending approval.
+        
+        Returns:
+            TwiML XML string
+        """
+        response = VoiceResponse()
+        
+        response.say(
+            "Welcome to Voice Ledger. "
+            "Your account is pending approval. "
+            "Please wait for your cooperative manager or system administrator to approve your registration. "
+            "You will be notified via Telegram once approved. "
+            "Thank you. Goodbye.",
+            voice='alice',
+            language='en-US'
+        )
+        
         response.hangup()
         
         return str(response)

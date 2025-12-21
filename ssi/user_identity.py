@@ -19,6 +19,7 @@ def get_or_create_user_identity(
     telegram_username: str = None,
     telegram_first_name: str = None,
     telegram_last_name: str = None,
+    phone_number: str = None,
     db_session: Session = None
 ) -> dict:
     """
@@ -72,6 +73,10 @@ def get_or_create_user_identity(
                 user.telegram_first_name = telegram_first_name
             if telegram_last_name and telegram_last_name != user.telegram_last_name:
                 user.telegram_last_name = telegram_last_name
+            # Update phone number if provided (user shared contact)
+            if phone_number and phone_number != user.phone_number:
+                user.phone_number = phone_number
+                user.phone_verified_at = datetime.utcnow()
             
             db_session.commit()
             
@@ -97,6 +102,8 @@ def get_or_create_user_identity(
             telegram_username=telegram_username,
             telegram_first_name=telegram_first_name,
             telegram_last_name=telegram_last_name,
+            phone_number=phone_number,
+            phone_verified_at=datetime.utcnow() if phone_number else None,
             did=identity["did"],
             encrypted_private_key=encrypted_private_key,
             public_key=identity["public_key"],

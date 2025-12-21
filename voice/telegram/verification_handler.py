@@ -395,6 +395,56 @@ async def _process_verification(
     
     db.commit()
     
+    # Mint batch token AFTER verification (cooperative custodial model)
+    # Only verified batches get on-chain representation
+    try:
+        from blockchain.token_manager import mint_batch_token
+        import os
+        
+        # Get cooperative wallet address (custodian)
+        cooperative_wallet = os.getenv('COOPERATIVE_WALLET_ADDRESS') or os.getenv('WALLET_ADDRESS_SEP')
+        
+        if cooperative_wallet:
+            # Get IPFS CID from commission event
+            from database.models import EPCISEvent
+            commission_event = db.query(EPCISEvent).filter(
+                EPCISEvent.batch_id == batch.id,
+                EPCISEvent.biz_step == 'commissioning'
+            ).first()
+            
+            if commission_event and commission_event.ipfs_cid:
+                # Mint token to cooperative
+                token_id = mint_batch_token(
+                    recipient=cooperative_wallet,
+                    quantity_kg=verified_quantity,  # Use VERIFIED quantity, not claimed
+                    batch_id=batch.batch_id,
+                    metadata={
+                        'variety': batch.variety,
+                        'origin': batch.origin,
+                        'processing_method': batch.processing_method,
+                        'quality_grade': batch.quality_grade,
+                        'farmer_did': batch.created_by_did,
+                        'gtin': batch.gtin,
+                        'gln': batch.gln,
+                        'verified_by': session['user_did'],
+                        'verification_date': datetime.utcnow().isoformat()
+                    },
+                    ipfs_cid=commission_event.ipfs_cid
+                )
+                
+                # Store token ID in batch record
+                if token_id:
+                    batch.token_id = token_id
+                    db.commit()
+                    logger.info(f"✓ Batch {batch.batch_id} token minted: ID {token_id}")
+                else:
+                    logger.warning(f"⚠ Token minting returned None for batch {batch.batch_id}")
+            else:
+                logger.warning(f"⚠ No commission event IPFS CID for batch {batch.batch_id}")
+    except Exception as e:
+        # Don't fail verification if token minting fails
+        logger.error(f"⚠ Token minting failed for batch {batch.batch_id}: {e}")
+    
     # Clean up session
     verification_sessions.pop(user_id, None)
     

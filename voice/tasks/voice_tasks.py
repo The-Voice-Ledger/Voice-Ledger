@@ -145,8 +145,22 @@ def process_voice_command_task(
         with get_db() as db:
             try:
                 from ssi.user_identity import get_user_by_telegram_id
+                from database.models import UserIdentity
                 
-                if metadata and metadata.get("channel") == "telegram":
+                # IVR channel: User already authenticated, ID passed in metadata
+                if metadata and metadata.get("channel") == "ivr":
+                    user_db_id = metadata.get("user_id")
+                    if user_db_id:
+                        user_identity = db.query(UserIdentity).filter_by(id=user_db_id).first()
+                        if user_identity:
+                            user_language = user_identity.preferred_language or 'en'
+                            user_telegram_id = user_identity.telegram_user_id
+                            logger.info(f"IVR call from user {user_db_id}, language: {user_language}")
+                        else:
+                            logger.error(f"IVR: User ID {user_db_id} not found in database")
+                
+                # Telegram channel: Look up by telegram_user_id
+                elif metadata and metadata.get("channel") == "telegram":
                     user_telegram_id = metadata.get("user_id")
                     if user_telegram_id:
                         user_identity = get_user_by_telegram_id(user_telegram_id, db)
