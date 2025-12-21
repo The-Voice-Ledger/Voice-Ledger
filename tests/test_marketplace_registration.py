@@ -92,14 +92,18 @@ def test_exporter_registration():
         db.commit()
         print(f"✓ Created exporter record (ID: {exporter.id})")
         
-        # Create reputation record
-        reputation = UserReputation(
-            user_id=user.id,
-            reputation_level="BRONZE"
-        )
-        db.add(reputation)
-        db.commit()
-        print(f"✓ Created reputation record for user {user.id}")
+        # Create reputation record (or update if exists)
+        reputation = db.query(UserReputation).filter_by(user_id=user.id).first()
+        if not reputation:
+            reputation = UserReputation(
+                user_id=user.id,
+                reputation_level="BRONZE"
+            )
+            db.add(reputation)
+            db.commit()
+            print(f"✓ Created reputation record for user {user.id}")
+        else:
+            print(f"✓ Reputation record already exists for user {user.id}")
         
         # Update pending registration status
         pending.status = "APPROVED"
@@ -211,14 +215,18 @@ def test_buyer_registration():
         db.commit()
         print(f"✓ Created buyer record (ID: {buyer.id})")
         
-        # Create reputation record
-        reputation = UserReputation(
-            user_id=user.id,
-            reputation_level="BRONZE"
-        )
-        db.add(reputation)
-        db.commit()
-        print(f"✓ Created reputation record for user {user.id}")
+        # Create reputation record (or update if exists)
+        reputation = db.query(UserReputation).filter_by(user_id=user.id).first()
+        if not reputation:
+            reputation = UserReputation(
+                user_id=user.id,
+                reputation_level="BRONZE"
+            )
+            db.add(reputation)
+            db.commit()
+            print(f"✓ Created reputation record for user {user.id}")
+        else:
+            print(f"✓ Reputation record already exists for user {user.id}")
         
         # Update pending registration status
         pending.status = "APPROVED"
