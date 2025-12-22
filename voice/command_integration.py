@@ -590,14 +590,103 @@ def handle_pack_batches(db: Session, entities: dict, user_id: int = None, user_d
         if not event_result:
             raise VoiceCommandError("Failed to create aggregation event")
         
+        # ========== PHASE 2: Mint Container Token ==========
+        # Get child token IDs and holders from database
+        from database.crud import get_batch_by_batch_id
+        from blockchain.token_manager import mint_container_token
+        
+        child_token_ids = []
+        child_holders = []
+        total_quantity_kg = 0.0
+        
+        for batch_id in batch_ids:
+            batch = get_batch_by_batch_id(db, batch_id)
+            if not batch:
+                print(f"⚠️ Warning: Batch {batch_id} not found in database")
+                continue
+            
+            if not batch.token_id:
+                print(f"⚠️ Warning: Batch {batch_id} has no token_id (not minted yet)")
+                continue
+            
+            # Get holder address (use cooperative master wallet)
+            # All tokens are minted to the cooperative master wallet
+            from blockchain.token_manager import get_token_manager
+            manager = get_token_manager()
+            holder_address = manager.account.address
+            
+            child_token_ids.append(batch.token_id)
+            child_holders.append(holder_address)
+            total_quantity_kg += batch.quantity_kg or 0.0
+        
+        # Mint container token on blockchain
+        container_token_id = None
+        if len(child_token_ids) >= 2:
+            # Get recipient (use cooperative master wallet)
+            from blockchain.token_manager import get_token_manager
+            manager = get_token_manager()
+            recipient_address = manager.account.address
+            
+            # Build metadata
+            metadata = {
+                "container_id": container_id,
+                "container_type": container_type,
+                "child_batch_ids": batch_ids,
+                "total_quantity_kg": total_quantity_kg,
+                "packed_at": event_result.get("event_time"),
+                "location_gln": location_gln,
+                "operator_did": user_did or "did:key:unknown"
+            }
+            
+            # Mint container token
+            try:
+                container_token_id = mint_container_token(
+                    recipient=recipient_address,
+                    quantity_kg=total_quantity_kg,
+                    container_id=container_id,
+                    metadata=metadata,
+                    ipfs_cid=event_result.get("ipfs_cid", ""),
+                    child_token_ids=child_token_ids,
+                    child_holders=child_holders
+                )
+                
+                if container_token_id:
+                    print(f"✅ Container token minted: Token ID {container_token_id}")
+                    
+                    # Store container token ID in aggregation_relationships table
+                    from database.models import AggregationRelationship
+                    agg_rel = db.query(AggregationRelationship).filter_by(
+                        parent_sscc=container_id
+                    ).first()
+                    
+                    if agg_rel:
+                        agg_rel.container_token_id = container_token_id
+                        db.commit()
+                        print(f"✅ Stored container token ID in database")
+                else:
+                    print("⚠️ Container token minting returned None")
+                    
+            except Exception as e:
+                print(f"⚠️ Container token minting failed: {e}")
+                # Don't fail the entire operation if blockchain fails
+        else:
+            print(f"⚠️ Only {len(child_token_ids)} child tokens found, need at least 2 for container minting")
+        # ===================================================
+        
         message = f"✅ Packed {len(batch_ids)} batches into container {container_id}"
-        return (message, {
+        result_data = {
             "container_id": container_id,
             "batch_ids": batch_ids,
             "event_hash": event_result.get("event_hash"),
             "ipfs_cid": event_result.get("ipfs_cid"),
             "blockchain_tx": event_result.get("blockchain_tx_hash")
-        })
+        }
+        
+        if container_token_id:
+            result_data["container_token_id"] = container_token_id
+            message += f" (Token ID: {container_token_id})"
+        
+        return (message, result_data)
         
     except Exception as e:
         raise VoiceCommandError(f"Packing failed: {str(e)}")

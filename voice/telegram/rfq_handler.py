@@ -70,8 +70,8 @@ async def handle_rfq_command(user_id: int, username: str) -> Dict[str, Any]:
                 'parse_mode': 'Markdown'
             }
         
-        # Check role
-        if user.role != "BUYER":
+        # Check role (TEMP: Allow ADMIN for testing)
+        if user.role not in ["BUYER", "ADMIN"]:
             return {
                 'message': (
                     "⚠️ *Access Denied*\n\n"
@@ -518,7 +518,7 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
             UserIdentity.telegram_user_id == str(user_id)
         ).first()
         
-        if not user or user.role != "COOPERATIVE_MANAGER":
+        if not user or user.role not in ["COOPERATIVE_MANAGER", "ADMIN"]:
             return {
                 'message': (
                     "⚠️ *Access Denied*\n\n"
@@ -605,7 +605,7 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
             UserIdentity.telegram_user_id == str(user_id)
         ).first()
         
-        if not user or user.role != "BUYER":
+        if not user or user.role not in ["BUYER", "ADMIN"]:
             return {
                 'message': (
                     "⚠️ *Access Denied*\n\n"
@@ -725,8 +725,8 @@ async def handle_voice_rfq_creation(
             )
             return {"ok": False}
         
-        # Check role
-        if user.role != "BUYER":
+        # Check role (TEMP: Allow ADMIN for testing)
+        if user.role not in ["BUYER", "ADMIN"]:
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,

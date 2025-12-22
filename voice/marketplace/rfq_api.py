@@ -241,7 +241,8 @@ def create_rfq(
     user = get_current_user(user_id, db)
     
     # Verify user is BUYER
-    if user.role != "BUYER":
+    # TEMP: Allow ADMIN for testing
+    if user.role not in ["BUYER", "ADMIN"]:
         raise HTTPException(
             status_code=403,
             detail="Only buyers can create RFQs"
@@ -375,7 +376,8 @@ def create_offer(
     user = get_current_user(user_id, db)
     
     # Verify user is COOPERATIVE_MANAGER
-    if user.role != "COOPERATIVE_MANAGER":
+    # TEMP: Allow ADMIN for testing
+    if user.role not in ["COOPERATIVE_MANAGER", "ADMIN"]:
         raise HTTPException(
             status_code=403,
             detail="Only cooperative managers can submit offers"
@@ -579,7 +581,8 @@ def list_my_offers(
     # Get user
     user = get_current_user(user_id, db)
     
-    if user.role != "COOPERATIVE_MANAGER":
+    # TEMP: Allow ADMIN for testing
+    if user.role not in ["COOPERATIVE_MANAGER", "ADMIN"]:
         raise HTTPException(status_code=403, detail="Only cooperative managers can view offers")
     
     query = db.query(RFQOffer).filter_by(cooperative_id=user.organization_id)

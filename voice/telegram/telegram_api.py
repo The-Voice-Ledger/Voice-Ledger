@@ -79,6 +79,11 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
             logger.info("Routing to contact handler (phone registration)")
             return await handle_contact_shared(update_data)
         
+        # Handle photo messages (for farm GPS verification)
+        if 'photo' in message:
+            logger.info("Routing to photo handler (GPS verification)")
+            return await handle_photo_message(update_data)
+        
         # Handle voice messages
         if 'voice' in message:
             logger.info("Routing to voice handler")
@@ -101,7 +106,9 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
 async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Handle when user shares their contact (phone number).
-    Creates/updates user identity with phone number for IVR authentication.
+    
+    Note: Phone collection now happens during /register flow.
+    This handler is for users who share contact outside of registration.
     
     Args:
         update_data: Telegram Update dict containing contact
@@ -125,68 +132,251 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
         if not phone_number.startswith('+'):
             phone_number = '+' + phone_number
         
-        logger.info(f"User {user_id} shared phone: {phone_number}")
+        logger.info(f"User {user_id} shared phone outside registration: {phone_number}")
         
-        # Create or update user identity with phone number
-        from database.models import SessionLocal
-        from ssi.user_identity import get_or_create_user_identity
+        # Check if user is in registration flow
+        from voice.telegram.register_handler import conversation_states, STATE_PHONE
         
-        db = SessionLocal()
-        try:
-            identity = get_or_create_user_identity(
-                telegram_user_id=str(user_id),
-                telegram_username=user.get('username'),
-                telegram_first_name=user.get('first_name'),
-                telegram_last_name=user.get('last_name'),
-                phone_number=phone_number,
-                db_session=db
-            )
+        if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_PHONE:
+            # User is in registration flow - store phone in conversation state
+            conversation_states[user_id]['data']['phone_number'] = phone_number
             
-            logger.info(f"User identity created/updated: {identity['did']}, phone: {phone_number}")
+            # Import and call the registration text handler to continue flow
+            from voice.telegram.register_handler import handle_registration_text
+            response = await handle_registration_text(user_id, phone_number)
             
-            # Send confirmation
+            # Send response
             processor = get_processor()
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
-                message=(
-                    f"✅ Registration complete!\n\n"
-                    f"📱 Phone: {phone_number}\n"
-                    f"🆔 Your DID: `{identity['did'][:40]}...`\n\n"
-                    f"You can now:\n"
-                    f"• Send voice messages here in Telegram\n"
-                    f"• Call our IVR line: +41 62 539 1661\n"
-                    f"• Receive SMS notifications\n\n"
-                    f"🎙️ Try saying: \"I harvested 50 kg coffee from Gedeo\""
-                ),
-                parse_mode='Markdown'
+                message=response.get('message', '✅ Phone number received'),
+                parse_mode=response.get('parse_mode'),
+                inline_keyboard=response.get('inline_keyboard')
             )
             
-            db.close()
-            return {"ok": True, "message": "Phone number registered"}
+            return {"ok": True, "message": "Phone processed in registration"}
+        
+        # User shared contact outside of registration - acknowledge and suggest /register
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=(
+                f"✅ Thanks for sharing your phone number!\n\n"
+                f"📱 Phone: {phone_number}\n\n"
+                f"To complete registration and start using Voice Ledger, please send:\n"
+                f"👉 /register\n\n"
+                f"This will set up your account with your role (farmer, manager, exporter, or buyer)."
+            ),
+            parse_mode=None
+        )
+        
+        return {"ok": True, "message": "Contact acknowledged"}
             
-        except Exception as e:
-            logger.error(f"Error creating user identity: {e}", exc_info=True)
-            db.close()
+    except Exception as e:
+        logger.error(f"Error handling contact: {e}", exc_info=True)
+        return {"ok": True, "message": f"Error: {str(e)}"}
+
+
+
+async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle photo upload from Telegram (for GPS verification during farmer registration).
+    
+    Args:
+        update_data: Telegram Update dict containing photo
+        
+    Returns:
+        Response dict for Telegram
+    """
+    try:
+        message = update_data.get('message', {})
+        user = message.get('from', {})
+        photo_array = message.get('photo', [])
+        
+        user_id = user.get('id')
+        
+        if not photo_array:
+            logger.error("Photo message but no photo array found")
+            return {"ok": True, "message": "No photo in message"}
+        
+        # Get largest photo (last in array)
+        photo = photo_array[-1]
+        photo_file_id = photo.get('file_id')
+        
+        logger.info(f"User {user_id} sent photo: {photo_file_id}")
+        
+        # Check if user is in registration flow expecting a photo
+        from voice.telegram.register_handler import (
+            conversation_states, 
+            STATE_UPLOAD_FARM_PHOTO,
+            handle_farm_photo_upload
+        )
+        from voice.telegram.batch_photo_sessions import get_batch_photo_session, clear_batch_photo_session
+        
+        # Priority 1: Check for farmer registration photo
+        if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_UPLOAD_FARM_PHOTO:
+            # Get file URL from Telegram
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if not bot_token:
+                raise ValueError("TELEGRAM_BOT_TOKEN not configured")
             
-            # Check if it's a duplicate phone error
-            if 'unique constraint' in str(e).lower() or 'duplicate' in str(e).lower():
+            # Get file path from Telegram API
+            import requests
+            file_info_response = requests.get(
+                f"https://api.telegram.org/bot{bot_token}/getFile",
+                params={'file_id': photo_file_id},
+                timeout=10
+            )
+            file_info_response.raise_for_status()
+            file_info = file_info_response.json()
+            
+            if not file_info.get('ok'):
+                logger.error(f"Failed to get file info: {file_info}")
+                return {"ok": True, "message": "Failed to get file info"}
+            
+            file_path = file_info['result']['file_path']
+            photo_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+            
+            # Process registration photo with GPS extraction
+            response = await handle_farm_photo_upload(user_id, photo_file_id, photo_url)
+            
+            # Send response to user
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response.get('message', '✅ Photo processed'),
+                parse_mode=response.get('parse_mode'),
+                inline_keyboard=response.get('inline_keyboard')
+            )
+            
+            return {"ok": True, "message": "Registration photo processed"}
+        
+        # Priority 2: Check for batch verification photo
+        batch_session = get_batch_photo_session(user_id)
+        if batch_session:
+            # User just created a batch and is uploading verification photo
+            batch_id = batch_session['batch_id']
+            batch_number = batch_session['batch_number']
+            
+            logger.info(f"Processing batch verification photo for batch {batch_id}")
+            
+            # Get file URL from Telegram
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if not bot_token:
+                raise ValueError("TELEGRAM_BOT_TOKEN not configured")
+            
+            # Get file path and download photo
+            import requests
+            file_info_response = requests.get(
+                f"https://api.telegram.org/bot{bot_token}/getFile",
+                params={'file_id': photo_file_id},
+                timeout=10
+            )
+            file_info_response.raise_for_status()
+            file_info = file_info_response.json()
+            
+            if not file_info.get('ok'):
+                logger.error(f"Failed to get file info: {file_info}")
+                return {"ok": True, "message": "Failed to get file info"}
+            
+            file_path = file_info['result']['file_path']
+            photo_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+            
+            # Download photo
+            photo_response = requests.get(photo_url, timeout=10)
+            photo_response.raise_for_status()
+            
+            # Process with batch photo API
+            from voice.verification.batch_photo_api import upload_batch_verification_photo
+            from database.models import SessionLocal
+            from io import BytesIO
+            from fastapi import UploadFile
+            
+            db = SessionLocal()
+            try:
+                # Create UploadFile-like object
+                photo_bytes = BytesIO(photo_response.content)
+                photo_bytes.name = f"batch_{batch_id}_verification.jpg"
+                
+                # Upload to batch verification API
+                result = await upload_batch_verification_photo(
+                    batch_id=batch_id,
+                    photo=UploadFile(file=photo_bytes, filename=photo_bytes.name),
+                    db=db
+                )
+                
+                # Clear session
+                clear_batch_photo_session(user_id)
+                
+                # Get user language
+                from database.models import UserIdentity
+                user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+                lang = user.preferred_language if user else 'en'
+                
+                # Send success message
+                if lang == 'am':
+                    message = (
+                        f"✅ *ማረጋገጫ ተሳክቷል!*\n\n"
+                        f"የእርስዎ ፎቶ ለ {batch_number} ተመዝግቧል።\n\n"
+                        f"📍 GPS: {result['gps']['latitude']:.6f}, {result['gps']['longitude']:.6f}\n"
+                    )
+                    if result.get('distance_from_farm_km') is not None:
+                        message += f"📏 ከእርሻ ርቀት: {result['distance_from_farm_km']:.1f} ኪ.ሜ\n"
+                    message += f"\n🌍 *EUDR የማክበር ዝግጁ!*"
+                else:
+                    message = (
+                        f"✅ *Verification Successful!*\n\n"
+                        f"Photo recorded for {batch_number}\n\n"
+                        f"📍 GPS: {result['gps']['latitude']:.6f}, {result['gps']['longitude']:.6f}\n"
+                    )
+                    if result.get('distance_from_farm_km') is not None:
+                        message += f"📏 Distance from farm: {result['distance_from_farm_km']:.1f} km\n"
+                    message += f"\n🌍 *Ready for EUDR compliance!*"
+                
                 processor = get_processor()
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message=(
-                        "❌ This phone number is already registered to another account.\n\n"
-                        "Each phone number can only be used once.\n"
-                        "If you need help, contact support."
-                    )
+                    message=message,
+                    parse_mode='Markdown'
                 )
-                return {"ok": True, "message": "Duplicate phone number"}
-            
-            raise
-            
+                
+                return {"ok": True, "message": "Batch verification photo processed"}
+                
+            except Exception as e:
+                logger.error(f"Error processing batch verification photo: {e}", exc_info=True)
+                
+                # Send error message
+                processor = get_processor()
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=f"❌ Failed to process photo: {str(e)}\n\nPlease try again with a photo that has GPS data."
+                )
+                
+                return {"ok": True, "message": f"Error: {str(e)}"}
+            finally:
+                db.close()
+        
+        # Not in registration or batch flow - send help message
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=(
+                "📸 Photo received, but I'm not sure what to do with it.\n\n"
+                "To add GPS verification:\n"
+                "• Use /register for farmer registration\n"
+                "• Record a batch first, then upload photo for verification"
+            )
+        )
+        return {"ok": True, "message": "Photo not expected"}
+        
     except Exception as e:
-        logger.error(f"Error handling contact: {e}", exc_info=True)
+        logger.error(f"Error handling photo: {e}", exc_info=True)
         return {"ok": True, "message": f"Error: {str(e)}"}
 
 
@@ -361,39 +551,35 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             db = SessionLocal()
             try:
                 existing_user = get_user_by_telegram_id(user_id, db)
-                
-                # If user doesn't exist or doesn't have phone number, ask for it
-                if not existing_user or not existing_user.phone_number:
-                    logger.info(f"New user or missing phone for {user_id}, requesting phone number")
-                    
-                    # Send request for phone number with Telegram contact button
-                    from voice.channels.telegram_channel import TelegramChannel
-                    telegram = TelegramChannel()
-                    
-                    # Create inline keyboard with contact button
-                    keyboard = {
-                        "keyboard": [[{"text": "📱 Share Phone Number", "request_contact": True}]],
-                        "resize_keyboard": True,
-                        "one_time_keyboard": True
-                    }
-                    
-                    message_text = (
-                        "👋 Welcome to Voice Ledger!\n\n"
-                        "📱 To get started, please share your phone number.\n\n"
-                        "This enables you to:\n"
-                        "• Create batches via Telegram voice messages\n"
-                        "• Call our IVR line: +41 62 539 1661\n"
-                        "• Receive SMS notifications\n\n"
-                        "Click the button below to share your contact 👇"
-                    )
-                    
-                    await telegram.send_message(user_id, message_text, reply_markup=keyboard)
-                    
-                    db.close()
-                    return {"ok": True, "message": "Requested phone number"}
-                
-                # User exists with phone - show welcome message
                 db.close()
+                
+                # If user doesn't exist, prompt them to register
+                if not existing_user:
+                    logger.info(f"New user {user_id}, prompting to register")
+                    
+                    result = await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=(
+                            "👋 *Welcome to Voice Ledger!*\n\n"
+                            "Voice Ledger helps coffee farmers, cooperatives, exporters, and buyers "
+                            "create digital supply chain records using natural conversation.\n\n"
+                            "📝 *Get Started:*\n"
+                            "To begin, please complete registration:\n"
+                            "👉 Send /register\n\n"
+                            "This will let you:\n"
+                            "• 🎙️ Create batches via voice messages\n"
+                            "• 📞 Call our IVR line: +41 62 539 1661\n"
+                            "• 📱 Receive SMS notifications\n"
+                            "• 🔐 Access the web dashboard with PIN\n\n"
+                            "Registration takes 2-5 minutes."
+                        ),
+                        parse_mode='Markdown'
+                    )
+                    logger.info(f"/start prompt to register: {result}")
+                    return {"ok": True, "message": "Prompted to register"}
+                
+                # User exists - show welcome message
             except Exception as e:
                 logger.error(f"Error checking user registration: {e}")
                 db.close()
@@ -597,6 +783,46 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     user_id=user_id,
                     message=response_text
                 )
+                
+                # Create batch photo session and prompt for verification photo (EUDR compliance)
+                if response_data and response_data.get('id'):
+                    from voice.telegram.batch_photo_sessions import create_batch_photo_session
+                    
+                    batch_id = response_data['id']
+                    batch_number = response_data.get('batch_id', f"Batch {batch_id}")
+                    
+                    create_batch_photo_session(user_id, batch_id, batch_number)
+                    
+                    # Prompt for photo upload
+                    from database.models import UserIdentity
+                    user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+                    lang = user.preferred_language if user else 'en'
+                    
+                    if lang == 'am':
+                        photo_prompt = (
+                            f"\n\n📸 *የEUDR ማረጋገጫ ፎቶ* (አማራጭ)\n\n"
+                            f"በእርሻዎ ቦታ ላይ የተነሱ ፎቶግራፍ ያስገቡ:\n"
+                            f"✅ ለአውሮፓ ወደሚላከው ቡና የሚረዳ\n"
+                            f"✅ የቦታ ማረጋገጫ ይሰጣል\n"
+                            f"✅ የ30 ቀናት ባልበለጠ ጊዜ ውስጥ የተነሱ\n\n"
+                            f"አሁን ፎቶ ለመላክ 📎 የሚለውን ይጫኑ።"
+                        )
+                    else:
+                        photo_prompt = (
+                            f"\n\n📸 *EUDR Verification Photo* (Optional)\n\n"
+                            f"Upload a photo from your harvest location:\n"
+                            f"✅ Helps with EU export compliance\n"
+                            f"✅ Provides GPS proof of origin\n"
+                            f"✅ Photo must be recent (within 30 days)\n\n"
+                            f"Press 📎 to send a photo now."
+                        )
+                    
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=photo_prompt,
+                        parse_mode='Markdown'
+                    )
             except Exception as e:
                 logger.error(f"Error processing /commission: {e}", exc_info=True)
                 await processor.send_notification(
@@ -1633,6 +1859,21 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 eudr_compliant = dpp.get('dueDiligence', {}).get('eudrCompliant', False)
                 all_geolocated = dpp.get('dueDiligence', {}).get('allFarmersGeolocated', False)
                 
+                # Get EUDR compliance details
+                eudr_compliance = dpp.get('eudrCompliance', {})
+                compliance_status = eudr_compliance.get('complianceStatus', 'UNKNOWN')
+                compliance_level = eudr_compliance.get('complianceLevel', 'Unknown')
+                farm_gps = eudr_compliance.get('geolocation', {}).get('farmLocation', {})
+                verification_photos = eudr_compliance.get('geolocation', {}).get('harvestVerification', [])
+                
+                # Build compliance status emoji
+                status_emoji = {
+                    'FULLY_VERIFIED': '🟢',
+                    'FARM_VERIFIED': '🟡',
+                    'SELF_REPORTED': '🟠',
+                    'NO_GPS': '🔴'
+                }.get(compliance_status, '⚪')
+                
                 # Build contributors list
                 contributor_lines = []
                 for c in contributors[:5]:  # Show first 5 farmers
@@ -1648,21 +1889,41 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 
                 contributors_text = "\n".join(contributor_lines)
                 
-                # Send formatted DPP summary
+                # Send formatted DPP summary with EUDR compliance
+                message_text = (
+                    f"📄 *Digital Product Passport*\n\n"
+                    f"*Container:* `{container_id}`\n"
+                    f"*Total Quantity:* {total_qty}\n"
+                    f"*Contributors:* {num_contributors} farmers\n\n"
+                    f"*Farmer Contributions:*\n{contributors_text}\n\n"
+                    f"*EUDR Compliance:*\n"
+                    f"{status_emoji} Status: {compliance_status.replace('_', ' ').title()}\n"
+                    f"📊 Level: {compliance_level}\n"
+                )
+                
+                # Add GPS verification details if available
+                if farm_gps.get('coordinates'):
+                    coords = farm_gps['coordinates']
+                    message_text += f"📍 Farm GPS: {coords['latitude']:.6f}, {coords['longitude']:.6f}\n"
+                    if farm_gps.get('verifiedAt'):
+                        message_text += f"✅ Verified: {farm_gps['verifiedAt'][:10]}\n"
+                
+                if verification_photos:
+                    message_text += f"📸 Harvest Photos: {len(verification_photos)} verified\n"
+                
+                message_text += (
+                    f"\n*Due Diligence:*\n"
+                    f"{'✅' if eudr_compliant else '❌'} EUDR Compliant\n"
+                    f"{'✅' if all_geolocated else '❌'} All Farmers Geolocated\n\n"
+                    f"*QR Code:* {dpp.get('qrCode', {}).get('url', 'N/A')}\n\n"
+                    f"Full DPP with blockchain proofs and GPS verification."
+                )
+                
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message=(
-                        f"📄 *Digital Product Passport*\n\n"
-                        f"*Container:* `{container_id}`\n"
-                        f"*Total Quantity:* {total_qty}\n"
-                        f"*Contributors:* {num_contributors} farmers\n\n"
-                        f"*Farmer Contributions:*\n{contributors_text}\n\n"
-                        f"*EUDR Compliance:* {'✅ Yes' if eudr_compliant else '❌ No'}\n"
-                        f"*All Farmers Geolocated:* {'✅ Yes' if all_geolocated else '❌ No'}\n\n"
-                        f"*QR Code:* {dpp.get('qrCode', {}).get('url', 'N/A')}\n\n"
-                        f"Full DPP generated with blockchain proofs and farmer lineage."
-                    )
+                    message=message_text,
+                    parse_mode='Markdown'
                 )
                 
                 logger.info(f"Successfully generated DPP for {container_id} with {num_contributors} contributors")

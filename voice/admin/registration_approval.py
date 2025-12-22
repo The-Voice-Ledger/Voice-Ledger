@@ -411,7 +411,7 @@ async def list_registrations():
                 </div>
 """
                 
-                html += """
+                html += f"""
             </div>
             
             {f'''

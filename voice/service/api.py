@@ -96,6 +96,14 @@ except ImportError as e:
     MARKETPLACE_AVAILABLE = False
     print(f"ℹ️  Marketplace module not available: {e}")
 
+# Import Batch Photo Verification router (Phase C - EUDR GPS photo compliance)
+try:
+    from voice.verification.batch_photo_api import router as batch_photo_router
+    BATCH_PHOTO_AVAILABLE = True
+except ImportError as e:
+    BATCH_PHOTO_AVAILABLE = False
+    print(f"ℹ️  Batch photo verification module not available: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -131,6 +139,11 @@ if BATCH_VERIFY_AVAILABLE:
 if MARKETPLACE_AVAILABLE:
     app.include_router(marketplace_router)
     print("✅ Marketplace/RFQ endpoints registered at /api/*")
+
+# Include Batch Photo Verification router (Phase C - EUDR)
+if BATCH_PHOTO_AVAILABLE:
+    app.include_router(batch_photo_router)
+    print("✅ Batch photo verification endpoints registered at /batches/*")
 
 # Allow local tools and UIs
 app.add_middleware(

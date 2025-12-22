@@ -73,6 +73,14 @@ class UserIdentity(Base):
     preferred_language = Column(String(2), default='en', nullable=False, index=True)  # 'en' or 'am'
     language_set_at = Column(DateTime, default=datetime.utcnow)
     
+    # PIN authentication for web UI (v1.7 - Phase 3: PIN Setup Integration)
+    pin_hash = Column(String(255))  # Bcrypt hash of 4-digit PIN
+    pin_salt = Column(String(255))  # Salt (bcrypt includes salt, kept for compatibility)
+    pin_set_at = Column(DateTime)  # When PIN was last set/changed
+    failed_login_attempts = Column(Integer, default=0)  # Consecutive failed PIN attempts
+    locked_until = Column(DateTime)  # Account locked until this timestamp (NULL if not locked)
+    last_login_at = Column(DateTime)  # Last successful PIN login
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = Column(DateTime, default=datetime.utcnow)
@@ -112,6 +120,10 @@ class PendingRegistration(Base):
     country = Column(String(100))
     target_volume_tons_annual = Column(Float)
     quality_preferences = Column(JSON)
+    
+    # PIN authentication (v1.7 - Phase 3: Collected during registration, copied to UserIdentity on approval)
+    pin_hash = Column(String(255))  # Bcrypt hash of 4-digit PIN
+    pin_salt = Column(String(255))  # Salt for PIN
     
     status = Column(String(20), default='PENDING', index=True)  # PENDING, APPROVED, REJECTED
     reviewed_by_admin_id = Column(Integer)
@@ -416,6 +428,9 @@ class AggregationRelationship(Base):
     
     aggregation_event_id = Column(Integer, ForeignKey("epcis_events.id"))
     disaggregation_event_id = Column(Integer, ForeignKey("epcis_events.id"))
+    
+    # Blockchain token tracking (v1.6 - Phase 2: Container minting)
+    container_token_id = Column(BigInteger, nullable=True, index=True)  # ERC-1155 container token ID
     
     aggregated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     disaggregated_at = Column(DateTime)

@@ -19,6 +19,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 import logging
+import os
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,10 @@ class DeforestationChecker:
         
         Args:
             api_key: Optional API key for Global Forest Watch
-                    (not required for basic queries, but recommended for production)
+                    If not provided, will try to read from GFW_API_KEY environment variable.
+                    Not required for basic queries, but recommended for production.
         """
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv('GFW_API_KEY')
         self.base_url = "https://data-api.globalforestwatch.org"
         self.eudr_cutoff_year = 2020
         

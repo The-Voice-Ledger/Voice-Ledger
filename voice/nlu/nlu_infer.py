@@ -186,7 +186,7 @@ If a field is not mentioned, set it to null. Do NOT add explanations, only JSON.
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",  # Upgraded from gpt-3.5-turbo for better intent accuracy
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": transcript}

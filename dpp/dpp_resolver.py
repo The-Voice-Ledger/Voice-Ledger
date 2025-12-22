@@ -22,8 +22,8 @@ from database import get_db, get_all_batches, get_batch_by_batch_id, get_batch_e
 # Initialize FastAPI app
 app = FastAPI(
     title="Voice Ledger DPP Resolver",
-    description="Resolve Digital Product Passports for coffee batches",
-    version="1.0.0"
+    description="Resolve Digital Product Passports for coffee batches with EUDR GPS verification",
+    version="2.0.0"
 )
 
 # Enable CORS for public access
@@ -87,7 +87,12 @@ async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
         
         # Return requested format
         if format == "summary":
-            return {
+            # Extract EUDR compliance info
+            eudr = dpp.get("eudrCompliance", {})
+            compliance_status = eudr.get("complianceStatus", "UNKNOWN")
+            compliance_level = eudr.get("complianceLevel", "Unknown")
+            
+            summary = {
                 "passportId": dpp["passportId"],
                 "batchId": dpp["batchId"],
                 "product": dpp["productInformation"]["productName"],
@@ -97,7 +102,14 @@ async def resolve_dpp(batch_id: str, format: str = "full") -> Dict[str, Any]:
                 "gtin": dpp["productInformation"]["gtin"],
                 "eudrCompliant": dpp["dueDiligence"]["eudrCompliant"],
                 "deforestationRisk": dpp["dueDiligence"]["riskAssessment"]["deforestationRisk"],
+                "eudrVerification": {
+                    "status": compliance_status,
+                    "level": compliance_level,
+                    "gpsVerified": compliance_status in ["FULLY_VERIFIED", "FARM_VERIFIED"]
+                },
                 "qrUrl": dpp["qrCode"]["url"]
+            }
+            return summary
             }
         
         elif format == "qr":
