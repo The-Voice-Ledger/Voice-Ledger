@@ -162,6 +162,27 @@ class FarmerIdentity(Base):
     farm_size_hectares = Column(Float)  # Farm size for EUDR compliance
     certification_status = Column(String(100))  # e.g., 'Organic', 'Fair Trade', 'Rainforest Alliance'
     
+    # GPS-verified photo fields (EUDR Article 9 compliance)
+    farm_photo_url = Column(String(500))  # Telegram file URL or IPFS gateway
+    farm_photo_hash = Column(String(64))  # SHA-256 hash for blockchain anchoring
+    farm_photo_ipfs = Column(String(100))  # IPFS CID for decentralized storage
+    photo_latitude = Column(Float)  # GPS extracted from photo EXIF
+    photo_longitude = Column(Float)  # GPS extracted from photo EXIF
+    photo_timestamp = Column(DateTime)  # When photo was taken (from EXIF)
+    gps_verified_at = Column(DateTime)  # When GPS was verified
+    photo_device_make = Column(String(100))  # Camera/phone manufacturer
+    photo_device_model = Column(String(100))  # Device model
+    blockchain_proof_hash = Column(String(66))  # Transaction hash of blockchain proof
+    
+    # Deforestation check fields (EUDR Article 10 compliance)
+    deforestation_checked_at = Column(DateTime)  # When deforestation check was performed
+    deforestation_risk = Column(String(20))  # LOW, MEDIUM, HIGH, UNKNOWN
+    deforestation_compliant = Column(Boolean)  # True if no deforestation detected
+    tree_cover_loss_hectares = Column(Float)  # Hectares of tree cover lost after Dec 31, 2020
+    deforestation_data_source = Column(String(200))  # e.g., "Global Forest Watch - UMD"
+    deforestation_confidence = Column(Float)  # Confidence score (0.0 to 1.0)
+    deforestation_details = Column(JSON)  # Detailed results from satellite analysis
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -239,6 +260,28 @@ class VerificationEvidence(Base):
     
     # Relationships
     batch = relationship("CoffeeBatch", back_populates="evidence")
+
+class VerificationPhoto(Base):
+    """GPS-verified photos for batch verification (EUDR compliance)"""
+    __tablename__ = "verification_photos"
+    
+    id = Column(Integer, primary_key=True)
+    batch_id = Column(Integer, ForeignKey("coffee_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    photo_url = Column(String(500), nullable=False)
+    photo_hash = Column(String(64), nullable=False, unique=True, index=True)
+    photo_ipfs = Column(String(100))  # IPFS CID
+    latitude = Column(Float)
+    longitude = Column(Float)
+    photo_timestamp = Column(DateTime)
+    device_make = Column(String(100))
+    device_model = Column(String(100))
+    verified_at = Column(DateTime, default=datetime.utcnow)
+    distance_from_farm_km = Column(Float)  # Distance from registered farm location
+    blockchain_proof_hash = Column(String(66))  # Transaction hash
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    batch = relationship("CoffeeBatch", backref="verification_photos")
 
 class EPCISEvent(Base):
     __tablename__ = "epcis_events"

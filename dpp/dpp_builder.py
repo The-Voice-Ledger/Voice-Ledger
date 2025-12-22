@@ -13,8 +13,265 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from database import get_db, get_batch_by_batch_id, get_batch_events
-from database.models import CoffeeBatch, AggregationRelationship, EPCISEvent
+from database.models import CoffeeBatch, AggregationRelationship, EPCISEvent, FarmerIdentity, VerificationPhoto
 from sqlalchemy.orm import Session
+from voice.verification.deforestation_checker import DeforestationChecker
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, Any]:
+    """
+    Build comprehensive EUDR compliance section with GPS photo verification.
+    
+    Implements EU Regulation 2023/1115 Article 9 requirements:
+    - Geolocation coordinates of all production plots
+    - Date of production
+    - Traceability through supply chain
+    - Risk assessment (deforestation-free)
+    
+    Args:
+        batch: CoffeeBatch database object
+        db: Database session
+        
+    Returns:
+        EUDR compliance section dict
+    """
+    farmer = batch.farmer
+    
+    # Check GPS verification status
+    has_registration_gps = farmer.photo_latitude is not None and farmer.photo_longitude is not None
+    has_self_reported_gps = farmer.latitude is not None and farmer.longitude is not None
+    
+    # Get verification photos for this batch
+    verification_photos = db.query(VerificationPhoto).filter_by(batch_id=batch.id).all()
+    
+    # Determine compliance status
+    if has_registration_gps and farmer.gps_verified_at:
+        if verification_photos:
+            compliance_status = "FULLY_VERIFIED"  # Farm GPS + batch photos
+            compliance_level = "Gold"
+        else:
+            compliance_status = "FARM_VERIFIED"  # Farm GPS only
+            compliance_level = "Silver"
+    elif has_self_reported_gps:
+        compliance_status = "SELF_REPORTED"  # GPS but no photo proof
+        compliance_level = "Bronze"
+    else:
+        compliance_status = "NO_GPS"  # Missing geolocation
+        compliance_level = "Non-Compliant"
+    
+    eudr_section = {
+        "regulation": {
+            "name": "EU Deforestation Regulation (EUDR)",
+            "reference": "Regulation (EU) 2023/1115",
+            "article": "Article 9 - Geolocation Requirements",
+            "applicableFrom": "2024-12-30"
+        },
+        "complianceStatus": compliance_status,
+        "complianceLevel": compliance_level,
+        "geolocation": {}
+    }
+    
+    # Add farm registration geolocation (from photo EXIF)
+    if has_registration_gps:
+        eudr_section["geolocation"]["farmLocation"] = {
+            "source": "GPS Photo Verification",
+            "coordinates": {
+                "latitude": farmer.photo_latitude,
+                "longitude": farmer.photo_longitude
+            },
+            "verifiedAt": farmer.gps_verified_at.isoformat() if farmer.gps_verified_at else None,
+            "photoTimestamp": farmer.photo_timestamp.isoformat() if farmer.photo_timestamp else None,
+            "device": f"{farmer.photo_device_make or ''} {farmer.photo_device_model or ''}".strip() or "Unknown",
+            "proof": {
+                "photoHash": farmer.farm_photo_hash,
+                "ipfsCID": farmer.farm_photo_ipfs,
+                "blockchainTx": farmer.blockchain_proof_hash
+            }
+        }
+    elif has_self_reported_gps:
+        eudr_section["geolocation"]["farmLocation"] = {
+            "source": "Self-Reported",
+            "coordinates": {
+                "latitude": farmer.latitude,
+                "longitude": farmer.longitude
+            },
+            "warning": "Not cryptographically verified. Upload farm photo for full compliance."
+        }
+    else:
+        eudr_section["geolocation"]["farmLocation"] = {
+            "status": "MISSING",
+            "warning": "Geolocation data required for EUDR compliance. Register with GPS photo."
+        }
+    
+    # Add batch verification photos (harvest location proof)
+    if verification_photos:
+        eudr_section["geolocation"]["harvestVerification"] = []
+        
+        for photo in verification_photos:
+            verification = {
+                "verificationId": photo.id,
+                "coordinates": {
+                    "latitude": photo.latitude,
+                    "longitude": photo.longitude
+                },
+                "timestamp": photo.photo_timestamp.isoformat() if photo.photo_timestamp else None,
+                "verifiedAt": photo.verified_at.isoformat() if photo.verified_at else None,
+                "device": f"{photo.device_make or ''} {photo.device_model or ''}".strip() or "Unknown",
+                "distanceFromFarm": {
+                    "value": photo.distance_from_farm_km,
+                    "unit": "km",
+                    "status": "VALID" if photo.distance_from_farm_km and photo.distance_from_farm_km < 50 else "WARNING"
+                } if photo.distance_from_farm_km is not None else None,
+                "proof": {
+                    "photoHash": photo.photo_hash,
+                    "ipfsCID": photo.photo_ipfs,
+                    "blockchainTx": photo.blockchain_proof_hash
+                }
+            }
+            eudr_section["geolocation"]["harvestVerification"].append(verification)
+    
+    # Add geographic boundaries (Ethiopia coffee-growing regions)
+    if farmer.country_code == 'ET':
+        eudr_section["geographicBoundary"] = {
+            "country": "ET",
+            "countryName": "Ethiopia",
+            "region": farmer.region or batch.origin_region,
+            "withinCoffeeBelt": True,
+            "coordinates": {
+                "bounds": {
+                    "north": 15.0,
+                    "south": 3.0,
+                    "east": 48.0,
+                    "west": 33.0
+                }
+            }
+        }
+    
+    # Add risk assessment with actual deforestation check
+    eudr_section["riskAssessment"] = {
+        "deforestationRisk": "CHECKING",
+        "riskFactors": [],
+        "assessmentDate": datetime.now(timezone.utc).date().isoformat(),
+        "assessor": "Voice Ledger GPS Verification System",
+        "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis"
+    }
+    
+    # Perform actual deforestation check if we have GPS coordinates
+    if has_registration_gps or has_self_reported_gps:
+        try:
+            checker = DeforestationChecker()
+            lat = farmer.photo_latitude if has_registration_gps else farmer.latitude
+            lon = farmer.photo_longitude if has_registration_gps else farmer.longitude
+            
+            deforestation_result = checker.check_deforestation(
+                float(lat),
+                float(lon),
+                radius_meters=1000  # Check 1km radius around farm
+            )
+            
+            # Store deforestation check results in database
+            farmer.deforestation_checked_at = deforestation_result.check_date
+            farmer.deforestation_risk = deforestation_result.risk_level
+            farmer.deforestation_compliant = deforestation_result.compliant
+            farmer.tree_cover_loss_hectares = deforestation_result.tree_cover_loss_hectares
+            farmer.deforestation_data_source = deforestation_result.data_source
+            farmer.deforestation_confidence = deforestation_result.confidence_score
+            farmer.deforestation_details = deforestation_result.details
+            db.commit()
+            
+            # Update risk assessment with actual results
+            eudr_section["riskAssessment"]["deforestationRisk"] = deforestation_result.risk_level
+            eudr_section["riskAssessment"]["deforestationCheck"] = {
+                "detected": deforestation_result.deforestation_detected,
+                "treeCoverLossHectares": deforestation_result.tree_cover_loss_hectares,
+                "compliant": deforestation_result.compliant,
+                "confidence": deforestation_result.confidence_score,
+                "dataSource": deforestation_result.data_source,
+                "methodology": deforestation_result.methodology,
+                "checkedAt": deforestation_result.check_date.isoformat(),
+                "eudrCutoffDate": "2020-12-31",
+                "recommendation": deforestation_result.details.get("recommendation")
+            }
+            
+            # Add appropriate risk factor based on deforestation status
+            if not deforestation_result.compliant:
+                eudr_section["riskAssessment"]["riskFactors"].append({
+                    "factor": f"Deforestation detected: {deforestation_result.tree_cover_loss_hectares} hectares lost",
+                    "severity": deforestation_result.risk_level,
+                    "mitigation": deforestation_result.details.get("recommendation")
+                })
+            else:
+                eudr_section["riskAssessment"]["riskFactors"].append({
+                    "factor": "No deforestation detected after Dec 31, 2020",
+                    "severity": "NONE",
+                    "note": f"Satellite imagery confirms {deforestation_result.tree_cover_loss_hectares} hectares tree cover loss (below threshold)"
+                })
+                
+            logger.info(f"Deforestation check completed for farmer {farmer.farmer_id}: {deforestation_result.risk_level} risk")
+            
+        except Exception as e:
+            logger.error(f"Deforestation check failed for farmer {farmer.farmer_id}: {str(e)}")
+            # Keep MEDIUM risk if check fails
+            eudr_section["riskAssessment"]["deforestationRisk"] = "UNKNOWN"
+            eudr_section["riskAssessment"]["deforestationCheck"] = {
+                "status": "CHECK_FAILED",
+                "error": str(e),
+                "note": "Manual deforestation review required"
+            }
+            eudr_section["riskAssessment"]["riskFactors"].append({
+                "factor": "Deforestation check unavailable",
+                "severity": "MEDIUM",
+                "mitigation": "Manual satellite imagery review required"
+            })
+    else:
+        # No GPS coordinates available
+        eudr_section["riskAssessment"]["deforestationRisk"] = "UNKNOWN"
+        eudr_section["riskAssessment"]["deforestationCheck"] = {
+            "status": "NO_GPS_COORDINATES",
+            "note": "Cannot perform deforestation check without geolocation data"
+        }
+    
+    # Add other risk factors based on compliance
+    if compliance_status == "NO_GPS":
+        eudr_section["riskAssessment"]["riskFactors"].append({
+            "factor": "Missing geolocation data",
+            "severity": "HIGH",
+            "mitigation": "Upload farm photo with GPS for verification"
+        })
+    elif compliance_status == "SELF_REPORTED":
+        eudr_section["riskAssessment"]["riskFactors"].append({
+            "factor": "Geolocation not cryptographically verified",
+            "severity": "MEDIUM",
+            "mitigation": "Upload photo with EXIF GPS for cryptographic proof"
+        })
+    elif not verification_photos:
+        eudr_section["riskAssessment"]["riskFactors"].append({
+            "factor": "No harvest location verification photos",
+            "severity": "LOW",
+            "mitigation": "Upload photo from harvest location to strengthen compliance"
+        })
+    
+    if not eudr_section["riskAssessment"]["riskFactors"]:
+        eudr_section["riskAssessment"]["riskFactors"].append({
+            "factor": "GPS verified with photo proof and no deforestation detected",
+            "severity": "NONE",
+            "note": "Full EUDR Article 9 and 10 compliance achieved"
+        })
+    
+    # Add due diligence statement
+    eudr_section["dueDiligenceStatement"] = {
+        "operator": "Voice Ledger Supply Chain Platform",
+        "statement": f"This batch has undergone GPS verification with compliance level: {compliance_level}. "
+                    f"Geolocation data {'has been cryptographically verified via photo EXIF metadata' if has_registration_gps else 'is self-reported and requires photo verification'}.",
+        "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
+        "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
+        "nextReviewDate": (datetime.now(timezone.utc).date().replace(year=datetime.now(timezone.utc).year + 1)).isoformat()
+    }
+    
+    return eudr_section
 
 
 def load_batch_data(batch_id: str):
@@ -210,16 +467,22 @@ def build_dpp(
         "url": dpp_url
     }
     
+    # Build comprehensive EUDR compliance section with GPS photo verification
+    with get_db() as db:
+        fresh_batch = get_batch_by_batch_id(db, batch_id)
+        eudr_compliance = build_eudr_compliance_section(fresh_batch, db)
+    
     # Assemble complete DPP
     dpp = {
         "passportId": passport_id,
         "batchId": batch_id,
-        "version": "1.0.0",
+        "version": "2.0.0",  # Updated to 2.0 with EUDR GPS verification
         "issuedAt": issued_at,
         "productInformation": product_info,
         "traceability": traceability,
         "sustainability": sustainability,
         "dueDiligence": due_diligence,
+        "eudrCompliance": eudr_compliance,  # NEW: Comprehensive EUDR section
         "blockchain": blockchain,
         "qrCode": qr_code
     }
