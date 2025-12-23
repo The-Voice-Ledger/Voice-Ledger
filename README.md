@@ -1,6 +1,6 @@
 # Voice Ledger
 
-**Voice-first blockchain traceability for coffee supply chains.** Farmers speak, the system records—everything from harvest to export, anchored on-chain with IPFS storage. Built for 11M+ smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
+**Voice-first blockchain traceability for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
 **Current:** v1.8 (Production) - Telegram bot, bilingual ASR, marketplace, EUDR compliance  
 **Status:** Deployed, tested, ready for scale
@@ -423,12 +423,7 @@ Comprehensive guides in `/documentation`:
 
 MIT
 
----
-
-## Author
-
-Emmanuel Acho, PhD  
-Building voice-first identity and traceability systems for the Global South.
+--- 
 
 ---
 
