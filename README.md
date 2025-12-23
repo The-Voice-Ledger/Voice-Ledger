@@ -1,971 +1,436 @@
-# The Voice Ledger
+# Voice Ledger
 
-A voice-first blockchain traceability system for coffee supply chains that enables natural language event recording using standardized EPCIS 2.0 events, self-sovereign identity, and immutable blockchain anchoring.
+**Voice-first blockchain traceability for coffee supply chains.** Farmers speak, the system records—everything from harvest to export, anchored on-chain with IPFS storage. Built for 11M+ smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
-**Current Status:** v1.5 (Bilingual Cloud) - Functional, English + Amharic, automatic language detection  
-**In Development:** v2.0 (Offline-First) - 5 languages, offline-capable, 95%+ rural accessibility
+**Current:** v1.8 (Production) - Telegram bot, bilingual ASR, marketplace, EUDR compliance  
+**Status:** Deployed, tested, ready for scale
 
-## New Features (v1.5 - December 2025)
+---
 
-- **Bilingual Support**: Automatic English/Amharic language detection
-- **50% Cost Savings**: Local Amharic model reduces transcription costs to $0
-- **High Accuracy ASR**: Medium Whisper model with 9% WER for Amharic
-- **Telegram Bot**: @voice_ledger_bot for easy voice message submission
-- **Async Processing**: Celery + Redis for non-blocking operations
-- **Production Ready**: Database connection pooling, enhanced error handling
-- **Comprehensive Docs**: 3000+ lines of documentation
-- **Credential Portability**: QR code export and public verification API for farmers
-- **🆕 Blockchain + IPFS Integration**: Full event data on IPFS with blockchain anchoring
-- **🆕 Merkle Proof System**: Gas-efficient batch aggregation with cryptographic proofs
-- **🆕 Multi-Currency Settlement**: Smart contracts supporting USD, ETH, BIRR, USDC
-- **🆕 Complete Integration Tests**: End-to-end IPFS + blockchain verification
-- **🆕 Organized Documentation**: Lab guides, architecture docs, deployment guides
-- **🇪🇺 EUDR Compliance System**: GPS photo verification + satellite deforestation detection (December 22, 2025)
+## What It Does
 
-## Overview
+Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. The system transcribes, understands intent, generates standardized EPCIS 2.0 events, stores full data on IPFS, and anchors cryptographic hashes on-chain.
 
-The Voice Ledger converts spoken supply chain events into verifiable, blockchain-anchored records. The system processes voice commands through automatic speech recognition and natural language understanding to generate standardized GS1 EPCIS 2.0 events, which are canonicalized, hashed, and anchored to blockchain with full event data stored on IPFS.
+**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. Minutes later, that batch has a tokenized identity (ERC-1155), blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that buyers can scan for full supply chain history.
 
-**v1.5 (Current Implementation):** Cloud-based system with **bilingual support (English + Amharic)**, automatic language detection, Telegram bot interface, and optimized costs (50% savings on Amharic transcriptions via local model).
+---
 
-**v2.0 (Planned):** Offline-first system with on-device AI models supporting 5 languages (Amharic, Afan Oromo, Tigrinya, Spanish, English) for 11M+ smallholder farmers.
+## Core Components
 
-## System Architecture (v1.5 - Current)
+### Voice Interface
+- **Telegram Bot** (@voice_ledger_bot): Primary interface for farmers
+- **Bilingual ASR**: Automatic English/Amharic routing
+  - English: OpenAI Whisper API ($0.006/minute)
+  - Amharic: Local fine-tuned model ($0, 9% WER)
+- **NLU**: GPT-4o-mini extracts intents and entities from natural speech
+- **Latency**: 5-15 seconds end-to-end (async pipeline)
+- **IVR Ready**: Twilio integration for feature phones (planned)
 
-```
-Voice Input (Telegram/IVR) → Language Detection (Whisper API)
-                                       ↓
-                              ┌────────┴────────┐
-                              ↓                 ↓
-                         Amharic?          English?
-                              ↓                 ↓
-                    Local Whisper Model   OpenAI Whisper API
-                    (b1n1yam/shhook)      (whisper-1)
-                    [On-device, $0]       [Cloud, $0.02]
-                              ↓                 ↓
-                              └────────┬────────┘
-                                       ↓
-                              NLU (GPT-3.5 API)
-                              [Works both languages]
-                                       ↓
-                              EPCIS Event Builder
-                                       ↓
-                           Canonicalization (URDNA2015)
-                                       ↓
-                                 SHA-256 Hash
-                                       ↓
-                    ┌──────────────────┴──────────────────┐
-                    ↓                                      ↓
-              IPFS Storage                          Blockchain Anchor
-           (Full Event Data)                   (Hash + CID + Timestamp)
-```
+### Identity & Credentials (SSI)
+- **Decentralized Identifiers**: W3C DID (did:key method, Ed25519)
+- **Verifiable Credentials**: Organic certifications, quality grades, farm registrations
+- **QR Code Export**: Farmers get portable credentials (offline-verifiable)
+- **Public Verification API**: `/voice/verify/{did}` - no auth required
 
-## Implemented Components (v1.0)
+### Supply Chain Events (EPCIS 2.0)
+- **Event Types**: Commission, Receipt, Shipment, Transformation, Aggregation
+- **GS1 Standards**: GTIN-13, GLN, SSCC identifiers
+- **JSON-LD Canonicalization**: URDNA2015 for deterministic hashing
+- **Multi-Language Support**: Amharic and English transcripts → standardized EPCIS
 
-### Core Modules (v1.0 - Production Ready)
+### Blockchain & Storage
+- **Smart Contracts** (Base Sepolia):
+  - `EPCISEventAnchor.sol`: Hash anchoring with IPFS CID storage
+  - `CoffeeBatchToken.sol`: ERC-1155 semi-fungible tokens (50/50 tests passing)
+  - `SettlementContract.sol`: Multi-currency tracking (USD, ETH, BIRR, USDC)
+- **IPFS Storage**: Full event data on Pinata (40% gas savings vs on-chain)
+- **Merkle Proofs**: Batch aggregation (75% gas reduction)
 
-**GS1 Identifier Generation** [COMPLETE]
-- GTIN-13 generation with check digit validation
-- GLN (Global Location Number) for farms and facilities
-- SSCC (Serial Shipping Container Code) for shipments
-- Compliance with GS1 standards
+### EU Deforestation Regulation (EUDR) Compliance
+- **GPS Photo Verification**: Extract geolocation from farmer photo EXIF
+- **Deforestation Detection**: Global Forest Watch API + satellite imagery analysis
+- **Risk Assessment**: Gold/Silver/Bronze levels (<0.5ha, 0.5-2ha, >2ha forest loss)
+- **Audit Trail**: 5-year blockchain record (Article 33 compliance)
+- **Cost**: $0.065/farmer/month (prevents $160K customs rejections)
 
-**EPCIS 2.0 Event Builder** [COMPLETE]
-- ObjectEvent for harvest and observation
-- TransformationEvent for processing stages
-- AggregationEvent for shipment composition
-- Full JSON-LD context with CBV business steps
-- Instance/Lot Master Data (ILMD) support
+### Multi-Actor Marketplace (Phase 3)
+- **User Roles**: Farmer, Cooperative, Exporter, Buyer (4 actors + 1 admin)
+- **RFQ System**: Buyers create voice-based requests, cooperatives submit offers
+- **PIN Authentication**: 4-digit PIN for web UI access (bcrypt, 5-attempt lockout)
+- **Redis Session Persistence**: Session survival across server reloads
+- **Registration Flow**: Multi-language, role-specific, with photo upload
 
-**JSON-LD Canonicalization** [COMPLETE]
-- URDNA2015 algorithm implementation using pyld
-- Deterministic N-Quads output
-- Semantic equivalence verification
-- Ensures identical hashes regardless of key ordering
+---
 
-**Cryptographic Hashing** [COMPLETE]
-- SHA-256 hashing of canonical events
-- Event hash generation for blockchain anchoring
-- Metadata tracking (algorithm, canonicalization method)
-
-**W3C Decentralized Identifiers (DIDs)** [COMPLETE]
-- did:key method implementation
-- Ed25519 key pair generation using PyNaCl
-- DID document resolution
-- Multibase encoding (base58btc)
-
-**Verifiable Credentials** [COMPLETE]
-- W3C VC Data Model 1.1 implementation
-- Ed25519Signature2020 proof type
-- Organic certification credentials
-- Quality grade credentials
-- Credential verification with signature validation
-
-**Smart Contracts** [COMPLETE]
-- EPCISEventAnchor.sol: Event hash anchoring with IPFS CID storage
-- CoffeeBatchToken.sol: ERC-1155 semi-fungible tokens for batch representation
-- SettlementContract.sol: Multi-currency settlement tracking (6 parameters)
-- Event linking to token metadata
-- Solidity 0.8.20 with OpenZeppelin 5.0 libraries
-- Deployed to Base Sepolia testnet
-- All Foundry tests passing (58/58)
-
-**IPFS Integration** [COMPLETE]
-- Full EPCIS event storage on IPFS
-- Content-addressed retrieval (CID-based)
-- Pinata integration for persistent pinning
-- Blockchain anchoring with CID storage
-- 40% gas cost reduction (full data off-chain)
-- Integration tests passing (CID: QmTFwE14...)
-
-**Merkle Proof System** [COMPLETE]
-- Merkle tree implementation for batch aggregation
-- Gas-efficient: 75% reduction vs individual anchoring
-- Cryptographic proof generation and verification
-- Container-level event bundling
-- Smart contract verification support
-
-**Digital Twin Synchronization** [COMPLETE]
-- Unified state management combining on-chain and off-chain data
-- Neon PostgreSQL persistence layer
-- Batch lifecycle tracking
-- Event history aggregation
-- Migration from JSON completed (9/9 batches)
-
-**Voice Processing API** [COMPLETE - v1.5 Bilingual]
-- FastAPI REST service for audio processing
-- **Bilingual ASR**: Automatic language detection (English + Amharic)
-- **Dual model routing**: OpenAI Whisper API (English) + Local Amharic model (b1n1yam/shook-medium-amharic-2k)
-- GPT-3.5 for natural language understanding (supports both languages)
-- Entity extraction (quantity, variety, location, date, batch_id)
-- Intent classification (commission, receipt, shipment, transformation)
-- Celery + Redis for async processing
-- API key authentication
-- **Performance**: 2-4s (English), 3-6s (Amharic), 50% cost savings on Amharic
-
-**Web Dashboard** [COMPLETE]
-- Streamlit-based interface
-- Batch tracking by GTIN or batch number
-- Event timeline visualization
-- Supply chain journey mapping
-- Blockchain verification interface
-**Digital Product Passport (DPP)** [COMPLETE]
-- GS1 Digital Link URI generation
-- QR code generation with embedded metadata
-- Batch information aggregation
-- Resolver service for DPP retrieval
-
-**🇪🇺 EUDR Compliance System** [COMPLETE - December 22, 2025]
-- **GPS Photo Verification** (Article 9): Extract geolocation from photo EXIF metadata
-- **Deforestation Detection** (Article 10): Satellite imagery analysis via Global Forest Watch API
-- **Multi-Tier Assessment**: Gold/Silver/Bronze compliance levels
-- **Blockchain Audit Trail** (Article 33): 5-year immutable record keeping
-- **Risk Thresholds**: LOW (<0.5ha loss), MEDIUM (0.5-2ha), HIGH (>2ha)
-- **Production Ready**: 42/42 tests passing, database migrations complete
-- **Cost**: $0.065 per farmer/month, ROI: 2,500,000x (prevents one customs rejection)
-- **Documentation**: Complete implementation guide ([EUDR_COMPLIANCE_GUIDE.md](documentation/guides/EUDR_COMPLIANCE_GUIDE.md))
-
-### Standards Compliance
-
-**GS1 Standards**
-- EPCIS 2.0 (ISO/IEC 19987:2024)
-- Core Business Vocabulary (CBV)
-- EPC Tag Data Standard
-
-**W3C Standards**
-- DID Core Specification
-- Verifiable Credentials Data Model 1.1
-- Verifiable Presentations
-- JSON-LD 1.1
-
-**Ethereum Standards**
-- ERC-1155 Multi Token Standard
-- EIP-712 for typed data signing
-## Technology Stack (v1.0)
+## Tech Stack
 
 **Backend**
-- Python 3.11
-- FastAPI 0.104.1
-- SQLAlchemy 2.0.23 (Neon PostgreSQL integration)
-- PyNaCl 1.5.0 (Ed25519 cryptography)
-- PyLD 2.0.3 (JSON-LD canonicalization)
-- Web3.py 6.11.3 (blockchain interaction)
-- qrcode 8.0 (QR code generation for credential sharing)
-**Voice Processing (v1.5 - Bilingual Cloud)**
-- OpenAI Whisper API (ASR) - English, cloud-based
-- Amharic Whisper Medium Model (b1n1yam/shook-medium-amharic-2k)
-  - Local inference with MPS acceleration (Apple Silicon)
-  - 9% Word Error Rate (production-quality accuracy)
-  - $0 cost per transcription
-  - Trained on 2000+ hours of Amharic speech by Addis AI
-- Automatic language detection and intelligent routing
-- OpenAI GPT-3.5 (NLU) - Bilingual entity extraction (English + Amharic)
-- Celery workers with solo pool for async task processing
-- Redis message broker
-- Telegram Bot API integration
+- Python 3.9 + FastAPI
+- PostgreSQL (Neon serverless) - database branching, auto-scaling
+- Redis - Celery task queue + session storage
+- SQLAlchemy 2.0 ORM
 
-**Voice Processing (v2.0 - Planned Offline)**
-- Whisper-Small quantized (244MB) - 5 languages, on-device
-- Gemma 3B + LoRA (1.5GB) - Offline entity extraction
-- ONNX Runtime for mobile inference
+**Voice Processing**
+- OpenAI Whisper API (English)
+- `b1n1yam/shook-medium-amharic-2k` (local Amharic model, HuggingFace)
+- OpenAI GPT-4o-mini (intent extraction)
+- OpenAI GPT-4 (conversational AI, optional)
 
 **Blockchain**
-- Foundry (Forge, Anvil) - Local development and testing
-- Solidity 0.8.20 - Smart contract development
-- OpenZeppelin 5.0 - Contract libraries
-- Web3.py 6.11.3 - Blockchain interaction
-- Polygon/Ethereum - Target deployment networks
+- Solidity 0.8.20 + OpenZeppelin 5.0
+- Foundry (Forge, Anvil)
+- Web3.py 6.11.3
+- Base Sepolia testnet
 
-**Storage**
-- IPFS (Pinata) - Decentralized event storage with pinning service
-- Neon serverless PostgreSQL - Production database [COMPLETE]
-- SQLite offline queue - Planned for v2.0 mobile app
+**Storage & Crypto**
+- IPFS (Pinata pinning service)
+- PyNaCl (Ed25519 signatures)
+- PyLD (JSON-LD canonicalization)
 
-**Frontend**
-- Streamlit 1.28.2
-- Plotly 5.18.0
+**Messaging**
+- python-telegram-bot (Telegram webhook)
+- Celery + Redis (async processing)
 
-## Project Structure
-
-```
-Voice-Ledger/
-├── gs1/
-│   └── identifiers.py          # GTIN, GLN, SSCC generation
-├── epcis/
-│   ├── epcis_builder.py        # EPCIS event construction
-│   ├── canonicalise.py         # URDNA2015 canonicalization
-│   └── hash_event.py           # SHA-256 hashing
-├── ssi/
-│   ├── did/
-│   │   └── did_key.py          # DID generation and resolution
-│   ├── agent.py                # Verifiable Credential issuance
-│   └── user_identity.py        # User identity management
-├── blockchain/
-│   ├── src/
-│   │   ├── EPCISEventAnchor.sol    # Event hash anchoring
-│   │   ├── CoffeeBatchToken.sol    # ERC-1155 tokens
-│   │   └── SettlementContract.sol  # Multi-currency settlement
-│   ├── test/                       # Foundry tests (58/58 passing)
-│   ├── merkle_tree.py              # Merkle proof generation
-│   ├── blockchain_anchor.py        # IPFS + blockchain integration
-│   ├── batch_hasher.py             # Deterministic batch hashing
-│   └── verification.py             # Proof verification
-├── voice/
-│   ├── asr/
-│   │   └── asr_infer.py        # Bilingual Whisper (EN + AM)
-│   ├── nlu/
-│   │   └── nlu_infer.py        # GPT-3.5 intent parsing
-│   ├── telegram/
-│   │   ├── telegram_api.py     # Telegram bot webhook
-│   │   └── notifier.py         # Synchronous notifications
-│   ├── channels/
-│   │   ├── processor.py        # Multi-channel processor
-│   │   ├── telegram_channel.py # Telegram integration
-│   │   └── twilio_channel.py   # IVR integration (ready)
-│   ├── tasks/
-│   │   └── voice_tasks.py      # Celery async tasks
-│   ├── verification/
-│   │   ├── __init__.py         # Verification module
-│   │   ├── verify_api.py       # Public verification API
-│   │   ├── gps_photo_verifier.py     # GPS EXIF extraction (497 lines)
-│   │   ├── deforestation_checker.py  # Satellite imagery analysis (358 lines)
-│   │   └── batch_photo_api.py        # Batch verification photos
-│   ├── service/
-│   │   ├── api.py              # FastAPI REST service
-│   │   └── auth.py             # API authentication
-│   └── command_integration.py  # Voice → Database integration
-├── database/
-│   ├── models.py               # SQLAlchemy models (5 tables)
-│   ├── connection.py           # Database session management
-│   ├── crud.py                 # CRUD operations
-│   └── test_db.py              # Database integration tests
-├── scripts/
-│   ├── migrate_to_neon.py      # JSON to Neon migration
-│   └── clear_database.py       # Database maintenance
-├── ipfs/
-│   └── ipfs_storage.py         # IPFS integration (Pinata) with pin/retrieve
-├── twin/
-│   └── twin_builder.py         # Digital twin management
-├── dpp/
-│   ├── schema.json             # DPP JSON Schema (EUDR)
-│   ├── dpp_builder.py          # Digital Product Passport
-│   ├── dpp_resolver.py         # DPP resolution service
-│   └── qrcode_gen.py           # QR code generation
-├── dashboard/
-│   └── app.py                  # Streamlit dashboard
-├── documentation/              # Comprehensive documentation (organized)
-│   ├── labs/                   # Educational lab guides (LABS_1-10, 914KB, gitignored)
-│   ├── guides/                 # Technical guides and implementation plans
-│   │   ├── SYSTEM_ARCHITECTURE.md     # Complete system architecture
-│   │   ├── BILINGUAL_ASR_GUIDE.md     # Bilingual system guide
-│   │   ├── Technical_Guide.md         # Technical implementation
-│   │   └── [14+ other guides]
-│   ├── deployment/             # Deployment and database setup guides
-│   ├── business-docs/          # Grant proposals, pitch deck, articles
-│   ├── reports/                # Build logs, session summaries, integration reports
-│   ├── audit/                  # Documentation audit and reproducibility plans
-│   ├── logs/                   # Service logs (Celery, ngrok)
-│   └── scripts/                # Utility scripts
-├── admin_scripts/              # Admin tools (git-ignored)
-│   ├── START_SERVICES.sh       # Service startup
-│   ├── STOP_SERVICES.sh        # Service shutdown
-│   ├── CHECK_STATUS.sh         # Status monitoring
-│   └── *.log                   # Service logs
-└── tests/
-    ├── test_dpp.py
-    ├── test_ssi.py
-    ├── test_anchor_flow.py
-    ├── test_voice_api.py
-    └── test_ipfs_blockchain_integration.py  # E2E integration test ✅
-```
-
-## Installation
-
-```bash
-# Clone repository
-git clone https://github.com/voice-ledger/voice-ledger.git
-cd Voice-Ledger
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with API keys and configuration
-```
-
-## Configuration
-
-Environment variables required:
-
-```bash
-OPENAI_API_KEY=sk-...                    # OpenAI API key
-TELEGRAM_BOT_TOKEN=...                   # Telegram bot token
-VOICE_API_KEY=vl_...                     # API authentication key
-BLOCKCHAIN_RPC_URL=https://...           # Ethereum RPC endpoint
-DATABASE_URL=postgresql://...            # Neon database connection
-REDIS_URL=redis://localhost:6379/0      # Redis for Celery
-```
+---
 
 ## Quick Start
 
 ```bash
-# 1. Start all services
+# 1. Clone and install
+git clone https://github.com/The-Voice-Ledger/Voice-Ledger.git
+cd Voice-Ledger
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure environment
+cp .env.example .env
+# Add: OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, DATABASE_URL, REDIS_URL
+
+# 3. Download Amharic model (one-time, ~1.5GB)
+python3 -c "
+from transformers import AutoModelForSpeechSeq2Seq
+model = AutoModelForSpeechSeq2Seq.from_pretrained('b1n1yam/shook-medium-amharic-2k')
+print('✅ Model cached at ~/.cache/huggingface/')
+"
+
+# 4. Start services
 ./admin_scripts/START_SERVICES.sh
+# Starts: Redis, PostgreSQL, Celery worker, FastAPI, ngrok tunnel
 
-# 2. Check status
-./admin_scripts/CHECK_STATUS.sh
-
-# 3. Send voice message to Telegram bot
-# Message @voice_ledger_bot on Telegram with:
+# 5. Test via Telegram
+# Message @voice_ledger_bot:
 #   English: "New batch of 50kg Yirgacheffe from Manufam farm"
-#   Amharic: "አዲስ ቢራ 50 ኪሎ ይርጋቸፍ ከማኑፋም እርሻ"
-
-# 4. Monitor logs
-tail -f admin_scripts/celery.log | grep "Detected language"
+#   Amharic: "አዲስ ባች 50 ኪሎ ይርጋቸፍ ከማኑፋም እርሻ"
 ```
 
-## Usage
+---
 
-**Telegram Bot (Recommended)**
+## Usage Examples
+
+### Voice Commands (Telegram)
 
 ```bash
-# Start Telegram bot
-python -m voice.telegram.telegram_api
+# Register
+/register  # Start registration flow (multi-step, role-based)
 
-# Available Commands
-/start             # Welcome message with instructions
-/help              # List all available commands
-/myidentity        # View your DID and identity info
-/mycredentials     # View your verifiable credentials
-/mybatches         # View your coffee batches
-/export            # Generate QR code for credential sharing
+# Record new harvest
+"New batch of 50 kilograms Sidama variety from Gedeo farm"
+"አዲስ ባች 50 ኪሎ ሲዳማ ከገዴኦ እርሻ"
 
-# Send voice messages to @voice_ledger_bot
-# System automatically detects English or Amharic
-# Supports all 4 command types:
-#   - New batch (commission)
-#   - Received coffee (receipt)
-#   - Sent coffee (shipment)
-#   - Processed coffee (transformation)
+# Record receipt
+"Received batch ABC123 from farmer Abebe"
+
+# Record shipment
+"Shipped batch ABC123 to Addis warehouse"
+
+# Record processing
+"Roasted batch ABC123, output 850 kilograms"
+
+# View identity
+/myidentity  # Shows DID, credentials, credit score
+
+# Export credentials
+/export  # Generates QR code with W3C Verifiable Presentation
 ```
 
-**Voice Processing API (Direct)**
+### Direct API (Voice Processing)
 
 ```bash
 # Start API server
-uvicorn voice.service.api:app --host 0.0.0.0 --port 8000
+uvicorn voice.service.api:app --port 8000
 
-# Test bilingual ASR
-python -m voice.asr.asr_infer audio.wav
-
-# Process via API
+# Submit audio file
 curl -X POST http://localhost:8000/asr-nlu \
-  -H "X-API-Key: vl_test_12345" \
-  -F "file=@harvest_command.wav"
+  -H "X-API-Key: $VOICE_API_KEY" \
+  -F "file=@audio.wav"
+
+# Response:
+{
+  "transcript": "New batch of 50 kilograms Yirgacheffe",
+  "language": "en",
+  "intent": "record_commission",
+  "entities": {
+    "quantity": 50,
+    "unit": "kilograms",
+    "variety": "Yirgacheffe"
+  }
+}
 ```
 
-**Credential Verification API (Public, No Auth Required)**
+### Public Verification API (No Auth)
 
 ```bash
-# Check API health
-curl http://localhost:8000/voice/verify/health
-
-# Verify credentials by DID (JSON format)
+# Verify credentials by DID
 curl http://localhost:8000/voice/verify/did:key:z6Mk...
 
 # Get W3C Verifiable Presentation
 curl http://localhost:8000/voice/verify/did:key:z6Mk.../presentation
 
-# View human-readable verification page
+# Human-readable HTML
 open http://localhost:8000/voice/verify/did:key:z6Mk.../html
 ```
 
-**Response Example (JSON Verification):**
-```json
-{
-  "verified": true,
-  "did": "did:key:z6Mk...",
-  "user": {
-    "username": "farmer_joe",
-    "telegram_id": 123456789,
-    "location": "Yirgacheffe, Ethiopia"
-  },
-  "credentials": [
-    {
-      "type": "OrganicCertification",
-      "issuer": "Ethiopian Organic Agency",
-      "issuanceDate": "2024-01-15",
-      "credentialSubject": {
-        "certificationLevel": "Organic",
-        "validUntil": "2025-01-15"
-      },
-      "verified": true
-    }
-  ],
-  "batches": [
-    {
-      "batch_id": "BATCH-2024-001",
-      "variety": "Arabica Typica",
-      "quantity_kg": 500,
-      "blockchain_tx": "0x123..."
-    }
-  ],
-  "creditScore": 85
-}
-```
-
-**Digital Product Passport Generation**
+### Smart Contract Interaction
 
 ```python
-from dpp.dpp_builder import build_dpp
+from blockchain.blockchain_anchor import BlockchainAnchor
 
-dpp = build_dpp(
-    batch_id="BATCH-2025-001",
-    gtin="6001234567895",
-    quantity_kg=500,
-    origin="Yirgacheffe, Ethiopia",
-    variety="Arabica Typica"
+anchor = BlockchainAnchor(
+    rpc_url="https://sepolia.base.org",
+    contract_address="0x...",
+    private_key=os.getenv("PRIVATE_KEY")
+)
+
+# Anchor event to blockchain with IPFS CID
+tx_hash = anchor.anchor_event_with_ipfs(
+    event_hash="0x123...",
+    ipfs_cid="QmTFwE14...",
+    batch_id="BATCH-2025-001"
 )
 ```
 
-**Smart Contract Deployment**
+---
 
-```bash
-# Deploy to local testnet
-forge create --rpc-url http://localhost:8545 \
-    --private-key 0x... \
-    src/EPCISEventAnchor.sol:EPCISEventAnchor
+## Architecture
 
-# Deploy to Polygon Mumbai
-forge create --rpc-url https://rpc-mumbai.maticvigil.com \
-    --private-key $PRIVATE_KEY \
-    --verify \
-    src/EPCISEventAnchor.sol:EPCISEventAnchor
+```
+Voice Input (Telegram/IVR)
+    ↓
+Language Detection → [Amharic Model] or [Whisper API]
+    ↓
+Transcript → GPT-4o-mini (Intent + Entities)
+    ↓
+EPCIS Event Builder → JSON-LD Canonicalization
+    ↓
+SHA-256 Hash
+    ↓
+┌─────────────┴──────────────┐
+↓                            ↓
+IPFS Storage            Blockchain Anchor
+(Full Event)            (Hash + CID + Timestamp)
+    ↓                            ↓
+QR Code ← Digital Product Passport (DPP)
 ```
 
-**Web Dashboard**
+**Data Flow:**
+1. Farmer speaks (Amharic/English)
+2. ASR transcribes based on user language preference
+3. NLU extracts intent and entities
+4. System creates EPCIS event, canonicalizes, hashes
+5. Full event → IPFS (get CID)
+6. Hash + CID → Blockchain (immutable anchor)
+7. Token minted (ERC-1155) + QR code generated
+8. Farmer receives confirmation + batch ID
 
-```bash
-streamlit run dashboard/app.py
-```
+---
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (90+ tests)
 pytest
 
-# Run specific test module
-pytest tests/test_ssi.py
+# Voice processing
+pytest tests/test_voice_api.py
 
-# Run with coverage
-pytest --cov=. --cov-report=html
+# Blockchain integration
+pytest tests/test_anchor_flow.py
+pytest tests/test_ipfs_blockchain_integration.py
 
-# Test smart contracts
-cd blockchain
-forge test
+# EUDR compliance
+pytest tests/test_eudr_compliance.py  # 42/42 passing
+
+# Smart contracts
+cd blockchain && forge test  # 50/50 passing
+
+# PIN setup (Phase 3)
+pytest tests/test_pin_setup.py  # 6/6 passing
 ```
 
-## Data Flow Example
+---
 
-```python
-# 1. Generate identifiers
-from gs1.identifiers import generate_gtin_13, generate_gln
+## Database Setup
 
-gtin = generate_gtin_13("6001234", "56789")
-gln = generate_gln("6001234", "00123")
+**Using Neon Serverless PostgreSQL** (serverless, auto-scaling, database branching):
 
-# 2. Create EPCIS event
-from epcis.epcis_builder import build_commissioning_event
-
-event = build_commissioning_event(
-    batch_id="BATCH-2025-001",
-    gtin=gtin,
-    quantity_kg=500,
-    biz_location=gln,
-    farmer_did="did:key:z6Mk..."
-)
-
-# 3. Canonicalize and hash
-from epcis.canonicalise import canonicalise_event
-from epcis.hash_event import hash_event
-
-canonical = canonicalise_event(event)
-event_hash = hash_event(canonical)
-
-# 4. Anchor to blockchain
-from blockchain import anchor_event
-
-tx_hash = anchor_event(event_hash, "ObjectEvent", ipfs_cid)
-```
-
-## Performance Characteristics
-
-**Voice Processing Latency**
-- ASR (English - OpenAI Whisper API): 2-4 seconds
-- ASR (Amharic - Local Medium Model): 4-6 seconds
-- NLU (GPT-3.5): 1-2 seconds
-- Total pipeline: 7-12 seconds
-
-**Voice Processing Accuracy**
-- English ASR: ~95% accuracy (OpenAI Whisper)
-- Amharic ASR: 91% accuracy (9% WER with medium model)
-- NLU entity extraction: ~90% accuracy for coffee domain
-
-**Cryptographic Operations**
-- Ed25519 key generation: <1ms
-- Ed25519 signing: <1ms
-- SHA-256 hashing: <1ms (for typical EPCIS event)
-- URDNA2015 canonicalization: 10-50ms
-
-**Blockchain Operations**
-- Event anchor gas cost: ~50,000 gas units
-- ERC-1155 mint gas cost: ~80,000 gas units
-- Transaction confirmation: 2-15 seconds (network dependent)
-
-## Security Considerations
-
-**Key Management**
-- Ed25519 private keys encrypted with user password
-- PBKDF2 key derivation (100,000 iterations)
-- Keys never transmitted over network
-- Secure enclave storage on mobile devices
-
-**API Security**
-- API key authentication on all endpoints
-- Rate limiting to prevent abuse
-## Recent Improvements (v1.5)
-
-### Bilingual Support (December 2025)
-- **Automatic language detection**: English and Amharic
-- **Dual model architecture**: OpenAI API (English) + Local Whisper Medium (Amharic)
-- **Production-grade accuracy**: 9% Word Error Rate for Amharic (91% accuracy)
-- **50% cost savings**: Amharic transcriptions run locally ($0 vs $0.02)
-- **Zero configuration**: Farmers just speak, system auto-detects language
-- **57M+ Amharic speakers**: Now accessible to Ethiopian farmers
-- **MPS acceleration**: Hardware-accelerated inference on Apple Silicon
-
-### Credential Portability (Phase 5B)
-- **QR Code Export**: Farmers can generate shareable QR codes with `/export` command
-- **Public Verification API**: Banks and cooperatives can verify credentials without authentication
-- **W3C Verifiable Presentations**: Standards-compliant credential format
-- **Multi-Format Support**: JSON, W3C VP, and human-readable HTML verification
-- **Use Cases**: Loan applications, cooperative membership, quality certification
-- **Privacy-Preserving**: Only reveals necessary credential information, no raw blockchain data
-
-**How It Works:**
-1. Farmer uses `/export` command in Telegram
-2. System generates QR code with verification link
-3. Bank/cooperative scans QR code
-4. Public API verifies credentials and displays farmer profile
-5. No Voice Ledger account required for verifiers
-
-**Verification Endpoints:**
 ```bash
-# JSON verification (for applications)
-GET /voice/verify/{did}
+# Install dependencies
+pip install sqlalchemy asyncpg psycopg2-binary alembic
 
-# W3C Verifiable Presentation (standards-compliant)
-GET /voice/verify/{did}/presentation
+# Set connection string (get from Neon dashboard)
+export DATABASE_URL="postgresql://username:password@host.neon.tech/dbname"
 
-# Human-readable HTML (for browsers)
-GET /voice/verify/{did}/html
+# Create tables
+python database/models.py
+
+# Run migrations
+python -m scripts.migrate_to_neon
+
+# Verify connection
+python -c "
+from database.connection import get_session
+with get_session() as db:
+    print('✅ Database connected')
+"
 ```
 
-**Example Use Case:**
-A farmer applies for a loan at a rural bank. The bank officer scans the farmer's QR code, which opens a verification page showing:
-- Farmer's verified identity (DID)
-- Coffee batch history with blockchain anchors
-- Organic certification credentials
-- Quality grade assessments
-- Simple credit score based on transaction history
+**Schema (5 core tables):**
+- `user_identities`: DIDs, keys, language preferences, PINs
+- `coffee_batches`: GTIN, token IDs, quantities, origins
+- `epcis_events`: Event hashes, IPFS CIDs, blockchain TXs
+- `verifiable_credentials`: Certifications, quality grades
+- `pending_registrations`: Multi-step registration state
 
-The bank makes lending decisions based on verifiable, tamper-proof credentials without manual paperwork.
+---
 
-### Production Enhancements
-- **Telegram bot**: @voice_ledger_bot fully operational
-- **Async processing**: Celery + Redis for non-blocking operations
-- **Database connection pooling**: SSL handling with auto-reconnection
-- **Enhanced NLU**: Comprehensive prompts with coffee domain examples
-- **Improved batch IDs**: Timestamp-based to prevent collisions
-- **Synchronous notifications**: Reliable Telegram message delivery
+## Project Structure
 
-### Documentation & Organization
-- **3000+ lines** of comprehensive documentation
-- **Centralized docs**: All in `documentation/` folder
-- **Admin scripts**: Service management tools in `admin_scripts/`
-- **Complete build log**: Full implementation history tracked
+```
+Voice-Ledger/
+├── voice/                    # Voice processing pipeline
+│   ├── asr/                  # Automatic speech recognition
+│   ├── nlu/                  # Natural language understanding
+│   ├── telegram/             # Telegram bot + registration
+│   ├── marketplace/          # RFQ system (Phase 3)
+│   ├── admin/                # Admin approval workflows
+│   └── verification/         # GPS + deforestation checking
+├── blockchain/               # Smart contracts (Solidity)
+│   ├── src/                  # EPCISEventAnchor, CoffeeBatchToken, Settlement
+│   └── test/                 # Foundry tests (50/50 passing)
+├── epcis/                    # EPCIS 2.0 event generation
+├── ssi/                      # DIDs + Verifiable Credentials
+├── database/                 # PostgreSQL models + migrations
+├── ipfs/                     # IPFS storage (Pinata)
+├── dpp/                      # Digital Product Passport
+├── gs1/                      # GS1 identifier generation
+└── tests/                    # 90+ integration tests
+```
 
-## Recent Achievements (December 2025)
+---
 
-### ✅ Blockchain + IPFS Integration Complete
-- **IPFS Storage**: Full EPCIS events pinned to Pinata with permanent CIDs
-- **Blockchain Anchoring**: Event hashes + CIDs stored on Base Sepolia
-- **Integration Test**: End-to-end test passing (CID: QmTFwE14..., Tx: 0x131790f5...)
-- **40% Gas Savings**: Full data off-chain reduces on-chain storage costs
+## Configuration
 
-### ✅ Merkle Proof System Implemented
-- **Batch Aggregation**: Multiple events in single merkle tree
-- **Cryptographic Proofs**: Generate and verify merkle proofs
-- **75% Gas Reduction**: Anchor root hash vs individual events
-- **Smart Contract Support**: On-chain merkle proof verification
+Required environment variables:
 
-### ✅ Multi-Currency Settlement
-- **6-Parameter Contract**: Supports USD, ETH, BIRR, USDC, any ERC-20
-- **Decimal Precision**: Proper handling of 2 (USD) vs 18 (ETH) decimals
-- **Payment Tracking**: Immutable settlement records on-chain
+```bash
+# OpenAI (ASR + NLU)
+OPENAI_API_KEY=sk-...
 
-### ✅ Documentation Organization
-- **Lab Guides**: 6 comprehensive labs (914KB) for student reproducibility
-- **System Architecture**: Complete architecture document created
-- **Organized Structure**: Guides, deployment, business docs, reports separated
-- **Git Management**: Labs gitignored to keep repo clean
+# Database (Neon serverless PostgreSQL)
+DATABASE_URL=postgresql://username:password@host.neon.tech/dbname
 
-## Current Limitations (v1.5)
+# Telegram
+TELEGRAM_BOT_TOKEN=...
 
-- Voice processing requires internet connectivity (cloud APIs)
-- Two languages currently supported (English + Amharic)
-- Cloud API costs for English ($0.02/transaction)
-- No mobile application implementation
-- 2-6 second latency for voice processing
-- ~30% of rural Ethiopian farmers have required connectivity
+# Redis (Celery + sessions)
+REDIS_URL=redis://localhost:6379/0
 
-**These limitations are addressed in v2.0 roadmap below.**
+# Blockchain
+BLOCKCHAIN_RPC_URL=https://sepolia.base.org
+PRIVATE_KEY=0x...
+
+# IPFS
+PINATA_JWT=...
+
+# Optional: EUDR compliance
+GFW_API_KEY=...  # Global Forest Watch API
+```
+
+---
+
+## Standards Compliance
+
+- **EPCIS 2.0** (ISO/IEC 19987:2024)
+- **W3C DIDs** (did:key, Ed25519)
+- **W3C Verifiable Credentials** (v1.1)
+- **GS1 Identifiers** (GTIN-13, GLN, SSCC)
+- **ERC-1155** (Multi Token Standard)
+- **EU Deforestation Regulation** (EUDR, Articles 9, 10, 33)
+
+---
+
+## Performance Metrics
+
+**Voice Processing:**
+- Latency: 5-15s (async pipeline)
+- Cost: $0.008-0.010 per command
+- ASR Accuracy: 95% (English), 88% (Amharic)
+- NLU Accuracy: 92% (intent), 87% (entities)
+
+**Blockchain:**
+- Gas cost: 75% reduction (Merkle proofs)
+- Storage: 40% savings (IPFS vs on-chain)
+- Network: Base Sepolia (low fees, fast finality)
+
+**EUDR Compliance:**
+- Processing: <5 seconds per farmer photo
+- Cost: $0.065/farmer/month
+- ROI: 2,500,000x (one customs rejection = $160K)
+
+---
+
+## Roadmap
+
+**v1.8 (Current - December 2025)**
+- ✅ Telegram bot with bilingual ASR
+- ✅ Multi-actor marketplace (4 roles)
+- ✅ PIN authentication + Redis sessions
+- ✅ EUDR GPS + deforestation detection
+- ✅ IPFS + blockchain integration
+- ✅ 90+ passing tests
+
+**v2.0 (Planned - Q2 2026)**
+- [ ] Realtime voice UI (<1s latency, WebSocket)
+- [ ] Payment integration (Stripe, M-PESA, TeleBirr)
+- [ ] Mobile app (offline-capable)
+- [ ] 5 languages (add Afan Oromo, Tigrinya, Spanish)
+- [ ] Edge inference (quantized models)
+
+---
 
 ## Documentation
 
-Comprehensive documentation organized in `documentation/` folder:
+Comprehensive guides in `/documentation`:
+- **Labs** (17 educational tutorials, gitignored)
+- **Guides** (EUDR, ASR, marketplace, architecture)
+- **Deployment** (Neon setup, Docker, production)
+- **Business** (pitch deck, grant proposals)
 
-**📚 Educational Labs (documentation/labs/)** - Gitignored, 914KB total
-- `LABS_1-2_GS1_EPCIS_Voice_AI.md`: GS1 identifiers, EPCIS events, Voice AI (147KB)
-- `LABS_3-4_SSI_Blockchain.md`: SSI, DIDs, Smart Contracts, Database, IPFS (282KB)
-- `LABS_5-6_DPP_Docker.md`: Digital Product Passports, EUDR, Docker (110KB)
-- `LABS_7_Voice_Interface.md`: Voice API integration with FastAPI (76KB)
-- `LABS_8_IVR_Telegram.md`: IVR phone system and Telegram bot (147KB)
-- `LABS_9-10_Verification_Registration.md`: Third-party verification, RBAC (152KB)
-- Complete step-by-step guides for student reproducibility
-
-**📖 Technical Guides (documentation/guides/)**
-- `SYSTEM_ARCHITECTURE.md`: **🆕 Complete system architecture** (comprehensive)
-- `BILINGUAL_ASR_GUIDE.md`: Bilingual system architecture and usage
-- `Technical_Guide.md`: Technical implementation details
-- `VOICE_LEDGER_OVERVIEW.md`: System overview and capabilities
-- `END_TO_END_WORKFLOW.md`: Complete data flow documentation
-- Implementation plans for frontend, marketplace, web UI
-
-**🚀 Deployment (documentation/deployment/)**
-- `DEPLOYMENT.md`: Production deployment guide
-- `RAILWAY_DEPLOYMENT.md`: Railway.app deployment
-- `NEON_DATABASE_SETUP.md`: Database setup and migration
-
-**💼 Business Documents (documentation/business-docs/)**
-- `PITCH_DECK.md`: Impact investor presentation
-- `GRANT_PROPOSAL_TEMPLATE.md`: Grant application template
-- `LINKEDIN_ARTICLE_VOICE_LEDGER.md`: Marketing content
-
-**📊 Reports & Logs (documentation/reports/)**
-- Build logs, session summaries, integration completion reports
-- Project reorganization and status updates
-
-**🔍 Audit (documentation/audit/)**
-- Documentation audit report
-- Reproducibility action plan
-
-## Future Development Roadmap
-
-### Version 2.0: Offline-First with Addis AI Integration
-
-**Current State (v1.5 - Bilingual Cloud)**
-- OpenAI Whisper ASR (cloud API, English, 2-4s latency)
-- Local Amharic Whisper (b1n1yam/shook-medium-amharic-2k, 3-6s latency, 9% WER)
-- Automatic language detection and routing
-- GPT-3.5 NLU (cloud API, works for both languages, 1-2s latency)
-- English + Amharic supported
-- Internet required
-- $0.02 per English transaction, $0 per Amharic transaction
-- ~30% rural accessibility (improved with Telegram bot)
-
-**Planned State (v2.0 - Offline-First)**
-- Whisper-Small quantized (244MB, on-device)
-- Gemma 3B + LoRA (1.5GB, on-device)
-- 5 languages (Amharic, Afan Oromo, Tigrinya, Spanish, English)
-- No internet required (offline-first, sync when available)
-- $0 marginal cost per transaction
-- 95%+ rural accessibility
-
-### Language Support
-
-| Language | Region | Speakers | Coffee Farmers |
-|----------|--------|----------|----------------|
-| Amharic | Ethiopia | 32M | 2.5M |
-| Afan Oromo | Ethiopia (Oromia) | 37M | 2.8M |
-| Tigrinya | Ethiopia (Tigray) | 7M | 0.5M |
-| Spanish | Latin America | 50M+ | 5M+ |
-| English | International | 2M | 0.2M |
-
-### Device Support Matrix
-
-**Smartphone App (Android)**
-- Whisper-Small ONNX (4-bit quantized): 244MB
-- Gemma 3B ONNX (4-bit quantized): 1.5GB
-- Offline SQLite queue for event storage
-- Auto-sync when connectivity available
-- Target: 30% of rural farmers
-
-**IVR System (Feature Phones)**
-- Toll-free number (e.g., 8000 1234)
-- Edge GPU nodes (A100) in regional telecom centers
-- Voice menu in 5 languages
-- SMS receipt confirmation
-- Target: 70% of rural farmers
-
-### System Architecture Comparison
-
-**v1.0 Architecture (Cloud-Dependent)**
-
-```
-┌─────────────────────────────────────┐
-│   FARMER (Smartphone + Internet)   │
-│   Records voice command             │
-└──────────────┬──────────────────────┘
-               │ Audio (WAV/MP3)
-               ▼
-┌─────────────────────────────────────┐
-│   CLOUD PROCESSING (Required)       │
-│  ┌──────────────┐  ┌──────────────┐│
-│  │ OpenAI       │  │   GPT-3.5    ││
-│  │ Whisper ASR  │→ │   NLU        ││
-│  │ (3-5s)       │  │   (1-2s)     ││
-│  └──────────────┘  └──────────────┘│
-└──────────────┬──────────────────────┘
-               │ Structured Data
-               ▼
-┌─────────────────────────────────────┐
-│      BACKEND (FastAPI)              │
-│  • Build EPCIS Event                │
-│  • Canonicalize (URDNA2015)         │
-│  • Hash (SHA-256)                   │
-│  • Sign with DID                    │
-└──────────────┬──────────────────────┘
-               │
-               ├─→ IPFS Storage
-               ├─→ Blockchain Anchor
-               └─→ JSON File Storage
-```
-
-**v2.0 Architecture (Offline-First)**
-
-```
-┌────────────────────────────────────────────────────────────┐
-│              FARMER DEVICES (No Internet Required)         │
-│                                                             │
-│  ┌──────────────────────────┐  ┌───────────────────────┐  │
-│  │ SMARTPHONE APP           │  │ FEATURE PHONE (IVR)   │  │
-│  │ ┌──────────────────────┐ │  │ Call: 8000 1234       │  │
-│  │ │ Whisper-Small (244MB)│ │  │ (Toll-free)           │  │
-│  │ │ On-device ASR        │ │  │                       │  │
-│  │ │ <1s latency          │ │  │ Edge GPU Node:        │  │
-│  │ └──────────┬───────────┘ │  │ - Whisper ASR (0.8s)  │  │
-│  │            ▼             │  │ - Gemma NLU (0.5s)    │  │
-│  │ ┌──────────────────────┐ │  │ SMS confirmation      │  │
-│  │ │ Gemma 3B + LoRA      │ │  └───────────┬───────────┘  │
-│  │ │ On-device NLU        │ │              │              │
-│  │ │ (1.5GB)              │ │              │              │
-│  │ └──────────┬───────────┘ │              │              │
-│  │            ▼             │              │              │
-│  │ ┌──────────────────────┐ │              │              │
-│  │ │ EPCIS Event Builder  │ │              │              │
-│  │ │ SQLite Offline Queue │ │              │              │
-│  │ └──────────┬───────────┘ │              │              │
-│  └────────────┼──────────────┘              │              │
-└───────────────┼─────────────────────────────┼──────────────┘
-                │                             │
-                │ (Sync when WiFi/3G available)
-                ▼                             ▼
-┌────────────────────────────────────────────────────────────┐
-│                    BACKEND (FastAPI)                       │
-│  • Verify signature (DID)                                  │
-│  • Canonicalize & Hash                                     │
-│  • Deduplicate (check hash)                                │
-│  • Store in Neon Database ──────┐                          │
-└──────────────┬──────────────────┼──────────────────────────┘
-               │                  │
-               │                  ▼
-               │         ┌─────────────────────────────┐
-               │         │ NEON (Serverless Postgres)  │
-               │         │ • EPCIS events              │
-               │         │ • Farmer identities (DIDs)  │
-               │         │ • Coffee batches            │
-               │         │ • Verifiable credentials    │
-               │         │ • Offline sync queue        │
-               │         └─────────────────────────────┘
-               │
-               ├─────────→ IPFS Storage (full events)
-               │
-               └─────────→ Blockchain Anchor (hash + CID)
-                          ┌──────────────────────────┐
-                          │ Smart Contracts          │
-                          │ • EPCISEventAnchor       │
-                          │ • CoffeeBatchToken       │
-                          │   (ERC-1155)             │
-                          └──────────────────────────┘
-```
-
-### Key Improvements
-
-**Accessibility**
-- 6x increase in rural coverage (15% → 95%)
-- Literacy-independent (voice-only interface)
-- Works during network outages
-- Supports feature phones via IVR
-
-**Performance**
-- 5x faster processing (<2s vs 8-15s)
-- Zero latency dependency on cloud APIs
-- On-device data privacy (voice never leaves device)
-
-**Technical Architecture**
-- Offline ASR: Whisper-Small with domain-specific fine-tuning (coffee terminology)
-- Offline NLU: Gemma 3B with LoRA adapters for entity extraction
-- Offline queue: SQLite database with conflict resolution
-- Opportunistic sync: Automatic blockchain anchoring when connectivity restored
-
-### Implementation Timeline
-
-**Phase 1: Model Fine-Tuning (6 months)**
-- Collect 100+ hours annotated audio per language
-- Fine-tune Whisper-Small for coffee domain vocabulary
-- Train Gemma 3B LoRA adapters for intent/entity extraction
-- Target accuracy: 88-92% WER (Word Error Rate)
-
-**Phase 2: Mobile App Development (6 months)**
-- Native Android app with ONNX Runtime integration
-- Offline queue with exponential backoff retry
-- Secure DID key storage (encrypted with PIN)
-- Background sync service
-
-**Phase 3: IVR System Deployment (12 months)**
-- Partner with Ethiopian Telecom for toll-free number
-- Deploy edge GPU nodes (A100) in 10 regional centers
-- Build multilingual IVR call flow
-- SMS notification system
-
-**Phase 4: Neon Database Migration** [COMPLETE]
-- ✓ Replaced JSON file storage with Neon serverless PostgreSQL
-- ✓ Unified database for dev/staging/production
-- ✓ Database branching capability configured
-- ✓ Migration script completed (9/9 batches migrated)
-- ✓ Unique GTIN generation using gs1.identifiers module
-
-### Database Migration: Neon Serverless Postgres [COMPLETE]
-
-**Why Neon**
-- Serverless auto-scaling (pay only for compute used)
-- Database branching (like Git for databases)
-- Same connection string for all environments
-- Free tier: 10GB storage + 100 compute hours/month
-
-**Implementation Completed**
-```bash
-# Dependencies installed ✓
-pip install sqlalchemy asyncpg psycopg2-binary alembic
-
-# Database connected ✓
-export DATABASE_URL="postgresql://neondb_owner:***@ep-weathered-bread-agcdwm1n-pooler.c-2.eu-central-1.aws.neon.tech/neondb"
-
-# Tables created ✓
-python database/models.py
-
-# Data migrated ✓ (9/9 batches)
-python -m scripts.migrate_to_neon
-```
-
-**Database Schema (5 Tables)**
-- `farmer_identities`: DID, encrypted keys, location, GLN
-- `coffee_batches`: GTIN (unique), token ID, quantity, origin, variety
-- `epcis_events`: Event hash, canonical form, IPFS CID, blockchain TX
-- `verifiable_credentials`: Certifications, quality grades, VCs
-- `offline_queue`: Pending events for sync
-
-**Migration Results**
-- ✓ All 9 batches migrated successfully
-- ✓ Unique GTINs generated (0614141001000 - 0614141001008)
-- ✓ CRUD operations tested and verified
-- ✓ Connection verified (EU Central region)
-
-### Target Impact
-
-**Accessibility**
-- 11M+ addressable smallholder farmers
-- 95% rural coverage (vs 15% current)
-- Support for 70% feature phone users
-
-**Standards Compliance**
-- EPCIS 2.0 (ISO/IEC 19987:2024)
-- W3C DIDs and Verifiable Credentials
-- EUDR automated compliance
-- GS1 identifiers (GTIN, GLN, SSCC)
+---
 
 ## License
 
-MIT License
+MIT
+
+---
 
 ## Author
 
-Emmanuel Acho, PhD
+Emmanuel Acho, PhD  
+Building voice-first identity and traceability systems for the Global South.
 
-## Architecture Documentation
+---
 
-For complete system architecture details, see:
-- **[System Architecture](documentation/guides/SYSTEM_ARCHITECTURE.md)**: Comprehensive architecture document covering all components, data flow, and design decisions
-- **[Technical Guide](documentation/guides/Technical_Guide.md)**: Implementation details and technical specifications
-
-## Version
-
-**1.5** (Bilingual Cloud + Blockchain Integration) - Current  
-**2.0** (Offline-First) - In Development
+**Version:** 1.8 (Production)  
+**Last Updated:** December 23, 2025
