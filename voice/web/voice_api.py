@@ -126,11 +126,10 @@ async def voice_websocket(websocket: WebSocket):
                 import asyncio
                 from functools import partial
                 loop = asyncio.get_event_loop()
+                # Bind all parameters in partial for correct execution
                 conv_result = await loop.run_in_executor(
                     None,
-                    partial(process_english_conversation, use_rag=True),
-                    user_id,
-                    transcript
+                    partial(process_english_conversation, user_id, transcript, use_rag=True)
                 )
             
             if isinstance(conv_result, str):
@@ -366,11 +365,10 @@ async def upload_voice(
                 import asyncio
                 from functools import partial
                 loop = asyncio.get_event_loop()
+                # Bind all parameters in partial for correct execution
                 conv_result = await loop.run_in_executor(
                     None,
-                    partial(process_english_conversation, use_rag=True),
-                    user_id,
-                    transcript
+                    partial(process_english_conversation, user_id, transcript, use_rag=True)
                 )
             
             # Debug: Check if conv_result is a dict or string
