@@ -64,16 +64,27 @@ def enhance_query_with_rag(
         if len(context) > max_chars:
             context = context[:max_chars] + "\n... [context truncated]"
         
-        # Build enhanced prompt
+        # Build enhanced prompt - inject RAG context as reference material
+        # Key: Context informs response CONTENT, not response FORMAT
         enhanced_prompt = f"""{base_prompt}
 
-=== RETRIEVED KNOWLEDGE BASE CONTEXT ===
+=== KNOWLEDGE BASE REFERENCE ===
+The following information from our documentation and codebase is provided as REFERENCE MATERIAL to help you answer the user's query. Use this to inform your response content, but DO NOT change your response format:
 
 {context}
 
-=== END CONTEXT ===
+=== END REFERENCE ===
 
-Use the above context to provide accurate, grounded responses. If the context contains relevant information, cite it. If the user asks about implementation details, refer to the code examples provided.
+CRITICAL REMINDER: Your response MUST still be in the EXACT JSON format specified above. Do NOT provide prose or explanatory text. The retrieved reference material above should inform the CONTENT of your JSON response (specifically the "message_text" and "message_spoken" fields), but you MUST maintain the JSON structure.
+
+Example of correct format when answering with retrieved context:
+{{
+  "message_text": "Based on our documentation: [answer using context]",
+  "message_spoken": "Based on our documentation: [answer using context]",
+  "ready_to_execute": false
+}}
+
+DO NOT return prose. DO NOT return markdown. ONLY return valid JSON.
 """
         
         logger.info(f"Enhanced prompt with {len(context)} chars of RAG context (query type: {query_type.value})")
