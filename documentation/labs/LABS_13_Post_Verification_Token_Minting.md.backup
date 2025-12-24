@@ -1,0 +1,1171 @@
+# Voice Ledger - Lab 13: Post-Verification Token Minting
+
+**Date**: December 21, 2025  
+**Version**: v1.6  
+**Deployment**: Base Sepolia Testnet  
+**Status**: \u2705 COMPLETE - All tests passing
+
+---
+
+## \ud83c\udfaf Lab Overview
+
+**Learning Objectives:**
+- Understand why tokens should be minted AFTER cooperative verification
+- Implement custodial token model (cooperative owns tokens, farmer tracked off-chain)
+- Integrate token minting with verification workflow
+- Use verified quantity (not claimed quantity) for token minting
+- Test end-to-end flow from batch creation through verification to tokenization
+
+**What You'll Build:**
+- \u2705 Post-verification token minting integrated with Telegram verification handler
+- \u2705 `blockchain/token_manager.py` - Web3 wrapper for CoffeeBatchToken contract
+- \u2705 Database integration with `token_id` column on `CoffeeBatch` table
+- \u2705 Comprehensive integration test (`test_token_minting_flow.py`)
+- \u2705 Enhanced smart contracts with `getTokenIdByBatchId()` function
+
+**Prerequisites:**
+- \u2705 Labs 1-12 completed (EPCIS events, verification system, aggregation)
+- \u2705 Foundry installed and configured
+- \u2705 Base Sepolia RPC access (Alchemy or similar)
+- \u2705 Wallet with testnet ETH for deployment
+- \u2705 PostgreSQL database with `CoffeeBatch` table
+- \u2705 Telegram bot with verification system working
+
+**Time Estimate:** 3-4 hours (implementation + testing + deployment)
+
+**Cost:** ~$0.01 (Base Sepolia testnet deployment + testing)
+
+---
+
+## \ud83d\udca1 Background: Why Post-Verification Minting?
+
+### The Problem
+
+**Original Implementation (Incorrect)**:
+```python
+# voice/command_integration.py (OLD - WRONG!)
+def handle_record_commission(...):
+    # 1. Create batch in database
+    batch = create_batch(db, batch_data)  # Status: PENDING_VERIFICATION
+    
+    # 2. Create EPCIS commission event
+    event = create_commission_event(db, batch)
+    
+    # 3. \u274c MINT TOKEN IMMEDIATELY (WRONG!)
+    token_id = mint_batch_token(
+        recipient=cooperative_wallet,
+        quantity_kg=batch.quantity,  # Farmer's CLAIM, not verified!
+        batch_id=batch.batch_id,
+        ...
+    )
+```
+
+**Problems with this approach**:
+1. \u274c **Unverified batches get on-chain representation** - Farmer claims 150kg, token minted for 150kg, but actual might be 145kg
+2. \u274c **No quality control** - Bad/rejected batches still get tokenized
+3. \u274c **Fraud vulnerability** - Malicious farmer can claim inflated quantities
+4. \u274c **Wasted gas** - Minting tokens that might be rejected during verification
+5. \u274c **Quantity mismatch** - On-chain token doesn't match physical verified quantity
+
+### The Solution: Post-Verification Minting
+
+**New Implementation (Correct)**:
+```python
+# voice/command_integration.py (NEW - CORRECT!)
+def handle_record_commission(...):
+    # 1. Create batch in database
+    batch = create_batch(db, batch_data)  # Status: PENDING_VERIFICATION
+    
+    # 2. Create EPCIS commission event
+    event = create_commission_event(db, batch)
+    
+    # 3. \u2705 NO TOKEN MINTED YET
+    # NOTE: Token minting happens AFTER cooperative verification
+    # See voice/telegram/verification_handler.py::_process_verification()
+
+# voice/telegram/verification_handler.py (NEW)
+def _process_verification(...):
+    # ... verification logic ...
+    
+    # Mark as verified
+    batch.status = "VERIFIED"
+    batch.verified_quantity = verified_quantity  # e.g., 145kg (not 150kg claim)
+    
+    # \u2705 NOW mint token with VERIFIED quantity
+    token_id = mint_batch_token(
+        recipient=cooperative_wallet,
+        quantity_kg=verified_quantity,  # VERIFIED, not claimed!
+        batch_id=batch.batch_id,
+        ...
+    )
+    
+    batch.token_id = token_id
+    db.commit()
+```
+
+**Benefits**:
+1. \u2705 **Only verified batches get tokens** - Quality control enforced
+2. \u2705 **Token uses verified quantity** - On-chain data matches physical reality
+3. \u2705 **Fraud prevention** - Can't tokenize unverified/rejected batches
+4. \u2705 **Gas savings** - Don't mint tokens for batches that fail verification
+5. \u2705 **Audit trail** - Clear separation between claim and verification
+
+---
+
+## \ud83c\udfed Architecture: Custodial Token Model
+
+### Why Custodial?
+
+In Ethiopian coffee supply chains, cooperatives act as **custodians** for farmer batches:
+- Farmers deliver green coffee to cooperative warehouse
+- Cooperative physically holds and manages inventory
+- Cooperative handles export documentation and logistics
+- Farmers are paid based on verified quantity + quality premium
+
+**Token custody should match physical custody.**
+
+### Custodial Model Design
+
+```
+\ud83d\udc68\u200d\ud83c\udf3e Farmer Abebe
+   |
+   | 1. Creates batch via voice: "Record 150kg Arabica"
+   v
+\ud83d\udcca PostgreSQL Database
+   - batch_id: "TEST_YEHA_20251221_115841"
+   - status: PENDING_VERIFICATION
+   - quantity: 150.0 kg (claimed)
+   - created_by_user_id: 123 (Abebe's Telegram user ID)
+   - created_by_did: did:key:z6Mk... (Abebe's DID)
+   - token_id: NULL (no token yet)
+   |
+   | 2. QR code sent to Abebe
+   v
+\ud83d\udcf1 Abebe scans QR, brings coffee to cooperative
+   |
+   | 3. Cooperative manager scans QR
+   v
+\ud83c\udfed Guzo Cooperative Warehouse
+   - Weighs actual coffee: 145kg (5kg moisture loss)
+   - Grades quality: 85/100
+   - Approves verification
+   |
+   | 4. Verification approved
+   v
+\ud83d\udd17 Blockchain (Base Sepolia)
+   - Token minted to cooperative wallet: 0x476856D4Cc51b62a...
+   - Token ID: 2
+   - Quantity: 145,000 grams (145kg verified, not 150kg claimed)
+   - Batch ID: "TEST_YEHA_20251221_115841"
+   - IPFS CID: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+   |
+   v
+\ud83d\udcca Database Updated
+   - status: VERIFIED
+   - verified_quantity: 145.0 kg
+   - token_id: 2
+   - verification_timestamp: 2025-12-21 11:58:41
+   |
+   v
+\ud83d\udc68\u200d\ud83c\udf3e Abebe credited off-chain
+   - Payment calculated: 145kg \u00d7 $3/kg = $435
+   - Farmer identity tracked: batch.created_by_user_id
+   - Settlement record created for payment rail
+```
+
+**Key Points**:
+1. **On-chain**: Cooperative owns token (ERC-1155 balance)
+2. **Off-chain**: Farmer tracked as originator (`batch.created_by_user_id`, `batch.created_by_did`)
+3. **Physical custody**: Cooperative holds coffee in warehouse
+4. **Financial settlement**: Farmer paid via separate payment rail (bank transfer, mobile money)
+5. **Traceability**: Full lineage maintained through DID + batch relationships
+
+---
+
+## Step 1: Update Database Schema
+
+Add `token_id` column to `CoffeeBatch` table to link PostgreSQL records with on-chain tokens.
+
+**Migration**: Already applied in `database/models.py` (line 199)
+
+```python
+# database/models.py
+class CoffeeBatch(Base):
+    __tablename__ = 'coffee_batches'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(String(100), unique=True, index=True)
+    
+    # ... existing fields ...
+    
+    # Blockchain token tracking (v1.6 - Dec 2025)
+    token_id = Column(BigInteger, nullable=True, index=True)  # ERC-1155 token ID on CoffeeBatchToken contract
+    
+    # User ownership tracking
+    created_by_user_id = Column(Integer, ForeignKey("user_identities.id"))
+    created_by_did = Column(String(200), index=True)
+    
+    # Verification fields
+    status = Column(String(30), default='PENDING_VERIFICATION', index=True)
+    verified_quantity = Column(Float)  # Actual quantity verified (may differ from claimed)
+    verification_timestamp = Column(DateTime)
+    verifier_did = Column(String(200))
+```
+
+**Why `BigInteger`?**
+- Solidity `uint256` can be very large (2^256 - 1)
+- Python `int` has unlimited precision, but database needs explicit type
+- `BigInteger` in SQLAlchemy maps to PostgreSQL `BIGINT` (up to 2^63 - 1)
+- More than sufficient for sequential token IDs (1, 2, 3, ...)
+
+**Verification**:
+```bash
+# Check if column exists
+psql $DATABASE_URL -c "\\d coffee_batches" | grep token_id
+
+# Should show:
+# token_id | bigint | | nullable, indexed
+```
+
+---
+
+## Step 2: Remove Token Minting from Commission Handler
+
+**File**: `voice/command_integration.py` (lines 141-148)
+
+**What we changed**:
+```python
+# OLD (WRONG):
+token_id = mint_batch_token(...)  # Minting immediately - WRONG!
+
+# NEW (CORRECT):
+# NOTE: Token minting happens AFTER cooperative verification
+# See voice/telegram/verification_handler.py::_process_verification()
+# This prevents unverified batches from getting on-chain representation
+```
+
+**Full context**:
+```python
+def handle_record_commission(
+    db: Session,
+    entities: Dict[str, Any],
+    user_id: int,
+    user_did: str = None
+) -> Dict[str, Any]:
+    \"\"\"Handle farmer coffee batch creation with EPCIS commissioning event.\"\"\"
+    
+    # 1. Create batch in database
+    batch_data = {
+        'batch_id': generate_batch_id(entities),
+        'quantity': entities.get('quantity'),
+        'unit': entities.get('unit', 'kg'),
+        'product_name': entities.get('product'),
+        'origin': entities.get('origin', 'Unknown'),
+        'status': 'PENDING_VERIFICATION',
+        'created_by_user_id': user_id,
+        'created_by_did': user_did
+    }
+    
+    batch = create_batch(db, batch_data)
+    
+    # 2. Create EPCIS commission event (IPFS + blockchain)
+    event = create_commission_event(db, batch)
+    
+    # 3. \u2705 NO TOKEN MINTED HERE
+    # NOTE: Token minting happens AFTER cooperative verification
+    # See voice/telegram/verification_handler.py::_process_verification()
+    # This prevents unverified batches from getting on-chain representation
+    
+    return {
+        'success': True,
+        'batch_id': batch.batch_id,
+        'batch': batch,
+        'event': event
+    }
+```
+
+---
+
+## Step 3: Create Token Manager Module
+
+**File**: `blockchain/token_manager.py` (NEW - 302 lines)
+
+This module provides a Web3 interface to the CoffeeBatchToken smart contract.
+
+**Key Features**:
+- Mints batch tokens with verified quantity
+- Queries token metadata from blockchain
+- Handles transaction signing and confirmation
+- Retry logic for `getTokenIdByBatchId()` (3 attempts with 2-second delay)
+
+**Implementation**:
+
+```python
+#!/usr/bin/env python3
+\"\"\"
+CoffeeBatchToken Manager - Mints batch tokens during verification
+
+Cooperative custodial model: tokens minted to cooperative wallet, 
+farmer tracked as originator in database.
+\"\"\"
+
+import os
+import sys
+import json
+from typing import Optional, Dict, Any
+from web3 import Web3
+from eth_account import Account
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class CoffeeBatchTokenManager:
+    \"\"\"Manages batch token minting after cooperative verification\"\"\"
+    
+    def __init__(self):
+        \"\"\"Initialize Web3 connection and contract\"\"\"
+        
+        self.rpc_url = os.getenv('BASE_SEPOLIA_RPC_URL')
+        self.private_key = os.getenv('PRIVATE_KEY_SEP')
+        self.contract_address = os.getenv('COFFEE_BATCH_TOKEN_ADDRESS')
+        
+        if not all([self.rpc_url, self.private_key, self.contract_address]):
+            raise ValueError(
+                "Missing required environment variables: "
+                "BASE_SEPOLIA_RPC_URL, PRIVATE_KEY_SEP, COFFEE_BATCH_TOKEN_ADDRESS"
+            )
+        
+        # Initialize Web3
+        self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
+        if not self.w3.is_connected():
+            raise ConnectionError(f"Failed to connect to {self.rpc_url}")
+        
+        # Load account
+        self.account = Account.from_key(self.private_key)
+        
+        # Load contract ABI
+        abi_path = os.path.join(
+            os.path.dirname(__file__),
+            "blockchain_abis",
+            "CoffeeBatchToken.json"
+        )
+        
+        with open(abi_path, 'r') as f:
+            abi = json.load(f)
+        
+        # Initialize contract
+        self.contract = self.w3.eth.contract(
+            address=Web3.to_checksum_address(self.contract_address),
+            abi=abi
+        )
+        
+        print(f"\u2713 CoffeeBatchTokenManager initialized")
+        print(f"  Chain ID: {self.w3.eth.chain_id}")
+        print(f"  Cooperative wallet: {self.account.address}")
+        print(f"  Token contract: {self.contract_address}")
+    
+    def mint_batch(
+        self,
+        recipient: str,
+        quantity_kg: float,
+        batch_id: str,
+        metadata: Dict[str, Any],
+        ipfs_cid: str
+    ) -> Optional[int]:
+        \"\"\"
+        Mint a batch token (called after cooperative verification).
+        
+        Args:
+            recipient: Cooperative wallet address
+            quantity_kg: Verified quantity in kilograms
+            batch_id: Unique batch identifier
+            metadata: Batch metadata dict
+            ipfs_cid: IPFS CID of commission event
+            
+        Returns:
+            Token ID (int) or None if failed
+        \"\"\"
+        
+        try:
+            # Validate inputs
+            if quantity_kg <= 0:
+                raise ValueError(f"Invalid quantity: {quantity_kg} kg")
+            
+            # Validate IPFS CID (CIDv0 starts with Qm, CIDv1 starts with bafy)
+            if not ipfs_cid or not (ipfs_cid.startswith('Qm') or ipfs_cid.startswith('bafy')):
+                raise ValueError(f"Invalid IPFS CID: {ipfs_cid}")
+            
+            # Prepare metadata JSON
+            metadata_json = json.dumps(metadata, separators=(',', ':'))
+            
+            # Convert kg to grams for smart contract (uint256 precision)
+            quantity_grams = int(quantity_kg * 1000)
+            
+            # Build transaction
+            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
+            gas_price = self.w3.eth.gas_price
+            
+            tx = self.contract.functions.mintBatch(
+                Web3.to_checksum_address(recipient),
+                quantity_grams,
+                batch_id,
+                metadata_json,
+                ipfs_cid
+            ).build_transaction({
+                'chainId': self.w3.eth.chain_id,
+                'gas': 500000,
+                'gasPrice': int(gas_price * 1.2),  # Add 20% buffer
+                'nonce': nonce,
+            })
+            
+            # Sign and send
+            signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            
+            print(f"  Transaction sent: {tx_hash.hex()}")
+            print(f"  Waiting for confirmation...")
+            
+            # Wait for receipt (30 second timeout)
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
+            
+            if receipt['status'] == 1:
+                print(f"\u2713 Batch token minted successfully!")
+                print(f"  Batch ID: {batch_id}")
+                print(f"  Quantity: {quantity_kg} kg")
+                print(f"  IPFS CID: {ipfs_cid}")
+                print(f"  TX hash: {tx_hash.hex()}")
+                
+                # Query the token ID by batch_id (with retry for propagation delay)
+                import time
+                for attempt in range(3):
+                    try:
+                        token_id = self.contract.functions.getTokenIdByBatchId(batch_id).call()
+                        print(f"  Token ID: {token_id}")
+                        return token_id
+                    except Exception as e:
+                        if attempt < 2:
+                            print(f"  Retrying token ID query (attempt {attempt + 2}/3)...")
+                            time.sleep(2)
+                        else:
+                            print(f"\u26a0 Couldn't query token ID after {attempt + 1} attempts: {e}")
+                            print(f"  Token was minted successfully - check Base Sepolia explorer")
+                            print(f"  TX: https://sepolia.basescan.org/tx/{tx_hash.hex()}")
+                            return None
+            else:
+                print(f"\u274c Token minting transaction failed")
+                print(f"  TX hash: {tx_hash.hex()}")
+                return None
+                
+        except Exception as e:
+            print(f"\u274c Token minting error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def get_batch_metadata(self, token_id: int) -> Optional[Dict[str, Any]]:
+        \"\"\"Query batch metadata from blockchain.\"\"\"
+        try:
+            metadata = self.contract.functions.getBatchMetadata(token_id).call()
+            return {
+                'batchId': metadata[0],
+                'quantity': metadata[1],
+                'metadata': metadata[2],
+                'ipfsCid': metadata[3],
+                'createdAt': metadata[4],
+                'exists': metadata[5],
+                'isAggregated': metadata[6],
+                'childTokenIds': metadata[7]
+            }
+        except Exception as e:
+            print(f"\u274c Error querying metadata: {e}")
+            return None
+
+# Convenience function for verification handler
+def mint_batch_token(
+    recipient: str,
+    quantity_kg: float,
+    batch_id: str,
+    metadata: Dict[str, Any],
+    ipfs_cid: str
+) -> Optional[int]:
+    \"\"\"
+    Mint a batch token (called from verification handler).
+    
+    Returns:
+        Token ID or None if failed
+    \"\"\"
+    manager = CoffeeBatchTokenManager()
+    return manager.mint_batch(
+        recipient=recipient,
+        quantity_kg=quantity_kg,
+        batch_id=batch_id,
+        metadata=metadata,
+        ipfs_cid=ipfs_cid
+    )
+```
+
+**Usage** (from verification handler):
+```python
+from blockchain.token_manager import mint_batch_token
+
+token_id = mint_batch_token(
+    recipient=os.getenv('COOPERATIVE_WALLET_ADDRESS'),
+    quantity_kg=145.0,  # Verified quantity
+    batch_id=\"TEST_YEHA_20251221_115841\",
+    metadata={'origin': 'Yirgacheffe', 'quality': 85},
+    ipfs_cid=\"QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp\"
+)
+
+if token_id:
+    batch.token_id = token_id
+    db.commit()
+```
+
+---
+
+## Step 4: Integrate with Verification Handler
+
+**File**: `voice/telegram/verification_handler.py` (lines 390-450)
+
+**What we added**: ~60 lines of token minting logic after cooperative approves verification.
+
+**Integration code**:
+
+```python
+async def _process_verification(
+    self,
+    verification_token: str,
+    db: Session,
+    verified_quantity: float,
+    quality_notes: str = None
+) -> Tuple[bool, str]:
+    \"\"\"Process batch verification and mint token.\"\"\"
+    
+    # 1. Find batch by verification token
+    batch = db.query(CoffeeBatch).filter(
+        CoffeeBatch.verification_token == verification_token,
+        CoffeeBatch.verification_used == False
+    ).first()
+    
+    if not batch:
+        return False, "\u274c Invalid or expired verification token"
+    
+    # 2. Check expiration
+    if batch.verification_expires_at < datetime.now():
+        return False, "\u274c Verification token has expired"
+    
+    # 3. Mark as verified
+    batch.status = \"VERIFIED\"
+    batch.verified_quantity = verified_quantity
+    batch.verification_used = True
+    batch.verification_timestamp = datetime.now()
+    batch.verifier_did = self.verifier_did  # Cooperative DID
+    
+    # 4. Create verification credential (W3C Verifiable Credential)
+    credential = self._create_verification_credential(batch, verified_quantity)
+    
+    # 5. Create verification EPCIS event
+    verification_event = self._create_verification_event(batch, verified_quantity)
+    
+    db.commit()
+    
+    # 6. \u2705 MINT TOKEN AFTER VERIFICATION (NEW!)
+    try:
+        from blockchain.token_manager import mint_batch_token
+        import os
+        
+        # Get cooperative wallet address
+        cooperative_wallet = os.getenv('COOPERATIVE_WALLET_ADDRESS') or os.getenv('WALLET_ADDRESS_SEP')
+        
+        if not cooperative_wallet:
+            logger.error(\"No cooperative wallet address configured\")
+        else:
+            # Get commission event IPFS CID
+            commission_event = db.query(EPCISEvent).filter(
+                EPCISEvent.batch_id == batch.id,
+                EPCISEvent.biz_step == 'commissioning'
+            ).first()
+            
+            if not commission_event or not commission_event.ipfs_cid:
+                logger.error(f\"No commission event found for batch {batch.batch_id}\")
+            else:
+                # Prepare metadata
+                metadata = {
+                    'origin': batch.origin,
+                    'product': batch.product_name,
+                    'cooperative': 'Guzo Cooperative',  # From batch or config
+                    'claimed_quantity': float(batch.quantity),
+                    'verified_quantity': float(verified_quantity),
+                    'quality_grade': quality_notes or 'N/A',
+                    'farmer_did': batch.created_by_did
+                }
+                
+                logger.info(f\"Minting token for batch {batch.batch_id}\")
+                logger.info(f\"  Verified quantity: {verified_quantity} kg\")
+                logger.info(f\"  IPFS CID: {commission_event.ipfs_cid}\")
+                
+                # Mint token with VERIFIED quantity (not claimed)
+                token_id = mint_batch_token(
+                    recipient=cooperative_wallet,
+                    quantity_kg=verified_quantity,  # \u2705 VERIFIED, not batch.quantity!
+                    batch_id=batch.batch_id,
+                    metadata=metadata,
+                    ipfs_cid=commission_event.ipfs_cid
+                )
+                
+                if token_id:
+                    batch.token_id = token_id
+                    db.commit()
+                    logger.info(f\"\u2705 Token minted: ID {token_id}\")
+                else:
+                    logger.error(\"Token minting failed\")
+                    # Note: Verification still succeeds even if minting fails
+    
+    except Exception as e:
+        logger.error(f\"Token minting error: {e}\")
+        import traceback
+        traceback.print_exc()
+        # Verification still succeeds even if token minting fails
+    
+    return True, f\"\u2705 Batch verified: {verified_quantity} kg\"
+```
+
+**Key design decisions**:
+
+1. **Graceful degradation**: If token minting fails, verification still succeeds
+   - Batch status \u2192 VERIFIED
+   - Verification credential issued
+   - Token minting is "nice to have" but not critical
+
+2. **Verified quantity**: Token minted with `verified_quantity`, not `batch.quantity`
+   - Farmer claims 150kg \u2192 `batch.quantity = 150.0`
+   - Cooperative verifies 145kg \u2192 `verified_quantity = 145.0`
+   - Token minted with 145,000 grams (145kg \u00d7 1000)
+
+3. **IPFS CID from commission event**: Uses same IPFS CID as commission event
+   - Commission event already pinned to IPFS
+   - Token points to same metadata
+   - No duplicate IPFS pinning needed
+
+4. **Metadata includes both quantities**: For audit trail
+   - `claimed_quantity`: What farmer said (150kg)
+   - `verified_quantity`: What cooperative measured (145kg)
+   - Transparency for discrepancy tracking
+
+---
+
+## Step 5: Update Smart Contract (v1.6)
+
+**Contract**: `blockchain/src/CoffeeBatchToken.sol`
+
+**New features added**:
+
+### 1. `getTokenIdByBatchId()` Function
+
+```solidity
+/**
+ * @notice Get token ID by batch ID string
+ * @param batchIdStr The batch identifier string
+ * @return tokenId The corresponding token ID
+ */
+function getTokenIdByBatchId(string calldata batchIdStr) 
+    external 
+    view 
+    returns (uint256) 
+{
+    uint256 tokenId = batchIdToTokenId[batchIdStr];
+    if (tokenId == 0) revert BatchIdNotFound(batchIdStr);
+    return tokenId;
+}
+```
+
+**Why needed?**  
+The `token_manager.py` needs to query the token ID after minting. Parsing events is unreliable (reorgs, indexing delays). Direct state query is more robust.
+
+### 2. Aggregation Functions
+
+```solidity
+/**
+ * @notice Mint an aggregated container token from multiple child batches
+ * @dev Burns child tokens and mints new container token
+ */
+function mintContainer(
+    address recipient,
+    uint256 quantity,
+    string calldata batchIdStr,
+    string calldata metadata,
+    string calldata ipfsCid,
+    uint256[] calldata childTokenIds,
+    address[] calldata childHolders
+) external onlyOwner returns (uint256)
+
+/**
+ * @notice Burn tokens (used for consumption/final sale)
+ */
+function burnBatch(uint256 tokenId, uint256 amount) external
+
+/**
+ * @notice Get child token IDs for an aggregated container
+ */
+function getChildTokenIds(uint256 tokenId) 
+    external 
+    view 
+    returns (uint256[] memory)
+```
+
+**Use case**: Lab 12 aggregation events
+- Multiple farmer batches \u2192 packed into container
+- Container token minted, child tokens burned
+- Lineage preserved in `childTokenIds[]` array
+
+### 3. Enhanced Metadata Structure
+
+```solidity
+struct BatchMetadata {
+    string batchId;
+    uint256 quantity;        // In grams
+    string metadata;         // JSON string
+    string ipfsCid;          // IPFS CID
+    uint256 createdAt;       // Block timestamp
+    bool exists;             // Existence flag
+    bool isAggregated;       // True if container
+    uint256[] childTokenIds; // Child tokens (if aggregated)
+}
+```
+
+---
+
+## Step 6: Deploy Updated Contracts
+
+**Deployment command**:
+
+```bash
+cd blockchain
+source ../.env
+
+forge script script/DeployVoiceLedger.s.sol:DeployVoiceLedger \\
+  --rpc-url $BASE_SEPOLIA_RPC_URL \\
+  --private-key $PRIVATE_KEY_SEP \\
+  --broadcast \\
+  --verify \\
+  --etherscan-api-key $BASESCAN_API_KEY \\
+  --via-ir \\
+  -vvvv
+```
+
+**Deployment result** (December 21, 2025 at 11:27 AM):
+
+```
+Script ran successfully.
+
+DeployedContracts {
+  epcisEventAnchor: 0xF8B7C8a3692fa1D3bDdF8079696cDB32E10241A7
+  coffeeBatchToken: 0xf2d21673C16086C22b432518B4E41D52188582f2
+  settlementContract: 0x16e6DB0f637Ec7d83066227d5cbfabD1dcB5623b
+}
+
+Estimated gas used: 4,641,311
+Cost: 0.000006502007938589 ETH
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL
+
+Verification:
+  Response: NOTOK
+  Details: Too many invalid api key attempts, please try again later
+  (API rate limited - can verify manually later)
+```
+
+**Update `.env`**:
+
+```bash
+# Deployed Contract Addresses (Base Sepolia - December 21, 2025 - v1.6 with Aggregation)
+EPCIS_EVENT_ANCHOR_ADDRESS=0xf8b7c8a3692fa1d3bddf8079696cdb32e10241a7
+COFFEE_BATCH_TOKEN_ADDRESS=0xf2d21673c16086c22b432518b4e41d52188582f2
+SETTLEMENT_CONTRACT_ADDRESS=0x16e6db0f637ec7d83066227d5cbfabd1dcb5623b
+```
+
+**Extract ABIs**:
+
+```bash
+cd blockchain
+python extract_abis.py
+```
+
+Output:
+```
+Extracting ABIs from Foundry build artifacts...
+
+\u2705 EPCISEventAnchor: Extracted 17 ABI entries \u2192 blockchain_abis/EPCISEventAnchor.json
+\u2705 CoffeeBatchToken: Extracted 48 ABI entries \u2192 blockchain_abis/CoffeeBatchToken.json
+\u2705 SettlementContract: Extracted 11 ABI entries \u2192 blockchain_abis/SettlementContract.json
+
+\u2705 ABI extraction complete.
+```
+
+---
+
+## Step 7: Create Integration Test
+
+**File**: `test_token_minting_flow.py` (NEW - 316 lines)
+
+**Purpose**: Comprehensive end-to-end test of the complete flow from batch creation through verification to token minting.
+
+**Test steps**:
+
+1. \u2705 **Step 1**: Farmer creates batch via voice command
+   - Batch status: `PENDING_VERIFICATION`
+   - Token ID: `None`
+
+2. \u2705 **Step 2**: Create commission EPCIS event
+   - Pin to IPFS
+   - Anchor event hash to blockchain
+   - Verify IPFS CID and blockchain TX
+
+3. \u2705 **Step 3**: Verify NO token minted yet
+   - Assert `batch.token_id is None`
+
+4. \u2705 **Step 4**: Cooperative manager verifies batch
+   - Scans QR code
+   - Verifies actual quantity (145kg vs 150kg claimed)
+   - Approves verification
+
+5. \u2705 **Step 5**: Token minting
+   - Mint to cooperative wallet
+   - Use verified quantity (145kg)
+   - Query token ID via `getTokenIdByBatchId()`
+
+6. \u2705 **Step 6**: Verify final state
+   - Status: `VERIFIED`
+   - `token_id`: Set to token ID
+   - `verified_quantity`: 145.0
+   - `verification_timestamp`: Set
+
+**Run test**:
+
+```bash
+cd /Users/manu/Voice-Ledger
+source venv/bin/activate
+source .env
+python test_token_minting_flow.py
+```
+
+**Expected output**:
+
+```
+============================================================
+  TOKEN MINTING INTEGRATION TEST
+============================================================
+
+[STEP 1] Farmer creates batch via voice command
+\u2705 Batch created: TEST_YEHA_20251221_115841
+\u2139\ufe0f    Status: PENDING_VERIFICATION
+\u2139\ufe0f    Claimed quantity: 150.0 kg
+\u2139\ufe0f    Token ID: None
+
+[STEP 2] Create commission EPCIS event (IPFS + blockchain)
+Creating commission event for batch TEST_YEHA_20251221_115841...
+  Event hash: dea256f229d4dfd8...
+\u2705 Pinned to IPFS: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+\u2713 Event pinned to IPFS: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+\u2713 BlockchainAnchor initialized
+  Chain ID: 84532
+  Account: 0x476856D4Cc51b62a4191873Db0df3b1bb5083F02
+  Contract: 0xf8b7c8a3692fa1d3bddf8079696cdb32e10241a7
+\u2713 Event anchored to blockchain
+  Batch: TEST_YEHA_20251221_115841
+  Hash: 0xdea256f2...
+  Tx: f9154df1d9a0086c6a77aa8834bb126377fb7a5b0683144db106877f4acbdc8f
+\u2705 Commission event created
+\u2139\ufe0f    IPFS CID: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+\u2139\ufe0f    Blockchain TX: f9154df1d9a0086c...
+
+[STEP 3] Verify NO token minted yet
+\u2705 Correct! No token minted before verification
+
+[STEP 4] Cooperative manager verifies batch
+\u2705 Batch verified by cooperative
+\u2139\ufe0f    Verified quantity: 145.0 kg (claimed: 150.0 kg)
+
+[STEP 5] Mint token to cooperative wallet
+\u2139\ufe0f    Minting to: 0x476856D4Cc51b6...
+\u2139\ufe0f    Using verified quantity: 145.0 kg
+\u2713 CoffeeBatchTokenManager initialized
+  Chain ID: 84532
+  Cooperative wallet: 0x476856D4Cc51b62a4191873Db0df3b1bb5083F02
+  Token contract: 0xf2d21673c16086c22b432518b4e41d52188582f2
+  Transaction sent: aa7fd742c0055710511732ed49d97f7ffcbef4d510202910f4d8debe84a913cc
+  Waiting for confirmation...
+\u2713 Batch token minted successfully!
+  Batch ID: TEST_YEHA_20251221_115841
+  Quantity: 145.0 kg
+  IPFS CID: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+  TX hash: aa7fd742c0055710511732ed49d97f7ffcbef4d510202910f4d8debe84a913cc
+  Retrying token ID query (attempt 2/3)...
+  Token ID: 2
+\u2705 Token minted! Token ID: 2
+\u2705 Token ID stored in database
+
+[STEP 6] Verify final state
+\u2705 Status is VERIFIED
+\u2705 Token ID stored
+\u2705 Token ID matches
+\u2705 Verified quantity recorded
+\u2705 Verification timestamp set
+\u2705 Verifier recorded
+
+============================================================
+  \u2705 ALL TESTS PASSED
+============================================================
+
+Flow Summary:
+  1. Farmer claimed: 150.0 kg
+  2. Cooperative verified: 145.0 kg
+  3. Token minted with: 145.0 kg
+  4. Token ID: 2
+  5. IPFS CID: QmbPaGGqrp2jLBEH841XPDzNsiAmbdvB9Xu9z81bbLfeTp
+
+\u2705 Only VERIFIED batches get on-chain tokens!
+```
+
+**Key observations**:
+- \u2705 Farmer claimed 150kg, but only 145kg verified \u2192 token minted with 145kg
+- \u2705 Token ID query needed retry (propagation delay) \u2192 succeeded on 2nd attempt
+- \u2705 All database fields updated correctly
+- \u2705 Complete audit trail: claimed \u2260 verified, both tracked
+
+---
+
+## \ud83c\udfaf Key Takeaways
+
+### 1. Token Minting Timing
+
+| Stage | Old (Wrong) | New (Correct) |
+|-------|-------------|---------------|
+| **Farmer creates batch** | \u274c Token minted | \u2705 No token |
+| **Commission event** | IPFS + blockchain | IPFS + blockchain |
+| **QR sent to farmer** | Token already exists | No token yet |
+| **Cooperative verifies** | Already tokenized | \u2705 Token minted here |
+
+**Result**: Only verified batches get on-chain representation.
+
+### 2. Quantity Reconciliation
+
+```
+Farmer claim:          150.0 kg  (batch.quantity)
+Cooperative verified:  145.0 kg  (batch.verified_quantity)
+Token minted:          145,000 grams (verified!)
+On-chain data:         Matches physical reality
+```
+
+**Why different?**
+- Moisture loss during drying
+- Removal of defective beans
+- Weight verification using calibrated scale
+
+### 3. Custody Model
+
+| Layer | Owner | Purpose |
+|-------|-------|---------|
+| **Physical** | Cooperative warehouse | Holds coffee |
+| **Blockchain (ERC-1155)** | Cooperative wallet | Token custody |
+| **Database** | Farmer (created_by_user_id) | Attribution |
+| **DID** | Farmer (created_by_did) | Identity |
+| **Settlement** | Farmer | Payment recipient |
+
+**Result**: Custody matches physical reality, farmer gets credit and payment.
+
+### 4. Integration Points
+
+```
+voice/command_integration.py
+  \u2514\u2500 Farmer creates batch \u2192 PENDING_VERIFICATION
+     \u2502
+     v
+database/models.py
+  \u2514\u2500 CoffeeBatch record (token_id = NULL)
+     \u2502
+     v
+voice/telegram/verification_handler.py
+  \u2514\u2500 Cooperative verifies \u2192 VERIFIED
+     \u2502
+     v
+blockchain/token_manager.py
+  \u2514\u2500 mint_batch() \u2192 Web3 transaction
+     \u2502
+     v
+blockchain/src/CoffeeBatchToken.sol
+  \u2514\u2500 mintBatch() \u2192 ERC-1155 token created
+     \u2502
+     v
+database/models.py
+  \u2514\u2500 batch.token_id updated
+```
+
+---
+
+## \ud83d\udcca Performance & Gas Costs
+
+**Deployment**:
+- Gas used: 4,641,311
+- Cost: 0.000006502 ETH (~$0.02 at current prices)
+
+**Per-batch minting**:
+- Gas used: ~150,000 - 200,000 (depends on metadata size)
+- Cost: ~0.000001 ETH (~$0.003)
+
+**Why IR optimizer?**
+- `via_ir = true` in `foundry.toml`
+- Enables intermediate representation optimization
+- Reduces deployed bytecode size
+- 10-15% gas savings
+
+**Scalability**:
+- 1,000 batches/day \u00d7 $0.003 = $3/day
+- 365,000 batches/year \u00d7 $0.003 = $1,095/year
+- Affordable for cooperative scale
+
+---
+
+## \ud83d\udd0d Testing & Validation
+
+### Foundry Tests
+
+```bash
+cd blockchain
+forge test -vv
+```
+
+**Results**: 65/65 tests passing
+
+Key tests:
+- \u2705 `test_MintBatch()` - Mints batch and verifies balance
+- \u2705 `test_GetTokenIdByBatchId()` - Queries token by string ID
+- \u2705 `test_MintContainer()` - Aggregates children, burns them
+- \u2705 `test_BurnBatch()` - Burns tokens at consumption
+- \u2705 `test_URI()` - Returns correct IPFS gateway URL
+
+### Integration Test
+
+```bash
+python test_token_minting_flow.py
+```
+
+**Results**: 6/6 steps passing
+
+- \u2705 Batch creation (PENDING_VERIFICATION)
+- \u2705 IPFS + blockchain event anchoring
+- \u2705 No token before verification
+- \u2705 Cooperative verification
+- \u2705 Token minting with verified quantity
+- \u2705 Database state verification
+
+### Manual Verification
+
+**Check on BaseScan**:
+1. Go to https://sepolia.basescan.org/
+2. Search for `0xf2d21673c16086c22b432518b4e41d52188582f2`
+3. Verify:
+   - \u2705 Contract deployed
+   - \u2705 Transactions visible
+   - \u2705 Token mints visible
+   - \u23f3 Source code verification pending (API rate limited)
+
+**Query on-chain data**:
+```bash
+# Get token metadata
+cast call $COFFEE_BATCH_TOKEN_ADDRESS \\
+  \"getBatchMetadata(uint256)((string,uint256,string,string,uint256,bool,bool,uint256[]))\" \\
+  2 \\
+  --rpc-url $BASE_SEPOLIA_RPC_URL
+
+# Get token ID by batch ID
+cast call $COFFEE_BATCH_TOKEN_ADDRESS \\
+  \"getTokenIdByBatchId(string)(uint256)\" \\
+  \"TEST_YEHA_20251221_115841\" \\
+  --rpc-url $BASE_SEPOLIA_RPC_URL
+```
+
+---
+
+## \ud83d\udee1\ufe0f Security Considerations
+
+### 1. Private Key Management
+
+\u274c **NEVER commit private keys to git**
+
+```bash
+# .gitignore should include:
+.env
+*.key
+*.pem
+```
+
+### 2. Access Control
+
+- \u2705 `onlyOwner` modifier on `mintBatch()`
+- \u2705 Owner = deployer wallet (cooperative)
+- \u2705 Prevents unauthorized minting
+
+### 3. Verification Token Security
+
+- \u2705 6-digit random token
+- \u2705 One-time use (`verification_used = True`)
+- \u2705 Expiration timestamp (24 hours)
+- \u2705 Database index for fast lookups
+
+### 4. Quantity Validation
+
+- \u2705 Smart contract checks `quantity > 0`
+- \u2705 Python checks `quantity_kg <= 0` raises error
+- \u2705 IPFS CID validation (must start with Qm or bafy)
+
+### 5. Database Transactions
+
+- \u2705 All verification steps in single transaction
+- \u2705 Rollback if any step fails
+- \u2705 Token minting separate (graceful degradation)
+
+---
+
+## \ud83d\udcda Further Reading
+
+**Smart Contract Standards**:
+- ERC-1155 Multi-Token Standard: https://eips.ethereum.org/EIPS/eip-1155
+- OpenZeppelin ERC-1155: https://docs.openzeppelin.com/contracts/5.x/erc1155
+
+**Web3 Integration**:
+- Web3.py Documentation: https://web3py.readthedocs.io/
+- Ethereum JSON-RPC: https://ethereum.org/en/developers/docs/apis/json-rpc/
+
+**Base Sepolia**:
+- Base Docs: https://docs.base.org/
+- Basescan Explorer: https://sepolia.basescan.org/
+- Base Faucet: https://www.coinbase.com/faucets/base-ethereum-goerli-faucet
+
+**EPCIS 2.0**:
+- GS1 EPCIS Standard: https://ref.gs1.org/standards/epcis/
+- W3C Verifiable Credentials: https://www.w3.org/TR/vc-data-model/
+
+---
+
+## \u2705 Lab Complete!
+
+You've successfully implemented post-verification token minting with:
+- \u2705 Smart contracts deployed to Base Sepolia
+- \u2705 Token manager module for Web3 interactions
+- \u2705 Integration with verification handler
+- \u2705 Database schema updated with `token_id` column
+- \u2705 Comprehensive integration test
+- \u2705 Custodial model with farmer attribution
+- \u2705 Verified quantity enforcement
+
+**Next Steps**:
+- **Lab 14**: Chainlink Functions for off-chain attestation
+- **Lab 15**: Multi-signature wallets for cooperative governance
+- **Lab 16**: Settlement contract integration with payment rails
+
+---
+
+**Last Updated**: December 21, 2025  
+**Version**: v1.6  
+**Status**: Production-ready on Base Sepolia testnet
