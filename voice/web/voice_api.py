@@ -26,7 +26,7 @@ import json
 from database.models import UserIdentity
 from database.connection import get_db
 from voice.web.auth import get_current_user
-from voice.tts import generate_speech
+from voice.providers.tts_provider import generate_speech
 from voice.asr.asr_infer import run_asr_with_user_preference_async
 from voice.integrations import process_english_conversation, process_amharic_conversation
 

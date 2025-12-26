@@ -104,6 +104,14 @@ except ImportError as e:
     BATCH_PHOTO_AVAILABLE = False
     print(f"ℹ️  Batch photo verification module not available: {e}")
 
+# Import Web Voice UI router (Lab 17 - WebSocket voice interface)
+try:
+    from voice.web.voice_api import router as web_voice_router
+    WEB_VOICE_AVAILABLE = True
+except ImportError as e:
+    WEB_VOICE_AVAILABLE = False
+    print(f"ℹ️  Web voice module not available: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -144,6 +152,19 @@ if MARKETPLACE_AVAILABLE:
 if BATCH_PHOTO_AVAILABLE:
     app.include_router(batch_photo_router)
     print("✅ Batch photo verification endpoints registered at /batches/*")
+
+# Include Web Voice UI router (Lab 17)
+if WEB_VOICE_AVAILABLE:
+    app.include_router(web_voice_router)
+    print("✅ Web voice endpoints registered at /api/voice/*")
+
+# Mount static files for frontend
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+frontend_path = Path(__file__).parent.parent.parent / "frontend"
+if frontend_path.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+    print(f"✅ Frontend static files mounted from {frontend_path}")
 
 # Allow local tools and UIs
 app.add_middleware(

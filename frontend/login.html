@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Ledger - Login</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <style>
+    .login-container {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: var(--spacing-lg);
+    }
+    
+    .login-card {
+      background: var(--accent-white);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: var(--spacing-2xl);
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .login-logo {
+      text-align: center;
+      margin-bottom: var(--spacing-xl);
+    }
+    
+    .login-title {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary-blue);
+      text-align: center;
+      margin-bottom: var(--spacing-sm);
+    }
+    
+    .login-subtitle {
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      margin-bottom: var(--spacing-xl);
+    }
+    
+    .form-group {
+      margin-bottom: var(--spacing-lg);
+    }
+    
+    .alert {
+      padding: var(--spacing-md);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--spacing-md);
+      font-size: 0.875rem;
+    }
+    
+    .alert-error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    
+    .alert-success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <div style="font-size: 3rem; margin-bottom: var(--spacing-sm);">☕</div>
+        <h1 class="login-title">Voice Ledger</h1>
+        <p class="login-subtitle">Admin Dashboard Login</p>
+      </div>
+      
+      <div id="alert" style="display: none;"></div>
+      
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="label" for="phone">Phone Number</label>
+          <input 
+            type="tel" 
+            id="phone" 
+            class="input" 
+            placeholder="+251911234567"
+            required
+            autocomplete="tel"
+          >
+        </div>
+        
+        <div class="form-group">
+          <label class="label" for="pin">PIN (4 digits)</label>
+          <input 
+            type="password" 
+            id="pin" 
+            class="input" 
+            placeholder="Enter your PIN"
+            maxlength="4"
+            pattern="[0-9]{4}"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%;" id="loginBtn">
+          <span id="loginBtnText">Login</span>
+          <span id="loginSpinner" class="spinner" style="display: none;"></span>
+        </button>
+      </form>
+      
+      <div style="text-align: center; margin-top: var(--spacing-lg); color: var(--text-secondary); font-size: 0.75rem;">
+        <p>Voice Ledger v1.8 - Lab 17 Admin Dashboard</p>
+        <p style="margin-top: var(--spacing-xs);">© 2025 Voice Ledger. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    
+    // Show alert message
+    function showAlert(message, type = 'error') {
+      const alert = document.getElementById('alert');
+      alert.className = `alert alert-${type}`;
+      alert.textContent = message;
+      alert.style.display = 'block';
+      
+      setTimeout(() => {
+        alert.style.display = 'none';
+      }, 5000);
+    }
+    
+    // Handle login form submission
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const phone = document.getElementById('phone').value.trim();
+      const pin = document.getElementById('pin').value.trim();
+      
+      // Validate inputs
+      if (!phone || !pin) {
+        showAlert('Please enter both phone number and PIN');
+        return;
+      }
+      
+      if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+        showAlert('PIN must be exactly 4 digits');
+        return;
+      }
+      
+      // Show loading state
+      const loginBtn = document.getElementById('loginBtn');
+      const loginBtnText = document.getElementById('loginBtnText');
+      const loginSpinner = document.getElementById('loginSpinner');
+      
+      loginBtn.disabled = true;
+      loginBtnText.textContent = 'Logging in...';
+      loginSpinner.style.display = 'inline-block';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            phone_number: phone,
+            pin: pin
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.token) {
+          // Store token and user info
+          localStorage.setItem('vl_token', data.token);
+          localStorage.setItem('vl_user', JSON.stringify(data.user));
+          
+          showAlert('Login successful! Redirecting...', 'success');
+          
+          // Redirect based on role
+          setTimeout(() => {
+            if (data.user.role === 'ADMIN') {
+              window.location.href = '/admin.html';
+            } else {
+              window.location.href = '/voice-ui.html';
+            }
+          }, 1000);
+        } else {
+          showAlert(data.message || 'Invalid credentials');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        showAlert('Login failed. Please try again.');
+      } finally {
+        // Reset button state
+        loginBtn.disabled = false;
+        loginBtnText.textContent = 'Login';
+        loginSpinner.style.display = 'none';
+      }
+    });
+    
+    // Check if already logged in
+    const token = localStorage.getItem('vl_token');
+    if (token) {
+      // Verify token is still valid
+      fetch(`${API_BASE}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          return response.json();
+        }
+        throw new Error('Invalid token');
+      })
+      .then(user => {
+        if (user.role === 'ADMIN') {
+          window.location.href = '/admin.html';
+        } else {
+          window.location.href = '/voice-ui.html';
+        }
+      })
+      .catch(() => {
+        // Token invalid, clear it
+        localStorage.removeItem('vl_token');
+        localStorage.removeItem('vl_user');
+      });
+    }
+  </script>
+</body>
+</html>

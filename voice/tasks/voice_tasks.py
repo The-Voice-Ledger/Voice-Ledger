@@ -389,7 +389,7 @@ def process_voice_command_task(
             else:
                 # English conversation with GPT-4
                 logger.info(f"Processing English conversation for user {user_db_id}")
-                conversation_result = process_english_conversation(user_db_id, transcript, use_rag=True)
+                conversation_result = process_english_conversation(user_db_id, transcript)
             
             # Check if conversation is ready to execute
             if not conversation_result.get('ready_to_execute'):

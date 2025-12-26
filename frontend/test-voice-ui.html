@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice UI Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .test-result {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        
+        .test-result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .test-result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .test-result.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .controls {
+            margin: 20px 0;
+        }
+        
+        #test-output {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(102, 126, 234, 0.2);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-panel">
+        <h1>🎙️ Voice UI Component Test</h1>
+        <p>Test the voice interface components programmatically</p>
+        
+        <div class="controls">
+            <button onclick="runAllTests()">▶️ Run All Tests</button>
+            <button onclick="testMicrophoneButton()">🎤 Test Mic Button</button>
+            <button onclick="testMediaRecorder()">📹 Test MediaRecorder API</button>
+            <button onclick="window.open('/voice-ui.html', '_blank')">🔗 Open Voice UI (New Tab)</button>
+            <button onclick="testDirectAccess()">🔍 Test Direct Access</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+        
+        <div id="test-output"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>Voice UI Preview (in iframe)</h2>
+        <iframe id="voice-ui-frame" src="/voice-ui.html" style="width: 100%; height: 500px; border: 1px solid #ddd; border-radius: 8px;"></iframe>
+    </div>
+
+    <script>
+        const output = document.getElementById('test-output');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearResults() {
+            output.innerHTML = '';
+        }
+        
+        async function testMicrophoneButton() {
+            log('🎤 Testing microphone button...', 'info');
+            
+            try {
+                const iframe = document.getElementById('voice-ui-frame');
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                
+                // Wait for iframe and JavaScript to fully load
+                log('⏳ Waiting for page to load...', 'info');
+                let attempts = 0;
+                while (attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (iframe.contentWindow.voiceController) {
+                        break;
+                    }
+                    attempts++;
+                }
+                
+                // Check if button exists
+                const micButton = iframeDoc.getElementById('mic-button');
+                if (!micButton) {
+                    log('❌ Microphone button not found in DOM', 'error');
+                    return;
+                }
+                log('✅ Microphone button found: ' + micButton.className, 'success');
+                
+                // Check if button has event listeners
+                const hasClickHandler = iframe.contentWindow.voiceController && 
+                                       iframe.contentWindow.voiceController.micButton;
+                if (hasClickHandler) {
+                    log('✅ Button has click handler attached', 'success');
+                } else {
+                    log('⚠️ VoiceController not initialized yet', 'error');
+                    return;
+                }
+                
+                // Simulate click
+                log('🖱️ Simulating button click...', 'info');
+                micButton.click();
+                
+                // Check if recording state changed
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                const isRecording = iframe.contentWindow.voiceController.isRecording;
+                if (isRecording) {
+                    log('✅ Recording state changed to: ' + isRecording, 'success');
+                    log('🎤 Microphone access requested!', 'success');
+                    
+                    // Stop recording after test
+                    setTimeout(() => {
+                        micButton.click();
+                        log('⏹️ Recording stopped', 'info');
+                    }, 1000);
+                } else {
+                    log('ℹ️ Recording state: ' + isRecording + ' (may require permission)', 'info');
+                }
+                
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+        
+        async function testMediaRecorder() {
+            log('📹 Testing MediaRecorder API availability...', 'info');
+            
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    log('❌ getUserMedia not supported', 'error');
+                    return;
+                }
+                log('✅ getUserMedia API available', 'success');
+                
+                if (typeof MediaRecorder === 'undefined') {
+                    log('❌ MediaRecorder API not available', 'error');
+                    return;
+                }
+                log('✅ MediaRecorder API available', 'success');
+                
+                // Check supported types
+                const types = ['audio/webm', 'audio/ogg', 'audio/mp4'];
+                const supportedTypes = types.filter(type => MediaRecorder.isTypeSupported(type));
+                
+                if (supportedTypes.length > 0) {
+                    log('✅ Supported formats: ' + supportedTypes.join(', '), 'success');
+                } else {
+                    log('⚠️ No supported audio formats found', 'error');
+                }
+                
+                log('🎤 Requesting microphone permission...', 'info');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                log('✅ Microphone permission granted!', 'success');
+                
+                // Create a test recorder
+                const recorder = new MediaRecorder(stream);
+                log('✅ MediaRecorder created successfully', 'success');
+                
+                // Stop the stream
+                stream.getTracks().forEach(track => track.stop());
+                log('⏹️ Test stream stopped', 'info');
+                
+            } catch (error) {
+                if (error.name === 'NotAllowedError') {
+                    log('❌ Microphone permission denied', 'error');
+                } else if (error.name === 'NotFoundError') {
+                    log('❌ No microphone found', 'error');
+                } else {
+                    log('❌ Error: ' + error.message, 'error');
+                }
+                console.error(error);
+            }
+        }
+        
+        async function testDirectAccess() {
+            log('🔍 Testing direct JavaScript access...', 'info');
+            
+            try {
+                // Test if we can fetch the JavaScript file
+                const response = await fetch('/js/voice-controller.js?v=2');
+                if (!response.ok) {
+                    log('❌ JavaScript file not accessible: ' + response.status, 'error');
+                    return;
+                }
+                
+                const jsContent = await response.text();
+                log('✅ JavaScript file loaded: ' + jsContent.length + ' bytes', 'success');
+                
+                // Check if it contains the VoiceController class
+                if (jsContent.includes('class VoiceController')) {
+                    log('✅ VoiceController class found in file', 'success');
+                } else {
+                    log('❌ VoiceController class not found in file', 'error');
+                }
+                
+                // Check key methods
+                const methods = ['toggleRecording', 'startRecording', 'stopRecording', 'uploadAudio'];
+                let foundMethods = 0;
+                for (const method of methods) {
+                    if (jsContent.includes(method)) {
+                        foundMethods++;
+                        log(`✅ Method found: ${method}()`, 'success');
+                    } else {
+                        log(`❌ Method missing: ${method}()`, 'error');
+                    }
+                }
+                
+                log(`📊 Methods found: ${foundMethods}/${methods.length}`, 'info');
+                
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+        
+        async function testDOMElements() {
+            log('🔍 Testing DOM elements...', 'info');
+            
+            try {
+                const iframe = document.getElementById('voice-ui-frame');
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                
+                const elements = [
+                    'mic-button',
+                    'recording-indicator',
+                    'processing-indicator',
+                    'conversation-history',
+                    'lang-en',
+                    'lang-am',
+                    'tts-player'
+                ];
+                
+                let found = 0;
+                let missing = 0;
+                
+                for (const id of elements) {
+                    const element = iframeDoc.getElementById(id);
+                    if (element) {
+                        found++;
+                        log(`✅ Found: #${id}`, 'success');
+                    } else {
+                        missing++;
+                        log(`❌ Missing: #${id}`, 'error');
+                    }
+                }
+                
+                log(`📊 Summary: ${found} found, ${missing} missing`, 'info');
+                
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            }
+        }
+        
+        async function testJavaScriptLoaded() {
+            log('📜 Testing JavaScript loaded...', 'info');
+            
+            try {
+                const iframe = document.getElementById('voice-ui-frame');
+                
+                // Wait up to 5 seconds for JavaScript to load
+                log('⏳ Waiting for JavaScript to load...', 'info');
+                let attempts = 0;
+                while (attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (typeof iframe.contentWindow.VoiceController !== 'undefined') {
+                        break;
+                    }
+                    attempts++;
+                }
+                
+                const hasVoiceController = typeof iframe.contentWindow.VoiceController !== 'undefined';
+                if (hasVoiceController) {
+                    log('✅ VoiceController class available', 'success');
+                } else {
+                    log('❌ VoiceController class not found', 'error');
+                    log('ℹ️ Check browser console for JavaScript errors', 'info');
+                    
+                    // Check if script tag exists
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const scriptTag = iframeDoc.querySelector('script[src*="voice-controller"]');
+                    if (scriptTag) {
+                        log(`ℹ️ Script tag found: ${scriptTag.src}`, 'info');
+                    } else {
+                        log('❌ Script tag not found in HTML', 'error');
+                    }
+                    return;
+                }
+                
+                // Wait a bit more for instance to be created
+                attempts = 0;
+                while (attempts < 20) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (iframe.contentWindow.voiceController !== undefined) {
+                        break;
+                    }
+                    attempts++;
+                }
+                
+                const hasInstance = iframe.contentWindow.voiceController !== undefined;
+                if (hasInstance) {
+                    log('✅ VoiceController instance created', 'success');
+                    
+                    const controller = iframe.contentWindow.voiceController;
+                    log(`ℹ️ Language: ${controller.currentLanguage}`, 'info');
+                    log(`ℹ️ Recording: ${controller.isRecording}`, 'info');
+                } else {
+                    log('⚠️ VoiceController instance not initialized', 'error');
+                    log('ℹ️ DOMContentLoaded may not have fired yet', 'info');
+                }
+                
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+        
+        async function runAllTests() {
+            clearResults();
+            log('🚀 Running all tests...', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            await testDOMElements();
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            await testJavaScriptLoaded();
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            await testMediaRecorder();
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            await testMicrophoneButton();
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            
+            log('✅ All tests completed!', 'success');
+        }
+        
+        // Run tests when iframe loads
+        window.addEventListener('load', () => {
+            const iframe = document.getElementById('voice-ui-frame');
+            iframe.addEventListener('load', () => {
+                log('✅ Voice UI iframe loaded', 'success');
+            });
+        });
+    </script>
+</body>
+</html>

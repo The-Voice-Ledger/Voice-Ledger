@@ -1,8 +1,12 @@
 """
 Automatic Speech Recognition (ASR) Module
 
-This module handles audio-to-text transcription with automatic language detection.
-It supports both English (OpenAI Whisper API) and Amharic (local fine-tuned model).
+This module handles audio-to-text transcription with hybrid routing:
+- Amharic: AddisAI cloud API (production) with optional local model fallback
+- English: OpenAI Whisper API
+
+The hybrid approach enables fast cloud deployment while maintaining local fallback
+for development and offline scenarios.
 """
 
 import os
@@ -23,6 +27,10 @@ load_dotenv()
 
 # Initialize OpenAI client for English
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# AddisAI configuration
+USE_ADDIS_STT = os.getenv("USE_ADDIS_STT", "true").lower() == "true"
+USE_LOCAL_AMHARIC_FALLBACK = os.getenv("USE_LOCAL_AMHARIC_FALLBACK", "true").lower() == "true"
 
 # Global model cache to avoid reloading
 _amharic_model = None
@@ -156,10 +164,33 @@ def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Di
         
         # Route based on user's language choice
         if user_language.lower() in ['am', 'amharic']:
-            # Use local Amharic model
-            logger.info("Routing to local Amharic Whisper model")
-            transcript = transcribe_with_amharic_model(audio_file_path)
-            language = 'am'
+            # Hybrid routing for Amharic: Cloud-first with local fallback
+            if USE_ADDIS_STT:
+                try:
+                    # Try AddisAI cloud STT first (production path)
+                    from voice.providers.addis_ai import transcribe_sync, AddisAIError
+                    logger.info("Routing to AddisAI cloud STT (Amharic)")
+                    
+                    result = transcribe_sync(audio_file_path, language="am")
+                    transcript = result['text']
+                    language = 'am'
+                    logger.info(f"AddisAI transcription successful: confidence={result.get('confidence', 0):.2f}")
+                    
+                except (AddisAIError, ImportError) as e:
+                    # Fallback to local model if enabled
+                    if USE_LOCAL_AMHARIC_FALLBACK:
+                        logger.warning(f"AddisAI failed ({str(e)}), falling back to local Amharic model")
+                        transcript = transcribe_with_amharic_model(audio_file_path)
+                        language = 'am'
+                    else:
+                        # Production: fail fast for monitoring
+                        logger.error(f"AddisAI STT failed and fallback disabled: {e}")
+                        raise Exception(f"Amharic transcription temporarily unavailable: {e}")
+            else:
+                # Direct to local model (development/offline mode)
+                logger.info("Routing to local Amharic Whisper model (USE_ADDIS_STT=false)")
+                transcript = transcribe_with_amharic_model(audio_file_path)
+                language = 'am'
         else:
             # Use OpenAI Whisper API for English
             logger.info("Routing to OpenAI Whisper API (English)")
