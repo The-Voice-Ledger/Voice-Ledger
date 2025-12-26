@@ -99,6 +99,130 @@ def clean_text_for_tts(text: str) -> str:
     return text.strip()
 
 
+def format_for_voice(text: str) -> str:
+    """
+    Format text for natural voice synthesis.
+    
+    Conversions:
+    - Currency: "$50" → "50 dollars", "€100" → "100 euros", "450 ETB" → "450 birr"
+    - Units: "5kg" → "5 kilograms", "10m" → "10 meters", "25%" → "25 percent"
+    - Numbers: Spell out numbers < 20, keep larger numbers as digits
+    - Ordinals: "1st" → "first", "2nd" → "second", "3rd" → "third"
+    - Codes: "ABC-123" remains as is (spelled out by TTS)
+    - Times: "14:30" → "14 30" or "2:30pm" → "2 30 PM"
+    
+    Args:
+        text: Input text with symbols and formatting
+        
+    Returns:
+        Voice-friendly text
+        
+    Example:
+        >>> format_for_voice("Batch ABC-123: 50kg for $450")
+        "Batch ABC-123: 50 kilograms for 450 dollars"
+    """
+    if not text:
+        return ""
+    
+    # Strip whitespace first
+    text = text.strip()
+    if not text:
+        return ""
+    
+    # Currency symbols - order matters (do specific ones first)
+    currency_map = {
+        r'\$(\d+(?:\.\d+)?)': r'\1 dollars',
+        r'(\d+(?:\.\d+)?)\s*ETB': r'\1 birr',  # Ethiopian Birr
+        r'(\d+(?:\.\d+)?)\s*USD': r'\1 US dollars',
+        r'(\d+(?:\.\d+)?)\s*EUR': r'\1 euros',
+        r'€(\d+(?:\.\d+)?)': r'\1 euros',  # After EUR to avoid double replacement
+        r'£(\d+(?:\.\d+)?)': r'\1 pounds',
+        r'¥(\d+(?:\.\d+)?)': r'\1 yen',
+    }
+    
+    for pattern, replacement in currency_map.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Units (with and without spaces)
+    units_map = {
+        r'(\d+(?:\.\d+)?)\s*kg(?!\w)': r'\1 kilograms',
+        r'(\d+(?:\.\d+)?)\s*g(?!\w)': r'\1 grams',
+        r'(\d+(?:\.\d+)?)\s*m(?!\w)': r'\1 meters',
+        r'(\d+(?:\.\d+)?)\s*km(?!\w)': r'\1 kilometers',
+        r'(\d+(?:\.\d+)?)\s*cm(?!\w)': r'\1 centimeters',
+        r'(\d+(?:\.\d+)?)\s*lb(?!\w)': r'\1 pounds',
+        r'(\d+(?:\.\d+)?)\s*oz(?!\w)': r'\1 ounces',
+        r'(\d+(?:\.\d+)?)\s*%': r'\1 percent',
+    }
+    
+    for pattern, replacement in units_map.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Ordinals (1st, 2nd, 3rd, etc.) - do BEFORE small number conversion
+    ordinals = {
+        r'\b1st\b': 'first',
+        r'\b2nd\b': 'second',
+        r'\b3rd\b': 'third',
+        r'\b4th\b': 'fourth',
+        r'\b5th\b': 'fifth',
+        r'\b6th\b': 'sixth',
+        r'\b7th\b': 'seventh',
+        r'\b8th\b': 'eighth',
+        r'\b9th\b': 'ninth',
+        r'\b10th\b': 'tenth',
+        r'\b11th\b': 'eleventh',
+        r'\b12th\b': 'twelfth',
+        r'\b13th\b': 'thirteenth',
+        r'\b14th\b': 'fourteenth',
+        r'\b15th\b': 'fifteenth',
+        r'\b16th\b': 'sixteenth',
+        r'\b17th\b': 'seventeenth',
+        r'\b18th\b': 'eighteenth',
+        r'\b19th\b': 'nineteenth',
+        r'\b20th\b': 'twentieth',
+    }
+    
+    for pattern, replacement in ordinals.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Spell out small numbers (1-19) when standalone
+    # Only replace if not part of larger numbers or codes
+    number_words = {
+        r'\b1\b': 'one',
+        r'\b2\b': 'two',
+        r'\b3\b': 'three',
+        r'\b4\b': 'four',
+        r'\b5\b': 'five',
+        r'\b6\b': 'six',
+        r'\b7\b': 'seven',
+        r'\b8\b': 'eight',
+        r'\b9\b': 'nine',
+        r'\b10\b': 'ten',
+        r'\b11\b': 'eleven',
+        r'\b12\b': 'twelve',
+        r'\b13\b': 'thirteen',
+        r'\b14\b': 'fourteen',
+        r'\b15\b': 'fifteen',
+        r'\b16\b': 'sixteen',
+        r'\b17\b': 'seventeen',
+        r'\b18\b': 'eighteen',
+        r'\b19\b': 'nineteen',
+    }
+    
+    # Only apply to text not surrounded by digits, hyphens, or followed by 'kilograms'/'meters'/etc
+    for pattern, word in number_words.items():
+        # Negative lookbehind/ahead to avoid replacing in codes or measurements
+        # Don't replace if followed by ' kilograms', ' meters', etc (already converted)
+        safe_pattern = r'(?<!\d)(?<!-)(?<!\.)' + pattern + r'(?!\d)(?!-)(?!\.)(?! kilograms)(?! grams)(?! meters)(?! kilometers)(?! centimeters)(?! pounds)(?! ounces)'
+        text = re.sub(safe_pattern, word, text)
+    
+    # Time formats (optional - make them more speech-friendly)
+    text = re.sub(r'(\d{1,2}):(\d{2})\s*(am|pm)', r'\1 \2 \3', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\d{1,2}):(\d{2})', r'\1 \2', text)  # 14:30 → 14 30
+    
+    return text
+
+
 async def _generate_and_send_voice(
     bot: Bot,
     chat_id: int,
@@ -128,16 +252,23 @@ async def _generate_and_send_voice(
             logger.warning(f"No text to synthesize after cleaning: {message[:50]}")
             return
         
+        # Format text for voice synthesis
+        voice_friendly_text = format_for_voice(clean_text)
+        
+        if not voice_friendly_text:
+            logger.warning(f"No text after voice formatting: {clean_text[:50]}")
+            return
+        
         # Prioritize: explicit language > user preference > text detection
         if language is None:
             if user_preference_language:
                 language = user_preference_language
                 logger.info(f"Using user preference language: {language}")
             else:
-                language = detect_language(clean_text)
+                language = detect_language(voice_friendly_text)
                 logger.info(f"Using text-detected language: {language}")
         
-        logger.info(f"🎤 Generating TTS: {len(clean_text)} chars, lang: {language}, chat: {chat_id}")
+        logger.info(f"🎤 Generating TTS: {len(voice_friendly_text)} chars (formatted), lang: {language}, chat: {chat_id}")
         
         # Route TTS based on language
         audio_bytes = None
@@ -146,7 +277,7 @@ async def _generate_and_send_voice(
             # Use AddisAI for Amharic
             try:
                 audio_bytes = await addisai_provider.text_to_speech(
-                    text=clean_text,
+                    text=voice_friendly_text,
                     language="am"
                 )
                 logger.info(f"✅ AddisAI TTS generated: {len(audio_bytes)} bytes")
@@ -158,7 +289,7 @@ async def _generate_and_send_voice(
                 response = await openai_client.audio.speech.create(
                     model="tts-1",
                     voice="nova",
-                    input=clean_text
+                    input=voice_friendly_text
                 )
                 audio_bytes = response.content
                 logger.info(f"✅ OpenAI TTS generated: {len(audio_bytes)} bytes")
@@ -183,7 +314,7 @@ async def _generate_and_send_voice(
                         reply_to_message_id=reply_to_message_id
                     )
                 
-                logger.info(f"✅ Voice reply sent: {len(clean_text)} chars, lang: {language}")
+                logger.info(f"✅ Voice reply sent: {len(voice_friendly_text)} chars (formatted), lang: {language}")
             finally:
                 # Cleanup temp file
                 try:

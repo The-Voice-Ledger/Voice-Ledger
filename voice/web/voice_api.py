@@ -26,8 +26,25 @@ import json
 from database.models import UserIdentity
 from database.connection import get_db
 from voice.web.auth import get_current_user
-from voice.providers.tts_provider import generate_speech
+from voice.tts import generate_speech
 from voice.asr.asr_infer import run_asr_with_user_preference_async
+
+
+def is_maintenance_mode() -> bool:
+    """Check if system is in maintenance mode."""
+    try:
+        maintenance_file = Path(__file__).parent.parent.parent / ".maintenance"
+        if maintenance_file.exists():
+            content = maintenance_file.read_text().strip()
+            # Check if MAINTENANCE_MODE=True
+            for line in content.split('\n'):
+                if line.startswith('MAINTENANCE_MODE='):
+                    value = line.split('=')[1].strip()
+                    return value.lower() in ('true', '1', 'yes')
+        return False
+    except Exception as e:
+        logger.error(f"Error checking maintenance mode: {e}")
+        return False
 from voice.integrations import process_english_conversation, process_amharic_conversation
 
 logger = logging.getLogger(__name__)
@@ -82,6 +99,16 @@ async def voice_websocket(websocket: WebSocket):
         user_id = user.id if user else 0
         
         logger.info(f"WebSocket voice session started for {'user ' + str(user.id) if user else 'anonymous'} ({user_language})")
+        
+        # Check maintenance mode
+        if is_maintenance_mode():
+            await websocket.send_json({
+                "status": "maintenance",
+                "message": "🔧 System Under Maintenance",
+                "details": "The Voice Ledger system is currently undergoing maintenance. Please try again later."
+            })
+            await websocket.close()
+            return
         
         # Receive audio data
         await websocket.send_json({"status": "ready", "message": "Ready to receive audio"})

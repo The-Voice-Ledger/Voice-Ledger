@@ -36,6 +36,7 @@ from database.models import (
     RFQ, RFQOffer, RFQAcceptance, RFQBroadcast,
     UserIdentity, Organization, Buyer, SessionLocal
 )
+from voice.marketplace.payment_messaging import send_payment_instructions
 
 # Database dependency for FastAPI
 def get_db():
@@ -481,7 +482,7 @@ def get_rfq_offers(
     return results
 
 @router.post("/rfq/{rfq_id}/accept", response_model=AcceptanceResponse, status_code=201)
-def accept_offer(
+async def accept_offer(
     rfq_id: int,
     acceptance: AcceptOfferRequest,
     user_id: int = Query(..., description="User ID (buyer)"),
@@ -555,6 +556,24 @@ def accept_offer(
     
     db.commit()
     db.refresh(acceptance_record)
+    
+    # NEW: Send payment instructions to buyer and cooperative
+    try:
+        # Get cooperative organization
+        cooperative_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
+        
+        # Send payment instructions
+        await send_payment_instructions(
+            acceptance=acceptance_record,
+            offer=offer,
+            rfq=rfq,
+            buyer=user,
+            cooperative_org=cooperative_org,
+            db=db
+        )
+    except Exception as e:
+        # Log error but don't fail the acceptance
+        print(f"Warning: Failed to send payment instructions: {e}")
     
     return AcceptanceResponse(
         id=acceptance_record.id,

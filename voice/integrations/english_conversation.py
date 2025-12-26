@@ -3,6 +3,8 @@ English Conversational AI using OpenAI GPT-4
 
 Provides conversational interface for English-speaking users to register coffee batches
 and perform supply chain operations through natural dialogue.
+
+Lab 18 Enhancement: RAG (Retrieval-Augmented Generation) integration for knowledge-grounded responses.
 """
 
 import os
@@ -13,6 +15,17 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from .conversation_manager import ConversationManager
+
+# Lab 18: RAG integration (optional - graceful fallback if not available)
+try:
+    from voice.rag import enhance_query_with_rag, classify_query
+    RAG_AVAILABLE = True
+    logger = logging.getLogger(__name__)
+    logger.info("RAG module loaded - conversational AI will use knowledge base")
+except ImportError:
+    RAG_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.info("RAG module not available - conversational AI will use static prompts only")
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -75,19 +88,35 @@ CONVERSATION GUIDELINES:
 - If user seems confused, offer examples
 - Celebrate successful completions
 
+AUTHENTICATION AWARENESS:
+- If user_id is 0, they are ANONYMOUS (not logged in)
+- For transactional operations (record_commission, record_shipment, etc.), anonymous users MUST be guided to register
+- For informational queries (prices, how-to, etc.), anonymous users get full answers
+
 CRITICAL: You MUST ONLY respond with valid JSON. No extra text before or after the JSON.
 
 RESPONSE FORMAT:
 
 When you need more information, respond with ONLY this JSON:
 {
-  "message": "Your follow-up question here",
+  "message_text": "Your follow-up question (can include emojis, formatting)",
+  "message_spoken": "Natural spoken version of the same question",
   "ready_to_execute": false
+}
+
+When ANONYMOUS user tries transactional operation:
+{
+  "message_text": "I'd love to help you record that! 📦\n\nHowever, batch recording requires registration.\n\nYou can:\n1. Click Login above\n2. Register via Telegram: https://t.me/VoiceLedgerBot",
+  "message_spoken": "I'd love to help you record that batch! However, batch recording requires a registered account. You can click the login button shown on screen, or register via our Telegram bot - there's a registration link displayed below. In the meantime, I can answer questions about prices or EUDR compliance.",
+  "ready_to_execute": false,
+  "needs_auth": true,
+  "telegram_bot_url": "https://t.me/VoiceLedgerBot"
 }
 
 When you have ALL required information, respond with ONLY this JSON:
 {
-  "message": "Your final confirmation message to the user",
+  "message_text": "Your final confirmation message to the user",
+  "message_spoken": "Natural spoken version of the same message",
   "ready_to_execute": true,
   "intent": "operation_name",
   "entities": {
@@ -98,24 +127,28 @@ When you have ALL required information, respond with ONLY this JSON:
   }
 }
 
+IMPORTANT: message_spoken should NEVER include URLs or emojis. Use phrases like 'shown on screen', 'displayed below', 'the link above' instead of reading URLs.
+
 DO NOT include any text outside the JSON structure. DO NOT include markdown code blocks. Just pure JSON.
 """
 
 
-def process_english_conversation(user_id: int, transcript: str) -> Dict[str, Any]:
+def process_english_conversation(user_id: int, transcript: str, use_rag: bool = True) -> Dict[str, Any]:
     """
     Process English voice transcript using GPT-4 conversational AI.
     
     This function:
     1. Retrieves conversation history
-    2. Sends transcript + history to GPT-4
-    3. Parses GPT-4 response
-    4. Updates conversation state
-    5. Returns result (ready to execute or needs more info)
+    2. (Lab 18) Enhances prompt with RAG-retrieved context if applicable
+    3. Sends transcript + history to GPT-4
+    4. Parses GPT-4 response
+    5. Updates conversation state
+    6. Returns result (ready to execute or needs more info)
     
     Args:
         user_id: Database user ID
         transcript: Transcribed text from user's voice message
+        use_rag: Whether to use RAG enhancement (default: True)
         
     Returns:
         {
@@ -134,8 +167,22 @@ def process_english_conversation(user_id: int, transcript: str) -> Dict[str, Any
         # Add user's message to history
         ConversationManager.add_message(user_id, 'user', transcript)
         
+        # Lab 18: Enhance system prompt with RAG if available and enabled
+        system_prompt = SYSTEM_PROMPT
+        if use_rag and RAG_AVAILABLE:
+            try:
+                system_prompt = enhance_query_with_rag(
+                    query=transcript,
+                    base_prompt=SYSTEM_PROMPT,
+                    max_context_tokens=2000
+                )
+                logger.info(f"Enhanced prompt with RAG for user {user_id}")
+            except Exception as rag_error:
+                logger.warning(f"RAG enhancement failed, using base prompt: {rag_error}")
+                system_prompt = SYSTEM_PROMPT
+        
         # Build messages for GPT-4
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
         
         logger.info(f"Sending English conversation to GPT-4 for user {user_id}, turn {ConversationManager.get_turn_count(user_id)}")
@@ -184,8 +231,14 @@ def process_english_conversation(user_id: int, transcript: str) -> Dict[str, Any
                     "ready_to_execute": False
                 }
         
-        # Add assistant's response to history
-        ConversationManager.add_message(user_id, 'assistant', result.get('message', assistant_response))
+        # Handle backward compatibility - if only 'message' is present, use it for both
+        if 'message' in result and 'message_text' not in result:
+            result['message_text'] = result['message']
+            result['message_spoken'] = result['message']
+        
+        # Add assistant's response to history (use text version)
+        message_to_save = result.get('message_text') or result.get('message', assistant_response)
+        ConversationManager.add_message(user_id, 'assistant', message_to_save)
         
         # If ready to execute, update entities and intent
         if result.get('ready_to_execute'):

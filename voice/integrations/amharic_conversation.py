@@ -159,7 +159,7 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
                     "conversation_history": conversation_history,
                     "generation_config": {
                         "temperature": 0.7,
-                        "maxOutputTokens": 500  # Fixed: was max_output_tokens (incorrect)
+                        "max_output_tokens": 500
                     }
                 }
             )

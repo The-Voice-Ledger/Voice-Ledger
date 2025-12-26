@@ -9,6 +9,7 @@ import os
 from typing import Dict, Any
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
+from pathlib import Path
 
 from voice.channels.processor import get_processor
 from voice.tasks.voice_tasks import process_voice_command_task
@@ -16,6 +17,45 @@ from voice.tasks.voice_tasks import process_voice_command_task
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/voice/telegram", tags=["telegram"])
+
+
+def is_maintenance_mode() -> bool:
+    """Check if system is in maintenance mode."""
+    try:
+        maintenance_file = Path(__file__).parent.parent.parent / ".maintenance"
+        if maintenance_file.exists():
+            content = maintenance_file.read_text().strip()
+            # Check if MAINTENANCE_MODE=True
+            for line in content.split('\n'):
+                if line.startswith('MAINTENANCE_MODE='):
+                    value = line.split('=')[1].strip()
+                    return value.lower() in ('true', '1', 'yes')
+        return False
+    except Exception as e:
+        logger.error(f"Error checking maintenance mode: {e}")
+        return False
+
+
+async def send_maintenance_message(chat_id: int):
+    """Send maintenance message to user."""
+    try:
+        from voice.channels.telegram_channel import send_telegram_message
+        
+        message = (
+            "🔧 *System Under Maintenance*\n\n"
+            "The Voice Ledger system is currently undergoing maintenance. "
+            "We apologize for any inconvenience.\n\n"
+            "Please try again later. Thank you for your patience!"
+        )
+        
+        await send_telegram_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='Markdown'
+        )
+        logger.info(f"Sent maintenance message to chat_id: {chat_id}")
+    except Exception as e:
+        logger.error(f"Error sending maintenance message: {e}")
 
 
 class TelegramResponse(BaseModel):
@@ -58,6 +98,19 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
         }
     """
     try:
+        # Check maintenance mode first
+        if is_maintenance_mode():
+            logger.info("System in maintenance mode, sending maintenance message")
+            # Get chat_id from update
+            update_data = await request.json()
+            if 'message' in update_data:
+                chat_id = update_data['message']['chat']['id']
+                await send_maintenance_message(chat_id)
+            elif 'callback_query' in update_data:
+                chat_id = update_data['callback_query']['message']['chat']['id']
+                await send_maintenance_message(chat_id)
+            return {"ok": True, "message": "Maintenance mode active"}
+        
         # Parse Telegram update
         update_data = await request.json()
         logger.info(f"Received Telegram update: {update_data.get('update_id')}")
