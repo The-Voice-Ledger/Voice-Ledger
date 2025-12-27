@@ -283,7 +283,7 @@ def query_operational_data(
                     event_type,
                     batch_id,
                     event_time,
-                    location_name
+                    biz_location
                 FROM epcis_events
                 ORDER BY event_time DESC
                 LIMIT :limit
@@ -296,7 +296,7 @@ def query_operational_data(
                     'type': row[0],
                     'batch_id': row[1],
                     'time': str(row[2]) if row[2] else None,
-                    'location': row[3]
+                    'location': row[3]  # biz_location (GLN)
                 }
                 for row in event_results
             ]
