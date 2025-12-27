@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Test - Voice Ledger</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .test-panel {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .query-section {
+            margin-bottom: 30px;
+        }
+
+        .query-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .query-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .query-btn {
+            padding: 15px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+
+        .query-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .query-btn strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 1.05em;
+        }
+
+        .query-btn small {
+            opacity: 0.8;
+            font-size: 0.85em;
+        }
+
+        .custom-query {
+            margin-top: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-primary {
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .response-section {
+            margin-top: 30px;
+        }
+
+        .response-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .response-box h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .response-text {
+            color: #555;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .metadata {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+
+        .metadata-item {
+            display: inline-block;
+            margin-right: 20px;
+            padding: 5px 12px;
+            background: white;
+            border-radius: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .metadata-item strong {
+            color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 30px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-box {
+            background: #fee;
+            border-left: 4px solid #f44;
+            padding: 20px;
+            border-radius: 10px;
+            color: #c33;
+            margin-top: 15px;
+        }
+
+        .debug-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 0.85em;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .debug-section pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .badge-transactional {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-operational {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-documentation {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .badge-hybrid {
+            background: #6f42c1;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🧪 RAG System Test</h1>
+            <p>Test the Hybrid RAG Router with different query types</p>
+        </div>
+
+        <!-- Test Panel -->
+        <div class="test-panel">
+            <!-- Documentation Queries -->
+            <div class="query-section">
+                <h3>📚 Documentation Queries <span class="badge badge-documentation">CHROMADB</span></h3>
+                <div class="query-buttons">
+                    <button class="query-btn" onclick="testQuery('What are EPCIS event types?')">
+                        <strong>EPCIS Events</strong>
+                        <small>Query documentation about EPCIS standard</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('How does the verification process work?')">
+                        <strong>Verification</strong>
+                        <small>Query process documentation</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('What is a Digital Product Passport?')">
+                        <strong>DPP Info</strong>
+                        <small>Query DPP documentation</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('Explain GS1 Digital Link')">
+                        <strong>GS1 Standards</strong>
+                        <small>Query GS1 specifications</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Operational Queries -->
+            <div class="query-section">
+                <h3>💾 Operational Queries <span class="badge badge-operational">POSTGRESQL</span></h3>
+                <div class="query-buttons">
+                    <button class="query-btn" onclick="testQuery('Show me recent coffee batches')">
+                        <strong>Recent Batches</strong>
+                        <small>Query live batch data</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('List verified farmers')">
+                        <strong>Verified Farmers</strong>
+                        <small>Query user database</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('What is the status of my batches?')">
+                        <strong>Batch Status</strong>
+                        <small>Query batch status</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('Show me recent transactions')">
+                        <strong>Transactions</strong>
+                        <small>Query event history</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hybrid Queries -->
+            <div class="query-section">
+                <h3>🔄 Hybrid Queries <span class="badge badge-hybrid">BOTH SOURCES</span></h3>
+                <div class="query-buttons">
+                    <button class="query-btn" onclick="testQuery('Why is my batch not verified yet?')">
+                        <strong>Verification Issue</strong>
+                        <small>Query docs + live data</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('How can I fix issues with my batches?')">
+                        <strong>Troubleshoot</strong>
+                        <small>Query help + batch data</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Transactional (Should Skip RAG) -->
+            <div class="query-section">
+                <h3>⚡ Transactional Commands <span class="badge badge-transactional">NO RAG</span></h3>
+                <div class="query-buttons">
+                    <button class="query-btn" onclick="testQuery('Record a new coffee batch')">
+                        <strong>Record Batch</strong>
+                        <small>Execute command (RAG skipped)</small>
+                    </button>
+                    <button class="query-btn" onclick="testQuery('Ship batch ABC123 to warehouse')">
+                        <strong>Ship Batch</strong>
+                        <small>Execute command (RAG skipped)</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Custom Query -->
+            <div class="custom-query">
+                <h3>✍️ Custom Query</h3>
+                <div class="input-group">
+                    <input type="text" id="customQuery" placeholder="Enter your custom query..." 
+                           onkeypress="if(event.key === 'Enter') testCustomQuery()">
+                    <button class="btn-primary" onclick="testCustomQuery()">Test</button>
+                </div>
+            </div>
+
+            <!-- Response Section -->
+            <div id="responseSection" class="response-section" style="display: none;">
+                <h3>📊 Response</h3>
+                <div id="responseContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentQuery = null;
+
+        async function testQuery(query) {
+            currentQuery = query;
+            const responseSection = document.getElementById('responseSection');
+            const responseContent = document.getElementById('responseContent');
+            
+            responseSection.style.display = 'block';
+            responseContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>Processing query: "${query}"</div>
+                </div>
+            `;
+
+            try {
+                // Call the conversation endpoint directly
+                const response = await fetch('/api/voice/test/conversation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: query,
+                        language: 'en',
+                        use_rag: true
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayResponse(data, query);
+
+            } catch (error) {
+                console.error('Error:', error);
+                responseContent.innerHTML = `
+                    <div class="error-box">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function testCustomQuery() {
+            const input = document.getElementById('customQuery');
+            const query = input.value.trim();
+            
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+            
+            testQuery(query);
+        }
+
+        function displayResponse(data, query) {
+            const responseContent = document.getElementById('responseContent');
+            
+            const messageText = data.message_text || data.message || 'No response';
+            const queryType = data.query_type || 'unknown';
+            const readyToExecute = data.ready_to_execute || false;
+            const ragUsed = data.rag_used !== false; // Assume true unless explicitly false
+
+            let queryTypeBadge = '';
+            if (queryType === 'transactional') {
+                queryTypeBadge = '<span class="badge badge-transactional">TRANSACTIONAL</span>';
+            } else if (queryType === 'operational') {
+                queryTypeBadge = '<span class="badge badge-operational">OPERATIONAL</span>';
+            } else if (queryType === 'documentation') {
+                queryTypeBadge = '<span class="badge badge-documentation">DOCUMENTATION</span>';
+            } else if (queryType === 'hybrid') {
+                queryTypeBadge = '<span class="badge badge-hybrid">HYBRID</span>';
+            }
+
+            responseContent.innerHTML = `
+                <div class="response-box">
+                    <h4>💬 Assistant Response</h4>
+                    <div class="response-text">${messageText}</div>
+                    
+                    <div class="metadata">
+                        <div class="metadata-item">
+                            <strong>Query:</strong> "${query}"
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Type:</strong> ${queryType} ${queryTypeBadge}
+                        </div>
+                        <div class="metadata-item">
+                            <strong>RAG:</strong> ${ragUsed ? '✅ Enabled' : '❌ Disabled'}
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Execute:</strong> ${readyToExecute ? '✅ Ready' : '❌ Not Ready'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <strong>Debug Info (Full Response):</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

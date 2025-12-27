@@ -545,6 +545,57 @@ async def get_voice_audio(
 
 
 # ============================================================
+# RAG TEST ENDPOINT
+# ============================================================
+
+class ConversationTestRequest(BaseModel):
+    text: str
+    language: Literal['en', 'am'] = 'en'
+    use_rag: bool = True
+
+@router.post("/api/voice/test/conversation")
+async def test_conversation(
+    request: ConversationTestRequest
+):
+    """
+    Test conversation processing with RAG (for testing purposes).
+    
+    Args:
+        request: Test request with text and language
+        
+    Returns:
+        Conversation result with RAG metadata
+    """
+    try:
+        user_id = 0  # Anonymous user for testing
+        
+        if request.language == 'am':
+            result = await process_amharic_conversation(user_id, request.text)
+        else:
+            import asyncio
+            from functools import partial
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                partial(process_english_conversation, user_id, request.text, use_rag=request.use_rag)
+            )
+        
+        # Add metadata about RAG usage
+        if isinstance(result, dict):
+            result['rag_used'] = request.use_rag
+            result['language'] = request.language
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Test conversation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Conversation processing failed: {str(e)}"
+        )
+
+
+# ============================================================
 # LANGUAGE PREFERENCE (already in user_profile_api.py)
 # ============================================================
 

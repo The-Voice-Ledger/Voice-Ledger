@@ -830,6 +830,10 @@ if frontend_dir.exists():
     async def serve_simple_test():
         return FileResponse(str(frontend_dir / "simple-test.html"))
     
+    @app.get("/test-rag.html", include_in_schema=False)
+    async def serve_test_rag():
+        return FileResponse(str(frontend_dir / "test-rag.html"))
+    
     print(f"✅ Serving frontend from {frontend_dir}")
 else:
     print(f"⚠️  Frontend directory not found at {frontend_dir}")
