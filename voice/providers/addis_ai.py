@@ -335,6 +335,75 @@ class AddisAIProvider:
             logger.error(error_msg, exc_info=True)
             raise AddisAIError(error_msg)
     
+    async def translate(
+        self,
+        text: str,
+        source_lang: str = "am",
+        target_lang: str = "en"
+    ) -> Dict[str, Any]:
+        """
+        Translate text between languages using AddisAI chat API.
+        
+        AddisAI doesn't have a dedicated translate endpoint, so we use
+        the chat API with a translation prompt.
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language code ("am" or "en")
+            target_lang: Target language code ("am" or "en")
+            
+        Returns:
+            {
+                "translation": str,       # Translated text
+                "source_lang": str,       # Source language code
+                "target_lang": str,       # Target language code
+                "original_text": str,     # Original text
+                "provider": "addisai"
+            }
+            
+        Raises:
+            AddisAIError: If translation fails
+        """
+        if not self.api_key:
+            raise AddisAIError("AddisAI API key not configured")
+        
+        try:
+            # Determine language names for the prompt
+            lang_names = {
+                "am": "Amharic",
+                "en": "English",
+                "om": "Afan Oromo"
+            }
+            
+            source_name = lang_names.get(source_lang, source_lang)
+            target_name = lang_names.get(target_lang, target_lang)
+            
+            # Create translation prompt
+            prompt = f"Translate the following {source_name} text to {target_name}. Only provide the translation, nothing else:\n\n{text}"
+            
+            # Use chat API for translation
+            chat_result = await self.chat(
+                prompt=prompt,
+                language=target_lang,
+                temperature=0.3,  # Lower temperature for more accurate translation
+                max_tokens=2000
+            )
+            
+            translated_text = chat_result.get("response", "").strip()
+            
+            return {
+                "translation": translated_text,
+                "source_lang": source_lang,
+                "target_lang": target_lang,
+                "original_text": text,
+                "provider": "addisai"
+            }
+            
+        except Exception as e:
+            error_msg = f"AddisAI translate failed: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise AddisAIError(error_msg)
+    
     @staticmethod
     def _clean_transcription(text: str) -> str:
         """
@@ -431,6 +500,19 @@ def chat_sync(
     """
     provider = AddisAIProvider()
     return asyncio.run(provider.chat(prompt, language, **kwargs))
+
+
+def translate_sync(
+    text: str,
+    source_lang: str = "am",
+    target_lang: str = "en"
+) -> Dict[str, Any]:
+    """
+    Synchronous wrapper for translate().
+    """
+    provider = AddisAIProvider()
+    return asyncio.run(provider.translate(text, source_lang, target_lang))
+    return asyncio.run(provider.translate(text, source_lang, target_lang, **kwargs))
 
 
 # Module-level instance for convenience

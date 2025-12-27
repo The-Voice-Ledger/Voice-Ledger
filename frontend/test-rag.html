@@ -269,7 +269,7 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🧪 RAG System Test</h1>
+            <h1>RAG System Test</h1>
             <p>Test the Hybrid RAG Router with different query types</p>
         </div>
 
@@ -277,7 +277,7 @@
         <div class="test-panel">
             <!-- Documentation Queries -->
             <div class="query-section">
-                <h3>📚 Documentation Queries <span class="badge badge-documentation">CHROMADB</span></h3>
+                <h3>Documentation Queries <span class="badge badge-documentation">CHROMADB</span></h3>
                 <div class="query-buttons">
                     <button class="query-btn" onclick="testQuery('What are EPCIS event types?')">
                         <strong>EPCIS Events</strong>
@@ -300,7 +300,7 @@
 
             <!-- Operational Queries -->
             <div class="query-section">
-                <h3>💾 Operational Queries <span class="badge badge-operational">POSTGRESQL</span></h3>
+                <h3>Operational Queries <span class="badge badge-operational">POSTGRESQL</span></h3>
                 <div class="query-buttons">
                     <button class="query-btn" onclick="testQuery('Show me recent coffee batches')">
                         <strong>Recent Batches</strong>
@@ -323,7 +323,7 @@
 
             <!-- Hybrid Queries -->
             <div class="query-section">
-                <h3>🔄 Hybrid Queries <span class="badge badge-hybrid">BOTH SOURCES</span></h3>
+                <h3>Hybrid Queries <span class="badge badge-hybrid">BOTH SOURCES</span></h3>
                 <div class="query-buttons">
                     <button class="query-btn" onclick="testQuery('Why is my batch not verified yet?')">
                         <strong>Verification Issue</strong>
@@ -338,7 +338,7 @@
 
             <!-- Transactional (Should Skip RAG) -->
             <div class="query-section">
-                <h3>⚡ Transactional Commands <span class="badge badge-transactional">NO RAG</span></h3>
+                <h3>Transactional Commands <span class="badge badge-transactional">NO RAG</span></h3>
                 <div class="query-buttons">
                     <button class="query-btn" onclick="testQuery('Record a new coffee batch')">
                         <strong>Record Batch</strong>
@@ -351,13 +351,40 @@
                 </div>
             </div>
 
+            <!-- Amharic RAG Test -->
+            <div class="query-section">
+                <h3>Amharic RAG Test <span class="badge badge-documentation">WITH TRANSLATION</span></h3>
+                <p style="color: #666; margin-bottom: 15px; font-size: 0.95em;">
+                    Tests OpenAI translation (Amharic → English) + RAG search + AddisAI response in Amharic
+                </p>
+                <div class="query-buttons">
+                    <button class="query-btn" onclick="testAmharicQuery('የኢፒሲአይኤስ ክስተት ዓይነቶች ምንድናቸው?')">
+                        <strong>EPCIS Events (አማርኛ)</strong>
+                        <small>Documentation query in Amharic</small>
+                    </button>
+                    <button class="query-btn" onclick="testAmharicQuery('50 ኪሎግራም የሲዳማ ቡና አጨድኩ')">
+                        <strong>Record Batch (አማርኛ)</strong>
+                        <small>Operational command (should skip RAG)</small>
+                    </button>
+                    <button class="query-btn" onclick="testAmharicQuery('የማረጋገጫ ሂደት እንዴት ይሠራል?')">
+                        <strong>Verification Process (አማርኛ)</strong>
+                        <small>Documentation query</small>
+                    </button>
+                </div>
+            </div>
+
             <!-- Custom Query -->
             <div class="custom-query">
-                <h3>✍️ Custom Query</h3>
+                <h3>Custom Query</h3>
                 <div class="input-group">
                     <input type="text" id="customQuery" placeholder="Enter your custom query..." 
                            onkeypress="if(event.key === 'Enter') testCustomQuery()">
                     <button class="btn-primary" onclick="testCustomQuery()">Test</button>
+                </div>
+                <div class="input-group" style="margin-top: 10px;">
+                    <input type="text" id="customAmharicQuery" placeholder="የአማርኛ ጥያቄ (Amharic query)..." 
+                           onkeypress="if(event.key === 'Enter') testCustomAmharicQuery()">
+                    <button class="btn-primary" onclick="testCustomAmharicQuery()">Test Amharic</button>
                 </div>
             </div>
 
@@ -371,6 +398,54 @@
 
     <script>
         let currentQuery = null;
+
+        async function testAmharicQuery(query) {
+            currentQuery = query;
+            const responseSection = document.getElementById('responseSection');
+            const responseContent = document.getElementById('responseContent');
+            
+            responseSection.style.display = 'block';
+            responseContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>Processing Amharic query: "${query}"</div>
+                    <small style="display: block; margin-top: 10px; opacity: 0.7;">
+                        1. Translating to English (OpenAI)<br>
+                        2. Searching documentation (RAG)<br>
+                        3. Generating Amharic response (AddisAI)
+                    </small>
+                </div>
+            `;
+
+            try {
+                // Call the Amharic conversation endpoint
+                const response = await fetch('/api/voice/test/amharic', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: query,
+                        user_id: 1  // Test user ID
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayAmharicResponse(data, query);
+
+            } catch (error) {
+                console.error('Error:', error);
+                responseContent.innerHTML = `
+                    <div class="error-box">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
 
         async function testQuery(query) {
             currentQuery = query;
@@ -428,6 +503,61 @@
             testQuery(query);
         }
 
+        function testCustomAmharicQuery() {
+            const input = document.getElementById('customAmharicQuery');
+            const query = input.value.trim();
+            
+            if (!query) {
+                alert('Please enter an Amharic query');
+                return;
+            }
+            
+            testAmharicQuery(query);
+        }
+
+        function displayAmharicResponse(data, query) {
+            const responseContent = document.getElementById('responseContent');
+            
+            const messageText = data.message || 'No response';
+            const readyToExecute = data.ready_to_execute || false;
+            const ragUsed = data.rag_used !== false;
+            const translation = data.translation || null;
+
+            responseContent.innerHTML = `
+                <div class="response-box">
+                    <h4>Amharic Response</h4>
+                    <div class="response-text" style="font-size: 1.1em;">${messageText}</div>
+                    
+                    ${translation ? `
+                    <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <strong>Translation (Amharic → English):</strong><br>
+                        <span style="color: #666;">${translation}</span>
+                    </div>
+                    ` : ''}
+                    
+                    <div class="metadata">
+                        <div class="metadata-item">
+                            <strong>Query:</strong> "${query}"
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Language:</strong> Amharic (አማርኛ)
+                        </div>
+                        <div class="metadata-item">
+                            <strong>RAG:</strong> ${ragUsed ? 'Used (with translation)' : 'Skipped'}
+                        </div>
+                        <div class="metadata-item">
+                            <strong>Execute:</strong> ${readyToExecute ? 'Ready' : 'Not Ready'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="debug-section">
+                    <strong>Debug Info (Full Response):</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+
         function displayResponse(data, query) {
             const responseContent = document.getElementById('responseContent');
             
@@ -449,7 +579,7 @@
 
             responseContent.innerHTML = `
                 <div class="response-box">
-                    <h4>💬 Assistant Response</h4>
+                    <h4>Assistant Response</h4>
                     <div class="response-text">${messageText}</div>
                     
                     <div class="metadata">
@@ -460,10 +590,10 @@
                             <strong>Type:</strong> ${queryType} ${queryTypeBadge}
                         </div>
                         <div class="metadata-item">
-                            <strong>RAG:</strong> ${ragUsed ? '✅ Enabled' : '❌ Disabled'}
+                            <strong>RAG:</strong> ${ragUsed ? 'Enabled' : 'Disabled'}
                         </div>
                         <div class="metadata-item">
-                            <strong>Execute:</strong> ${readyToExecute ? '✅ Ready' : '❌ Not Ready'}
+                            <strong>Execute:</strong> ${readyToExecute ? 'Ready' : 'Not Ready'}
                         </div>
                     </div>
                 </div>

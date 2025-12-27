@@ -553,6 +553,10 @@ class ConversationTestRequest(BaseModel):
     language: Literal['en', 'am'] = 'en'
     use_rag: bool = True
 
+class AmharicTestRequest(BaseModel):
+    text: str
+    user_id: int = 0
+
 @router.post("/api/voice/test/conversation")
 async def test_conversation(
     request: ConversationTestRequest
@@ -592,6 +596,41 @@ async def test_conversation(
         raise HTTPException(
             status_code=500,
             detail=f"Conversation processing failed: {str(e)}"
+        )
+
+@router.post("/api/voice/test/amharic")
+async def test_amharic_conversation(
+    request: AmharicTestRequest
+):
+    """
+    Test Amharic conversation with RAG integration.
+    
+    This endpoint:
+    - Translates Amharic to English (OpenAI)
+    - Searches documentation if applicable (RAG)
+    - Returns Amharic response (AddisAI)
+    
+    Args:
+        request: Amharic text and user_id
+        
+    Returns:
+        Conversation result with translation metadata
+    """
+    try:
+        result = await process_amharic_conversation(request.user_id, request.text)
+        
+        # Add test metadata
+        if isinstance(result, dict):
+            result['rag_used'] = True  # RAG is enabled by default in process_amharic_conversation
+            result['language'] = 'am'
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Amharic test conversation failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Amharic conversation processing failed: {str(e)}"
         )
 
 

@@ -64,6 +64,38 @@ def enhance_query_with_rag(
         if len(context) > max_chars:
             context = context[:max_chars] + "\n... [context truncated]"
         
+        # For DOCUMENTATION queries, use a knowledge-focused prompt instead of operational prompt
+        if query_type == QueryType.DOCUMENTATION:
+            doc_prompt = f"""You are a knowledgeable technical documentation assistant. The user has asked a technical question and you have relevant documentation to help them.
+
+=== DOCUMENTATION CONTEXT ===
+{context}
+=== END CONTEXT ===
+
+User's question: {query}
+
+CRITICAL INSTRUCTIONS:
+1. The documentation context above CONTAINS THE ANSWER to the user's question
+2. You MUST extract and explain the relevant information from this context
+3. DO NOT say "I can only help with coffee operations" - you have documentation for this question
+4. DO NOT say "RFQs aren't handled" or similar - if there's RFQ code/docs in context, explain it
+5. DO NOT refuse to answer - the context was specifically retrieved to answer this question
+6. Provide a clear, practical explanation based on the documentation
+7. You can reference specific files, functions, or documentation sections
+
+Response format (valid JSON only):
+{{
+  "message_text": "[Clear explanation based on the documentation context above]",
+  "message_spoken": "[Clear explanation based on the documentation context above]",
+  "ready_to_execute": false
+}}
+
+Answer the question using the provided documentation context:"""
+            
+            logger.info(f"Using documentation-focused prompt with {len(context)} chars of RAG context")
+            return doc_prompt
+        
+        # For HYBRID queries, enhance the base prompt with context
         # Build enhanced prompt - inject RAG context as reference material
         # Key: Context informs response CONTENT, not response FORMAT
         enhanced_prompt = f"""{base_prompt}
