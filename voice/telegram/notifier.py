@@ -89,7 +89,7 @@ def send_batch_confirmation(chat_id: int, batch_info: Dict[str, Any]) -> bool:
     return send_telegram_notification(chat_id, message)
 
 
-def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -> bool:
+async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -> bool:
     """
     Send batch confirmation with verification QR code.
     
@@ -103,7 +103,7 @@ def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -> bool
     Returns:
         True if sent successfully, False otherwise
     """
-    import requests
+    import httpx
     
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
     if not bot_token:
@@ -176,7 +176,8 @@ def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -> bool
             'parse_mode': 'MarkdownV2'  # Use MarkdownV2 with proper escaping
         }
         
-        response = requests.post(url, data=data, files=files, timeout=30)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, data=data, files=files)
         
         if response.status_code == 200:
             logger.info(f"Verification QR code sent to {chat_id}")

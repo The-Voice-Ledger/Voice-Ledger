@@ -236,6 +236,85 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
         }
     """
     try:
+        # LAB 20: Check for workflow triggers FIRST (batch recording, shipment tracking)
+        from voice.workflows.state_machine import StateManager, ConversationState
+        from voice.workflows.batch_recording import BatchRecordingWorkflow
+        from voice.workflows.shipment_tracking import ShipmentTrackingWorkflow
+        
+        # Check if user is in active workflow
+        state_data = StateManager.get_user_state(user_id)
+        if state_data:
+            workflow_name = state_data.get('workflow')
+            current_state_str = state_data.get('state')
+            
+            try:
+                current_state = ConversationState(current_state_str)
+            except ValueError:
+                logger.warning(f"Unknown state {current_state_str}, clearing")
+                StateManager.clear_user_state(user_id)
+                state_data = None
+            
+            if state_data and workflow_name:
+                # Route to appropriate workflow
+                logger.info(f"User {user_id} in active workflow: {workflow_name}, state: {current_state_str}")
+                
+                if workflow_name == 'batch_recording':
+                    workflow = BatchRecordingWorkflow()
+                    result = await workflow.handle_message(user_id, transcript, current_state)
+                    
+                    return {
+                        'message': result.get('message', ''),
+                        'ready_to_execute': False,  # Workflows handle their own execution
+                        'intent': None,
+                        'entities': {},
+                        'needs_clarification': result.get('keep_state', True)
+                    }
+                
+                elif workflow_name == 'shipment_tracking':
+                    workflow = ShipmentTrackingWorkflow()
+                    result = await workflow.handle_message(user_id, transcript, current_state)
+                    
+                    return {
+                        'message': result.get('message', ''),
+                        'ready_to_execute': False,
+                        'intent': None,
+                        'entities': {},
+                        'needs_clarification': result.get('keep_state', True)
+                    }
+        
+        # Check for workflow trigger keywords (Amharic)
+        text_lower = transcript.lower()
+        
+        # Batch recording triggers (Amharic keywords)
+        batch_triggers = ['ባች መዝግብ', 'አዲስ ባች', 'ምርት መዝግብ', 'ቡና መዝግብ', 'አጨድ']
+        if any(trigger in text_lower for trigger in batch_triggers):
+            logger.info(f"Batch recording workflow triggered for user {user_id} (Amharic)")
+            workflow = BatchRecordingWorkflow()
+            result = await workflow.start(user_id)
+            
+            return {
+                'message': result.get('message', ''),
+                'ready_to_execute': False,
+                'intent': None,
+                'entities': {},
+                'needs_clarification': True
+            }
+        
+        # Shipment tracking triggers (Amharic keywords)
+        shipment_triggers = ['መላኪያ ክትትል', 'የእኔ መላኪያዎች', 'ቡናዬ የት', 'መላኪያ መፈተሽ']
+        if any(trigger in text_lower for trigger in shipment_triggers):
+            logger.info(f"Shipment tracking workflow triggered for user {user_id} (Amharic)")
+            workflow = ShipmentTrackingWorkflow()
+            result = await workflow.start(user_id)
+            
+            return {
+                'message': result.get('message', ''),
+                'ready_to_execute': False,
+                'intent': None,
+                'entities': {},
+                'needs_clarification': True
+            }
+        
         # Get conversation history
         history = ConversationManager.get_history(user_id)
         ConversationManager.set_language(user_id, 'am')

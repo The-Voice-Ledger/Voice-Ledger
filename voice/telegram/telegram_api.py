@@ -222,7 +222,8 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 f"👉 /register\n\n"
                 f"This will set up your account with your role (farmer, manager, exporter, or buyer)."
             ),
-            parse_mode=None
+            parse_mode=None,
+            send_voice=False  # Acknowledgment - text only
         )
         
         return {"ok": True, "message": "Contact acknowledged"}
@@ -407,7 +408,8 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message=f"❌ Failed to process photo: {str(e)}\n\nPlease try again with a photo that has GPS data."
+                    message=f"❌ Failed to process photo: {str(e)}\n\nPlease try again with a photo that has GPS data.",
+                    send_voice=False  # Error message - text only
                 )
                 
                 return {"ok": True, "message": f"Error: {str(e)}"}
@@ -424,7 +426,8 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 "To add GPS verification:\n"
                 "• Use /register for farmer registration\n"
                 "• Record a batch first, then upload photo for verification"
-            )
+            ),
+            send_voice=False  # System notification - text only
         )
         return {"ok": True, "message": "Photo not expected"}
         
@@ -465,7 +468,7 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
             f"{len(voice_message.audio_data)} bytes"
         )
         
-        # Send immediate acknowledgment to user
+        # Send immediate acknowledgment to user (TEXT ONLY - no voice needed for system notification)
         await processor.send_notification(
             channel_name='telegram',
             user_id=voice_message.user_id,
@@ -473,7 +476,8 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 "🎙️ *Voice received!*\n\n"
                 "Processing your message...\n"
                 "I'll notify you when the batch is created."
-            )
+            ),
+            send_voice=False  # System notification - no need for voice
         )
         
         # Save audio to temp file for processing
@@ -501,12 +505,13 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         logger.info(f"Queued Telegram voice processing: task_id={task.id}")
         
-        # Optionally send task ID
+        # Optionally send task ID (TEXT ONLY - task IDs are useless in voice)
         if task.id:
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=voice_message.user_id,
-                message=f"📋 Task ID: `{task.id[:16]}...`"
+                message=f"📋 Task ID: `{task.id[:16]}...`",
+                send_voice=False  # Task IDs have no value in voice format
             )
         
         return {
@@ -627,7 +632,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                             "• 🔐 Access the web dashboard with PIN\n\n"
                             "Registration takes 2-5 minutes."
                         ),
-                        parse_mode='Markdown'
+                        parse_mode='Markdown',
+                        send_voice=True  # Welcome message - conversational content
                     )
                     logger.info(f"/start prompt to register: {result}")
                     return {"ok": True, "message": "Prompted to register"}
@@ -667,7 +673,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     "📊 \"Pack batches A B C into pallet\"\n\n"
                     "Type /help for more details! 🎤"
                 ),
-                parse_mode=None
+                parse_mode='Markdown',
+                send_voice=True  # Menu - conversational, useful as voice
             )
             logger.info(f"/start notification result: {result}")
             return {"ok": True, "message": "Sent welcome message"}
@@ -1404,27 +1411,14 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 username=username
             )
             
-            # Send response
-            import requests
-            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-            if 'keyboard' in response:
-                requests.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                    json={
-                        'chat_id': user_id,
-                        'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
-                        'reply_markup': {'inline_keyboard': response['keyboard']}
-                    },
-                    timeout=30
-                )
-            else:
-                await processor.send_notification(
-                    channel_name='telegram',
-                    user_id=user_id,
-                    message=response['message'],
-                    parse_mode=response.get('parse_mode')
-                )
+            # Send response via processor
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode', 'Markdown'),
+                reply_markup=response.get('keyboard')
+            )
             
             return {"ok": True, "message": "My RFQs sent"}
         
@@ -2153,33 +2147,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             logger.info(f"User {user_id} in RFQ creation session, routing to RFQ handler")
             response = await handle_rfq_message(int(user_id), text)
             
-            # Send response with keyboard
-            import requests
-            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-            reply_markup = {}
-            if 'keyboard' in response:
-                reply_markup = {'keyboard': response['keyboard'], 'resize_keyboard': True, 'one_time_keyboard': True}
-            elif 'inline_keyboard' in response:
-                reply_markup = {'inline_keyboard': response['inline_keyboard']}
-            
-            if reply_markup:
-                requests.post(
-                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                    json={
-                        'chat_id': user_id,
-                        'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
-                        'reply_markup': reply_markup
-                    },
-                    timeout=30
-                )
-            else:
-                await processor.send_notification(
-                    channel_name='telegram',
-                    user_id=user_id,
-                    message=response['message'],
-                    parse_mode=response.get('parse_mode')
-                )
+            # Send response with voice support (consistent with voice input)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode', 'Markdown'),
+                reply_markup=response.get('keyboard') or response.get('inline_keyboard'),
+                send_voice=True  # Text input should get voice responses too
+            )
             
             return {"ok": True, "message": "RFQ response sent"}
         
@@ -2214,12 +2190,247 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Registration response sent"}
         
+        # Natural text query processing (non-slash commands)
+        # Process like voice input: through conversational AI with NLU
+        if not text.startswith('/'):
+            logger.info(f"Processing natural text query from user {user_id}: {text[:50]}...")
+            return await process_natural_text_query(update_data)
+        
         # Unknown command
         logger.debug(f"Unknown Telegram text command: {text}")
         return {"ok": True, "message": "Text command not recognized"}
         
     except Exception as e:
         logger.error(f"Error handling Telegram text command: {e}")
+        return {"ok": True, "message": f"Error: {str(e)}"}
+
+
+async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process natural text queries through conversational AI pipeline.
+    
+    This allows users to type natural queries like "help", "show my batches",
+    or "what are EPCIS events?" and get conversational responses.
+    
+    Similar to Trust Voice implementation - unified text/voice processing.
+    
+    Args:
+        update_data: Telegram Update dict with text message
+        
+    Returns:
+        Response dict for Telegram
+    """
+    try:
+        message = update_data['message']
+        text = message.get('text', '')
+        user_id = str(message['from']['id'])
+        
+        logger.info(f"Processing natural text query from {user_id}: '{text[:50]}...'")
+        
+        # Get user's language preference
+        from database.models import SessionLocal
+        from ssi.user_identity import get_user_by_telegram_id
+        
+        db = SessionLocal()
+        try:
+            user = get_user_by_telegram_id(user_id, db_session=db)
+            language = user.preferred_language if user else 'en'
+            db.close()
+        except Exception as e:
+            logger.warning(f"Could not get user language preference: {e}")
+            language = 'en'
+            db.close()
+        
+        logger.info(f"User {user_id} language preference: {language}")
+        
+        # Check if user is in active workflow conversation
+        from voice.workflows.state_machine import StateManager, ConversationState
+        from voice.workflows.batch_recording import BatchRecordingWorkflow
+        from voice.workflows.shipment_tracking import ShipmentTrackingWorkflow
+        
+        state_data = StateManager.get_user_state(int(user_id))
+        if state_data:
+            current_state = state_data.get('state')
+            workflow_name = state_data.get('workflow')
+            
+            logger.info(f"User {user_id} in workflow: {workflow_name}, state: {current_state}")
+            
+            # Route to appropriate workflow
+            if workflow_name == 'batch_recording':
+                workflow = BatchRecordingWorkflow()
+                result = await workflow.handle_message(
+                    user_id=int(user_id),
+                    message=text,
+                    current_state=ConversationState(current_state)
+                )
+                response_message = result.get('message', 'Error processing your message.')
+            elif workflow_name == 'shipment_tracking':
+                workflow = ShipmentTrackingWorkflow()
+                result = await workflow.handle_message(
+                    user_id=int(user_id),
+                    message=text,
+                    current_state=ConversationState(current_state)
+                )
+                response_message = result.get('message', 'Error processing your message.')
+            else:
+                # Unknown workflow, clear state
+                StateManager.clear_user_state(int(user_id))
+                response_message = "Session expired. Please start again."
+        
+        # Check for workflow trigger keywords
+        elif any(kw in text.lower() for kw in ['record batch', 'new batch', 'record harvest', 'create batch', 'log batch', 'record coffee']):
+            logger.info(f"Starting batch recording workflow for user {user_id}")
+            workflow = BatchRecordingWorkflow()
+            result = await workflow.start(int(user_id), initial_message=text)
+            response_message = result.get('message', 'Error starting batch recording.')
+        
+        elif any(kw in text.lower() for kw in ['track shipment', 'my shipments', 'where is my coffee', 'check shipment', 'track my']):
+            logger.info(f"Starting shipment tracking workflow for user {user_id}")
+            workflow = ShipmentTrackingWorkflow()
+            result = await workflow.start(int(user_id), initial_message=text)
+            response_message = result.get('message', 'Error starting shipment tracking.')
+        
+        # RFQ creation detection (buyer wants to purchase)
+        elif any(kw in text.lower() for kw in [
+            'want to buy', 'need to buy', 'looking for', 'i want to purchase', 'need to purchase', 'want to order',
+            'create rfq', 'create an rfq', 'make rfq', 'make an rfq', 'new rfq', 'rfq for', 'post rfq',
+            'request quote', 'request for quote', 'looking to buy', 'interested in buying'
+        ]):
+            logger.info(f"RFQ intent detected for user {user_id}: {text[:50]}")
+            from voice.marketplace.voice_rfq_extractor import extract_rfq_from_voice
+            from voice.telegram.rfq_handler import handle_voice_rfq_creation
+            
+            # Extract RFQ details from text
+            extraction = extract_rfq_from_voice(text, language='en')
+            
+            # Route to voice RFQ handler (works for both voice and text)
+            result = await handle_voice_rfq_creation(int(user_id), text, extraction, {
+                'channel': 'telegram',
+                'user_id': user_id,
+                'language': language
+            })
+            
+            # Handler sends its own message, so we just need to acknowledge
+            response_message = None  # Message already sent by handler
+        
+        # Check if this is a documentation/help query vs operational query
+        # Documentation queries use MultiTurnRAG, operational queries use conversation handlers
+        elif True:  # Wrap in elif to continue the if-elif chain
+            query_lower = text.lower()
+            
+            # Operational command keywords (BYPASS RAG, go to conversation handlers)
+            operational_keywords = [
+                'ship', 'record', 'register', 'create', 'pack', 'unpack', 
+                'split', 'my batch', 'show batch', 'list batch', 'find batch',
+                'transform', 'aggregate', 'disaggregate',
+                'gtin:', 'batch id:', 'container', 'sscc'
+            ]
+            
+            # Check if this is operational (bypass RAG)
+            is_operational = any(keyword in query_lower for keyword in operational_keywords)
+            
+            # Documentation query keywords (route to RAG)
+            doc_keywords = [
+                'what is', 'what are', 'how to', 'how do', 'why', 'explain', 
+                'tell me about', 'help', 'describe', 'documentation', 'guide',
+                'epcis', 'blockchain', 'dpp', 'gs1',
+                # Amharic equivalents
+                'ምን', 'እንዴት', 'ለምን', 'ምንድን', 'ማብራሪያ'
+            ]
+            
+            is_doc_query = any(keyword in query_lower for keyword in doc_keywords) and not is_operational
+            
+            if is_doc_query:
+                # Use Multi-Turn RAG for documentation queries
+                logger.info(f"Routing to MultiTurnRAG for doc query: {text[:50]}...")
+                from voice.rag.multi_turn_rag import MultiTurnRAG
+                from database.models import SessionLocal
+                from ssi.user_identity import get_user_by_telegram_id
+                
+                # Get database user_id (not Telegram ID)
+                db = SessionLocal()
+                try:
+                    user = get_user_by_telegram_id(user_id, db_session=db)
+                    db_user_id = user.id if user else int(user_id)
+                    db.close()
+                except Exception as e:
+                    logger.warning(f"Could not get DB user ID: {e}")
+                    db_user_id = int(user_id)
+                    db.close()
+                
+                # Process with MultiTurnRAG
+                rag_result = await MultiTurnRAG.process_rag_query(
+                    user_id=db_user_id,
+                    query=text,
+                    language=language
+                )
+                
+                response_message = rag_result.get('message', 'Sorry, I could not find relevant information.')
+                
+                # Add sources if available
+                sources = rag_result.get('sources', [])
+                if sources and len(sources) > 0:
+                    sources_text = "\n\n📚 *Sources:*\n" + "\n".join([
+                        f"• {src.get('file', 'Unknown')}"
+                        for src in sources[:3]
+                    ])
+                    response_message += sources_text
+                
+                # Indicate if this was a follow-up
+                if rag_result.get('is_follow_up'):
+                    logger.info(f"MultiTurnRAG detected follow-up for user {db_user_id}")
+            
+            else:
+                # Route to appropriate conversational AI based on language
+                if language == 'am':
+                    # Amharic conversation
+                    from voice.integrations.amharic_conversation import process_amharic_conversation
+                    
+                    # Convert user_id to int for amharic function
+                    result = await process_amharic_conversation(int(user_id), text)
+                    response_message = result.get('message', 'ይቅርታ፣ ስህተት ተከስቷል።')
+                    
+                else:
+                    # English conversation (default)
+                    from voice.integrations.english_conversation import process_english_conversation
+                    
+                    # process_english_conversation is sync, not async
+                    result = process_english_conversation(int(user_id), text, use_rag=True)
+                    response_message = result.get('message_text') or result.get('message_spoken') or result.get('message', 'Sorry, I encountered an error.')
+        
+        # Send response to user (only if message is not None)
+        if response_message:
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response_message,
+                parse_mode=None
+            )
+        
+        # Optional: Generate and send voice response too (dual delivery)
+        # This would make it truly like Trust Voice - both text and voice
+        # For now, we'll just send text to keep it simple
+        # Future enhancement: Add voice synthesis here
+        
+        logger.info(f"Natural text query processed successfully for user {user_id}")
+        return {"ok": True, "message": "Natural text query processed"}
+        
+    except Exception as e:
+        logger.error(f"Error processing natural text query: {e}", exc_info=True)
+        
+        # Send error message to user
+        try:
+            processor = get_processor()
+            user_id = str(update_data['message']['from']['id'])
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message="Sorry, I encountered an error processing your message. Please try again or use a voice message."
+            )
+        except:
+            pass
+        
         return {"ok": True, "message": f"Error: {str(e)}"}
 
 

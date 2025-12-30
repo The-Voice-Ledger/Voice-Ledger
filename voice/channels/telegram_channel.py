@@ -159,8 +159,9 @@ class TelegramChannel(VoiceChannel):
             send_voice = kwargs.pop('send_voice', True)
             language = kwargs.pop('language', None)
             reply_to_message_id = kwargs.pop('reply_to_message_id', None)
+            reply_markup = kwargs.pop('reply_markup', None)
             
-            # Use dual delivery (text + voice)
+            # Use dual delivery (text + voice) with reply_markup support
             await send_voice_reply(
                 bot=self.bot,
                 chat_id=chat_id,
@@ -168,7 +169,8 @@ class TelegramChannel(VoiceChannel):
                 parse_mode=parse_mode,
                 language=language,
                 send_voice=send_voice,
-                reply_to_message_id=reply_to_message_id
+                reply_to_message_id=reply_to_message_id,
+                reply_markup=reply_markup
             )
             
             logger.info(f"Sent dual delivery notification to {user_id} (voice={'enabled' if send_voice else 'disabled'})")

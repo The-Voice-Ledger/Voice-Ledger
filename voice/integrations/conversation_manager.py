@@ -151,6 +151,153 @@ class ConversationManager:
                 logger.debug(f"Set intent for user {user_id}: {intent}")
     
     @staticmethod
+    def store_rag_context(
+        user_id: int,
+        query: str,
+        query_type: str,
+        retrieved_context: str,
+        sources: list
+    ):
+        """
+        Store RAG query context for follow-up questions.
+        
+        Args:
+            user_id: Database user ID
+            query: Original query text
+            query_type: Type of query (e.g., 'documentation', 'batch_search')
+            retrieved_context: Context retrieved from RAG
+            sources: List of source documents/chunks used
+        """
+        with _conversations_lock:
+            # Create conversation if it doesn't exist
+            if user_id not in _conversations:
+                _conversations[user_id] = {
+                    'user_id': user_id,
+                    'language': 'en',
+                    'intent': None,
+                    'context': {},
+                    'created_at': datetime.utcnow(),
+                    'last_updated': datetime.utcnow()
+                }
+            
+            conversation = _conversations[user_id]
+            
+            # Store RAG-specific context
+            conversation['rag_context'] = {
+                'last_query': query,
+                'query_type': query_type,
+                'retrieved_context': retrieved_context,
+                'sources': sources,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            conversation['last_updated'] = datetime.utcnow()
+            
+            logger.debug(
+                f"Stored RAG context for user {user_id}: "
+                f"query='{query[:50]}...', sources={len(sources)}"
+            )
+    
+    @staticmethod
+    def get_rag_context(user_id: int) -> dict:
+        """
+        Get stored RAG context for follow-up processing.
+        
+        Args:
+            user_id: Database user ID
+            
+        Returns:
+            Dict with RAG context or empty dict if none stored
+        """
+        conversation = ConversationManager.get_conversation(user_id)
+        return conversation.get('rag_context', {})
+    
+    @staticmethod
+    def is_follow_up_question(user_id: int, current_query: str) -> bool:
+        """
+        Detect if current query is a follow-up to previous RAG query.
+        
+        Uses heuristics:
+        - Recent RAG context exists (within timeout)
+        - Query contains follow-up indicators
+        - Query is short and contextual
+        
+        Args:
+            user_id: Database user ID
+            current_query: Current user query
+            
+        Returns:
+            True if this appears to be a follow-up question
+        """
+        rag_context = ConversationManager.get_rag_context(user_id)
+        
+        if not rag_context:
+            return False
+        
+        # Check if context is recent (within 5 minutes)
+        try:
+            context_time = datetime.fromisoformat(rag_context['timestamp'])
+            time_elapsed = datetime.utcnow() - context_time
+            if time_elapsed > CONVERSATION_TIMEOUT:
+                logger.debug(f"RAG context expired for user {user_id}")
+                return False
+        except (KeyError, ValueError) as e:
+            logger.error(f"Invalid RAG context timestamp: {e}")
+            return False
+        
+        # Follow-up indicators (case-insensitive)
+        current_lower = current_query.lower().strip()
+        
+        # Strong follow-up signals (phrases that indicate continuation)
+        follow_up_phrases = [
+            'show me', 'give me', 'what about', 'how about', 'tell me more',
+            'can you', 'explain more', 'show examples', 'more details',
+            'more info', 'elaborate', 'expand on',
+            # Amharic equivalents
+            'ምሳሌ', 'ተጨማሪ', 'በዝርዝር'
+        ]
+        
+        for phrase in follow_up_phrases:
+            if phrase in current_lower:
+                logger.debug(
+                    f"Follow-up detected for user {user_id}: "
+                    f"phrase='{phrase}' in query"
+                )
+                return True
+        
+        # Special case: "tell me about X" where X is a pronoun (follow-up)
+        if current_lower.startswith('tell me about'):
+            words_after = current_lower.replace('tell me about', '').strip().split()
+            if words_after and words_after[0] in ['it', 'that', 'this', 'them', 'those', 'these']:
+                logger.debug(f"Follow-up detected for user {user_id}: tell me about pronoun")
+                return True
+        
+        # Pronouns at the START of query (referring to previous context)
+        pronoun_starters = ['it ', 'that ', 'this ', 'they ', 'them ', 'those ', 'these ']
+        if any(current_lower.startswith(p) for p in pronoun_starters):
+            logger.debug(f"Follow-up detected for user {user_id}: pronoun starter")
+            return True
+        
+        # Single word queries that are contextual
+        single_word_followups = ['explain', 'describe', 'examples', 'why', 'how']
+        if current_lower in single_word_followups:
+            logger.debug(f"Follow-up detected for user {user_id}: single word")
+            return True
+        
+        # Very short queries (<15 chars) that don't start a new topic
+        if len(current_query.strip()) < 15:
+            # Check if it's NOT starting a completely new topic
+            new_topic_indicators = ['what is', 'how do', 'tell me about', 'what are']
+            if not any(current_lower.startswith(indicator) for indicator in new_topic_indicators):
+                logger.debug(
+                    f"Follow-up detected for user {user_id}: "
+                    f"short contextual query ({len(current_query)} chars)"
+                )
+                return True
+        
+        logger.debug(f"Not a follow-up for user {user_id}")
+        return False
+    
+    @staticmethod
     def clear_conversation(user_id: int):
         """
         Clear conversation (after successful command execution or manual reset).

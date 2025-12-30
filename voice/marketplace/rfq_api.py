@@ -22,12 +22,15 @@ Architecture:
 
 import sys
 import os
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -81,6 +84,7 @@ class RFQResponse(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime]
     offer_count: int = 0
+    broadcast_count: int = 0  # Number of cooperatives RFQ was broadcasted to
 
     class Config:
         from_attributes = True
@@ -189,6 +193,12 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
     # Get all cooperatives
     cooperatives = db.query(Organization).filter_by(type="COOPERATIVE").all()
     
+    # Quick exit if no cooperatives
+    if not cooperatives:
+        logger.info(f"No cooperatives to broadcast RFQ {rfq.id}")
+        return
+    
+    broadcast_count = 0
     for coop in cooperatives:
         relevance_score = calculate_relevance_score(rfq, coop, db)
         
@@ -202,8 +212,10 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
                 notified_at=datetime.utcnow()
             )
             db.add(broadcast)
+            broadcast_count += 1
     
     db.commit()
+    logger.info(f"Broadcasted RFQ {rfq.id} to {broadcast_count} cooperatives")
 
 # ============================================================================
 # API Endpoints
@@ -278,10 +290,13 @@ def create_rfq(
     # Smart broadcast to cooperatives
     broadcast_rfq_to_cooperatives(rfq, db)
     
+    # Count how many cooperatives were notified
+    broadcast_count = db.query(RFQBroadcast).filter_by(rfq_id=rfq.id).count()
+    
     # Get buyer organization
     buyer_org = db.query(Organization).filter_by(id=user.organization_id).first()
     
-    return RFQResponse(
+    response = RFQResponse(
         id=rfq.id,
         rfq_number=rfq.rfq_number,
         buyer_id=rfq.buyer_id,
@@ -297,6 +312,12 @@ def create_rfq(
         expires_at=rfq.expires_at,
         offer_count=0
     )
+    
+    # Add broadcast_count to response (not in schema, but useful for client)
+    response_dict = response.model_dump()
+    response_dict['broadcast_count'] = broadcast_count
+    
+    return response_dict
 
 @router.get("/rfqs", response_model=List[RFQResponse])
 def list_rfqs(

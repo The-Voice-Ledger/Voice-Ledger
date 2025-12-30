@@ -336,7 +336,8 @@ async def send_voice_reply(
     parse_mode: str = "HTML",
     language: Optional[str] = None,
     send_voice: bool = True,
-    reply_to_message_id: Optional[int] = None
+    reply_to_message_id: Optional[int] = None,
+    reply_markup = None
 ) -> None:
     """
     Send dual text + voice response.
@@ -365,6 +366,7 @@ async def send_voice_reply(
         language: Language code ("en" or "am"), auto-detected if None
         send_voice: Whether to include voice message (default: True)
         reply_to_message_id: Optional message ID to reply to
+        reply_markup: Optional reply markup (inline keyboard)
     
     Example:
         await send_voice_reply(
@@ -374,10 +376,61 @@ async def send_voice_reply(
         )
     """
     
+    # Convert reply_markup if it's a list (keyboard)
+    telegram_reply_markup = None
+    if reply_markup:
+        if isinstance(reply_markup, list):
+            # Check if this is inline keyboard (has callback_data/url) or regular keyboard
+            # Inline keyboards have callback_data or url, regular keyboards just have text
+            is_inline = False
+            for row in reply_markup:
+                for button in row:
+                    if isinstance(button, dict) and ('callback_data' in button or 'url' in button):
+                        is_inline = True
+                        break
+                if is_inline:
+                    break
+            
+            if is_inline:
+                # Convert to InlineKeyboardMarkup
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                keyboard = []
+                for row in reply_markup:
+                    keyboard_row = []
+                    for button in row:
+                        keyboard_row.append(
+                            InlineKeyboardButton(
+                                text=button.get('text', ''),
+                                callback_data=button.get('callback_data'),
+                                url=button.get('url')
+                            )
+                        )
+                    keyboard.append(keyboard_row)
+                telegram_reply_markup = InlineKeyboardMarkup(keyboard)
+            else:
+                # Convert to ReplyKeyboardMarkup (regular keyboard)
+                from telegram import KeyboardButton, ReplyKeyboardMarkup
+                keyboard = []
+                for row in reply_markup:
+                    keyboard_row = []
+                    for button in row:
+                        keyboard_row.append(
+                            KeyboardButton(text=button.get('text', ''))
+                        )
+                    keyboard.append(keyboard_row)
+                telegram_reply_markup = ReplyKeyboardMarkup(
+                    keyboard,
+                    resize_keyboard=True,
+                    one_time_keyboard=True
+                )
+        else:
+            telegram_reply_markup = reply_markup
+    
     # 1. Send text immediately (low latency)
     text_message = await bot.send_message(
         chat_id=chat_id,
         text=message,
+        reply_markup=telegram_reply_markup,
         parse_mode=parse_mode,
         reply_to_message_id=reply_to_message_id
     )
@@ -385,7 +438,8 @@ async def send_voice_reply(
     logger.info(f"✅ Text sent: {len(message)} chars to chat {chat_id}")
     
     # 2. Generate and send voice (non-blocking)
-    if send_voice:
+    # BUT: Don't send voice if there's a keyboard - it interferes with button interaction
+    if send_voice and not telegram_reply_markup:
         # Look up user preference from database
         user_preference_language = None
         try:
@@ -403,8 +457,11 @@ async def send_voice_reply(
             logger.warning(f"Could not lookup user preference: {e}")
         
         # Run in background - doesn't block
-        asyncio.create_task(
-            _generate_and_send_voice(
+        # BUT: if we're in a short-lived event loop (Celery), await directly
+        try:
+            current_task = asyncio.current_task()
+            # Check if we should await or create_task based on context
+            voice_task = _generate_and_send_voice(
                 bot, 
                 chat_id, 
                 message, 
@@ -412,7 +469,10 @@ async def send_voice_reply(
                 text_message.message_id,  # Reply to the text message
                 user_preference_language  # Pass user preference
             )
-        )
+            # Create as background task - caller responsible for awaiting if needed
+            asyncio.create_task(voice_task)
+        except Exception as e:
+            logger.error(f"Could not create voice generation task: {e}")
 
 
 def send_voice_reply_sync(
