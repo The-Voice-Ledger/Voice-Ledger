@@ -1293,6 +1293,35 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Registration started"}
         
+        # Handle /batches command - launch mini app
+        if text.startswith('/batches'):
+            import requests
+            import os
+            
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            api_base = os.getenv('API_BASE_URL', 'https://your-ngrok-url.ngrok.io')
+            
+            # Send message with inline button to launch mini app
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={
+                    'chat_id': user_id,
+                    'text': '☕ *Browse Your Coffee Batches*\n\nView all your batches with detailed information and traceability timeline.',
+                    'parse_mode': 'Markdown',
+                    'reply_markup': {
+                        'inline_keyboard': [[
+                            {
+                                'text': '📦 Open Batch Browser',
+                                'web_app': {'url': f'{api_base}/miniapps/batches'}
+                            }
+                        ]]
+                    }
+                },
+                timeout=30
+            )
+            
+            return {"ok": True, "message": "Mini app launched"}
+        
         # Handle /rfq command - create RFQ (buyers)
         if text.startswith('/rfq'):
             from voice.telegram.rfq_handler import handle_rfq_command

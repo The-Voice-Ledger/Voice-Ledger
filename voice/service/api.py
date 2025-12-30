@@ -135,7 +135,13 @@ try:
 except ImportError as e:
     VOICE_WEB_AVAILABLE = False
     print(f"ℹ️  Web voice module not available: {e}")
-
+# Import Mini App API router (Lab 22 - Telegram Mini Apps)
+try:
+    from voice.telegram.miniapp_api import router as miniapp_router, mini_app_router
+    MINIAPP_AVAILABLE = True
+except ImportError as e:
+    MINIAPP_AVAILABLE = False
+    print(f"ℹ️  Mini app module not available: {e}")
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -197,6 +203,12 @@ if USER_PROFILE_AVAILABLE:
 if VOICE_WEB_AVAILABLE:
     app.include_router(voice_web_router)
     print("✅ Web voice interface endpoints registered at /api/voice/*")
+
+# Include Mini App API router (Lab 22)
+if MINIAPP_AVAILABLE:
+    app.include_router(miniapp_router)
+    app.include_router(mini_app_router)
+    print("✅ Mini app endpoints registered at /api/miniapp/* and /miniapps/*")
 
 # Allow local tools and UIs
 app.add_middleware(
