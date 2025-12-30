@@ -2,7 +2,9 @@
 Automatic Speech Recognition (ASR) Module
 
 This module handles audio-to-text transcription with automatic language detection.
-It supports both English (OpenAI Whisper API) and Amharic (local fine-tuned model).
+It supports:
+- English: OpenAI Whisper API
+- Amharic: Addis AI STT API (preferred) or local fine-tuned Whisper model (fallback)
 """
 
 import os
@@ -14,6 +16,7 @@ from dotenv import load_dotenv
 import torch
 from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 import torchaudio
+import httpx
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -21,10 +24,20 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
+# Configure HuggingFace cache path (Railway compatible with local fallback)
+HF_HOME = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+os.environ["HF_HOME"] = HF_HOME
+os.environ["TRANSFORMERS_CACHE"] = HF_HOME
+logger.info(f"HuggingFace cache directory: {HF_HOME}")
+
 # Initialize OpenAI client for English
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Global model cache to avoid reloading
+# Addis AI configuration for Amharic STT
+ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
+ADDIS_AI_STT_URL = "https://api.addisassistant.com/api/v1/audio/transcribe"
+
+# Global model cache to avoid reloading (fallback only)
 _amharic_model = None
 _amharic_processor = None
 
@@ -32,6 +45,7 @@ _amharic_processor = None
 def load_amharic_model():
     """
     Load the Amharic-optimized Whisper model (lazy loading).
+    Model cache location configured via HF_HOME environment variable.
     
     Returns:
         Tuple of (model, processor)
@@ -40,6 +54,7 @@ def load_amharic_model():
     
     if _amharic_model is None:
         logger.info("Loading Amharic Whisper model: b1n1yam/shook-medium-amharic-2k")
+        logger.info(f"Cache location: {HF_HOME}")
         model_name = "b1n1yam/shook-medium-amharic-2k"
         _amharic_processor = AutoProcessor.from_pretrained(model_name)
         _amharic_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name)
@@ -50,6 +65,22 @@ def load_amharic_model():
         logger.info(f"Amharic model loaded on device: {device}")
     
     return _amharic_model, _amharic_processor
+
+
+def check_amharic_model() -> bool:
+    """
+    Check if Amharic model is cached (for Railway startup checks).
+    
+    Returns:
+        True if model is cached, False otherwise
+    """
+    try:
+        from transformers import AutoModel
+        model_name = "b1n1yam/shook-medium-amharic-2k"
+        cache_path = Path(HF_HOME) / "hub" / f"models--{model_name.replace('/', '--')}"
+        return cache_path.exists()
+    except:
+        return False
 
 
 def detect_language(audio_file_path: str) -> str:
@@ -78,9 +109,68 @@ def detect_language(audio_file_path: str) -> str:
         return 'en'
 
 
+async def transcribe_with_addis_ai(audio_file_path: str) -> str:
+    """
+    Transcribe audio using Addis AI STT API (Amharic).
+    
+    This is the preferred method for Amharic transcription as it uses
+    Addis AI's native Amharic speech recognition model.
+    
+    Args:
+        audio_file_path: Path to the audio file
+        
+    Returns:
+        Transcribed text in Amharic
+        
+    Raises:
+        Exception: If API call fails
+    """
+    if not ADDIS_AI_API_KEY:
+        raise ValueError("ADDIS_AI_API_KEY not set in environment")
+    
+    audio_path = Path(audio_file_path)
+    
+    if not audio_path.exists():
+        raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+    
+    try:
+        logger.info("Transcribing Amharic audio with Addis AI STT")
+        
+        async with httpx.AsyncClient(timeout=60.0) as http_client:
+            with open(audio_path, 'rb') as audio_file:
+                files = {'audio': (audio_path.name, audio_file, 'audio/wav')}
+                data = {'language': 'am'}
+                
+                response = await http_client.post(
+                    ADDIS_AI_STT_URL,
+                    headers={"X-API-Key": ADDIS_AI_API_KEY},
+                    files=files,
+                    data=data
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                transcript = result.get('text', '')
+                
+                if not transcript:
+                    raise ValueError("Empty transcript from Addis AI")
+                
+                logger.info(f"Addis AI transcription: {transcript[:50]}...")
+                return transcript.strip()
+                
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Addis AI STT HTTP error: {e.response.status_code} - {e.response.text}")
+        raise Exception(f"Addis AI STT failed: {e.response.text}")
+    except Exception as e:
+        logger.error(f"Addis AI STT failed: {e}")
+        raise Exception(f"Addis AI STT failed: {str(e)}")
+
+
 def transcribe_with_amharic_model(audio_file_path: str) -> str:
     """
-    Transcribe audio using local Amharic Whisper model.
+    Transcribe audio using local Amharic Whisper model (FALLBACK).
+    
+    This is kept as a fallback if Addis AI STT fails.
     
     Args:
         audio_file_path: Path to the audio file
@@ -122,13 +212,79 @@ def transcribe_with_amharic_model(audio_file_path: str) -> str:
     return transcription.strip()
 
 
-def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Dict[str, str]:
+async def run_asr_with_user_preference_async(audio_file_path: str, user_language: str) -> Dict[str, str]:
     """
-    Transcribe audio based on user's language preference (not detection).
+    Transcribe audio based on user's language preference (ASYNC version with Addis AI).
     
     This function routes audio directly to the appropriate model based on
-    the user's chosen language during registration, without relying on
-    potentially unreliable language detection.
+    the user's chosen language during registration.
+    
+    Amharic: Uses Addis AI STT API (preferred), falls back to local model
+    English: Uses OpenAI Whisper API
+    
+    Args:
+        audio_file_path: Path to the audio file (supports WAV, MP3, M4A, etc.)
+        user_language: User's preferred language ('en' or 'am')
+        
+    Returns:
+        Dictionary with 'text' and 'language' keys
+        
+    Raises:
+        FileNotFoundError: If audio file doesn't exist
+        Exception: If transcription fails
+        
+    Example:
+        >>> result = await run_asr_with_user_preference_async("voice.wav", "am")
+        >>> print(f"Language: {result['language']}, Text: {result['text']}")
+        Language: am, Text: አዲስ ቢራ 50 ኪሎ ከገዴኦ እርሻ
+    """
+    audio_path = Path(audio_file_path)
+    
+    if not audio_path.exists():
+        raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+    
+    try:
+        logger.info(f"Transcribing with user preference: {user_language}")
+        
+        # Route based on user's language choice
+        if user_language.lower() in ['am', 'amharic']:
+            # Try Addis AI first, fallback to local model
+            try:
+                logger.info("Routing to Addis AI STT (Amharic)")
+                transcript = await transcribe_with_addis_ai(audio_file_path)
+                language = 'am'
+            except Exception as addis_error:
+                logger.warning(f"Addis AI failed, falling back to local model: {addis_error}")
+                transcript = transcribe_with_amharic_model(audio_file_path)
+                language = 'am'
+        else:
+            # Use OpenAI Whisper API for English
+            logger.info("Routing to OpenAI Whisper API (English)")
+            with open(audio_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+            transcript = transcript.strip()
+            language = 'en'
+        
+        return {
+            'text': transcript,
+            'language': language
+        }
+        
+    except Exception as e:
+        logger.error(f"ASR failed: {str(e)}")
+        raise Exception(f"ASR failed: {str(e)}")
+
+
+def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Dict[str, str]:
+    """
+    Transcribe audio based on user's language preference (SYNC version - for backward compatibility).
+    
+    This is the synchronous version for existing Celery tasks.
+    For new web voice API, use run_asr_with_user_preference_async().
     
     Args:
         audio_file_path: Path to the audio file (supports WAV, MP3, M4A, etc.)
@@ -156,7 +312,7 @@ def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Di
         
         # Route based on user's language choice
         if user_language.lower() in ['am', 'amharic']:
-            # Use local Amharic model
+            # Use local Amharic model (sync only for Celery)
             logger.info("Routing to local Amharic Whisper model")
             transcript = transcribe_with_amharic_model(audio_file_path)
             language = 'am'

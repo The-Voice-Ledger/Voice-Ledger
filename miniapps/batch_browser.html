@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Browser</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color);
+        }
+
+        .search-bar {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+            border-radius: 12px;
+            font-size: 16px;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color);
+            margin-bottom: 16px;
+        }
+
+        .search-bar:focus {
+            outline: none;
+            border-color: var(--tg-theme-button-color, #007aff);
+        }
+
+        .filter-chips {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filter-chips::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chip {
+            padding: 8px 16px;
+            border-radius: 20px;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color);
+            border: 1px solid transparent;
+            font-size: 14px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chip.active {
+            background-color: var(--tg-theme-button-color, #007aff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+
+        .batch-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .batch-card {
+            background-color: var(--tg-theme-secondary-bg-color, #f9f9f9);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .batch-card:active {
+            transform: scale(0.98);
+        }
+
+        .batch-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .batch-id {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color);
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background-color: #34c759;
+            color: white;
+        }
+
+        .status-shipped {
+            background-color: #007aff;
+            color: white;
+        }
+
+        .status-verified {
+            background-color: #5856d6;
+            color: white;
+        }
+
+        .batch-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .batch-info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+
+        .batch-info-label {
+            font-weight: 500;
+        }
+
+        .batch-info-value {
+            color: var(--tg-theme-text-color);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--tg-theme-hint-color);
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px 20px;
+            color: #ff3b30;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--tg-theme-hint-color);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Detail Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .modal.active {
+            display: block;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--tg-theme-section-separator-color);
+        }
+
+        .back-button {
+            font-size: 24px;
+            cursor: pointer;
+            margin-right: 12px;
+            color: var(--tg-theme-button-color, #007aff);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color);
+        }
+
+        .detail-section {
+            background-color: var(--tg-theme-secondary-bg-color, #f9f9f9);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .detail-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--tg-theme-hint-color);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color);
+        }
+
+        .detail-value {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--tg-theme-text-color);
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main List View -->
+    <div id="listView">
+        <div class="header">
+            <h1>☕ Coffee Batches</h1>
+        </div>
+
+        <input type="text" id="searchInput" class="search-bar" placeholder="Search batches...">
+
+        <div class="filter-chips">
+            <div class="chip active" data-filter="all">All</div>
+            <div class="chip" data-filter="active">Active</div>
+            <div class="chip" data-filter="shipped">Shipped</div>
+            <div class="chip" data-filter="verified">Verified</div>
+        </div>
+
+        <div id="batchList" class="batch-list">
+            <div class="loading">Loading batches...</div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailView" class="modal">
+        <div class="modal-header">
+            <span class="back-button" onclick="closeDetail()">←</span>
+            <span class="modal-title">Batch Details</span>
+        </div>
+        <div id="detailContent"></div>
+    </div>
+
+    <script>
+        // Initialize Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.MainButton.hide();
+
+        // Get user info
+        const user = tg.initDataUnsafe?.user;
+        const userId = user?.id;
+
+        console.log('Telegram User:', user);
+
+        let allBatches = [];
+        let currentFilter = 'all';
+
+        // Load batches on page load
+        async function loadBatches() {
+            if (!userId) {
+                document.getElementById('batchList').innerHTML = '<div class="error">Authentication failed. Please restart the bot.</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/miniapp/batches?user_id=${userId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    allBatches = data.batches || [];
+                    renderBatches(allBatches);
+                } else {
+                    throw new Error(data.error || 'Failed to load batches');
+                }
+            } catch (error) {
+                console.error('Error loading batches:', error);
+                document.getElementById('batchList').innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderBatches(batches) {
+            const container = document.getElementById('batchList');
+
+            if (batches.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📦</div>
+                        <div>No batches found</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = batches.map(batch => `
+                <div class="batch-card" onclick="showDetail('${batch.gtin || batch.batch_id}')">
+                    <div class="batch-header">
+                        <span class="batch-id">${batch.batch_id || batch.gtin}</span>
+                        <span class="status-badge status-${batch.status || 'active'}">${(batch.status || 'active').toUpperCase()}</span>
+                    </div>
+                    <div class="batch-info">
+                        <div class="batch-info-row">
+                            <span class="batch-info-label">Weight:</span>
+                            <span class="batch-info-value">${batch.weight_kg || 0} kg</span>
+                        </div>
+                        <div class="batch-info-row">
+                            <span class="batch-info-label">Coffee Type:</span>
+                            <span class="batch-info-value">${batch.coffee_type || 'Arabica Coffee'}</span>
+                        </div>
+                        <div class="batch-info-row">
+                            <span class="batch-info-label">Created:</span>
+                            <span class="batch-info-value">${formatDate(batch.created_at)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function showDetail(batchId) {
+            document.getElementById('listView').style.display = 'none';
+            document.getElementById('detailView').classList.add('active');
+
+            const detailContent = document.getElementById('detailContent');
+            detailContent.innerHTML = '<div class="loading">Loading details...</div>';
+
+            try {
+                const response = await fetch(`/api/miniapp/batch/${batchId}?user_id=${userId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderDetail(data);
+                } else {
+                    throw new Error(data.error || 'Failed to load batch details');
+                }
+            } catch (error) {
+                console.error('Error loading batch details:', error);
+                detailContent.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function renderDetail(data) {
+            const batch = data.batch;
+            const events = data.events || [];
+
+            let html = `
+                <div class="detail-section">
+                    <div class="detail-section-title">Batch Information</div>
+                    <div class="detail-row">
+                        <span class="detail-label">Batch ID:</span>
+                        <span class="detail-value">${batch.batch_id || 'N/A'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">GTIN:</span>
+                        <span class="detail-value">${batch.gtin || 'N/A'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Weight:</span>
+                        <span class="detail-value">${batch.weight_kg || 0} kg</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Coffee Type:</span>
+                        <span class="detail-value">${batch.coffee_type || 'Arabica Coffee'}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Status:</span>
+                        <span class="detail-value status-badge status-${batch.status || 'active'}">${(batch.status || 'active').toUpperCase()}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Created:</span>
+                        <span class="detail-value">${formatDate(batch.created_at)}</span>
+                    </div>
+                </div>
+            `;
+
+            if (events.length > 0) {
+                html += `
+                    <div class="detail-section">
+                        <div class="detail-section-title">Timeline (${events.length} events)</div>
+                        ${events.map(event => `
+                            <div class="detail-row">
+                                <span class="detail-label">${event.biz_step || 'Event'}:</span>
+                                <span class="detail-value">${formatDate(event.event_time)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            if (batch.blockchain_hash) {
+                html += `
+                    <div class="detail-section">
+                        <div class="detail-section-title">Blockchain</div>
+                        <div class="detail-row">
+                            <span class="detail-label">Hash:</span>
+                            <span class="detail-value">${batch.blockchain_hash.substring(0, 16)}...</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        function closeDetail() {
+            document.getElementById('detailView').classList.remove('active');
+            document.getElementById('listView').style.display = 'block';
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = allBatches.filter(batch => 
+                (batch.batch_id && batch.batch_id.toLowerCase().includes(query)) ||
+                (batch.gtin && batch.gtin.toLowerCase().includes(query)) ||
+                (batch.coffee_type && batch.coffee_type.toLowerCase().includes(query))
+            );
+            renderBatches(applyFilter(filtered));
+        });
+
+        // Filter functionality
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                currentFilter = chip.dataset.filter;
+                renderBatches(applyFilter(allBatches));
+            });
+        });
+
+        function applyFilter(batches) {
+            if (currentFilter === 'all') return batches;
+            return batches.filter(batch => batch.status === currentFilter);
+        }
+
+        // Load batches on start
+        loadBatches();
+    </script>
+</body>
+</html>

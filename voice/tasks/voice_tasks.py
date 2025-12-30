@@ -274,7 +274,14 @@ def process_voice_command_task(
                             response = loop.run_until_complete(
                                 handle_voice_rfq_creation(int(user_id), transcript, extraction, metadata)
                             )
-                            loop.run_until_complete(asyncio.sleep(0.1))
+                            # Allow background tasks (voice generation) to complete
+                            # Small delay to ensure all tasks are scheduled
+                            loop.run_until_complete(asyncio.sleep(0.5))
+                            # Gather and await all pending tasks
+                            pending = asyncio.all_tasks(loop)
+                            if pending:
+                                logger.info(f"Waiting for {len(pending)} background tasks to complete")
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                             
                             return {
                                 "status": "success",
@@ -316,9 +323,10 @@ def process_voice_command_task(
                                 route_voice_to_command(command, int(user_id), metadata)
                             )
                             
-                            # Give any background tasks time to finish (e.g., HTTP requests)
-                            # This ensures httpx connections are properly closed
-                            loop.run_until_complete(asyncio.sleep(0.1))
+                            # Wait for background tasks (voice generation) to complete
+                            pending = asyncio.all_tasks(loop)
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                             
                             result = {
                                 "status": "success",
@@ -349,6 +357,50 @@ def process_voice_command_task(
             
             return voice_command_result
         
+        # Check if user has active RFQ session (voice clarification flow)
+        if metadata and metadata.get("channel") == "telegram":
+            user_id = metadata.get("user_id")
+            if user_id:
+                from voice.telegram.rfq_handler import rfq_sessions
+                if int(user_id) in rfq_sessions:
+                    logger.info(f"User {user_id} has active RFQ session, routing to RFQ clarification handler")
+                    try:
+                        import asyncio
+                        from voice.telegram.rfq_handler import handle_rfq_voice_clarification
+                        
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            response = loop.run_until_complete(
+                                handle_rfq_voice_clarification(int(user_id), transcript, metadata)
+                            )
+                            
+                            # Wait for background tasks (voice generation) to complete
+                            pending = asyncio.all_tasks(loop)
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                            
+                            return {
+                                "status": "success",
+                                "transcript": transcript,
+                                "command": "voice_rfq_clarification",
+                                "response": response,
+                                "audio_metadata": metadata
+                            }
+                        finally:
+                            try:
+                                if hasattr(loop, 'shutdown_asyncgens'):
+                                    loop.run_until_complete(loop.shutdown_asyncgens())
+                            except:
+                                pass
+                            try:
+                                loop.close()
+                            except:
+                                pass
+                    except Exception as e:
+                        logger.error(f"Failed to handle RFQ clarification: {e}", exc_info=True)
+                        # Fall through to conversation handler
+        
         # Update task state: extracting
         self.update_state(
             state='EXTRACTING',
@@ -378,7 +430,10 @@ def process_voice_command_task(
                     conversation_result = loop.run_until_complete(
                         process_amharic_conversation(user_db_id, transcript)
                     )
-                    loop.run_until_complete(asyncio.sleep(0.1))
+                    # Wait for background tasks (voice generation) to complete
+                    pending = asyncio.all_tasks(loop)
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 finally:
                     try:
                         if hasattr(loop, 'shutdown_asyncgens'):
@@ -389,7 +444,7 @@ def process_voice_command_task(
             else:
                 # English conversation with GPT-4
                 logger.info(f"Processing English conversation for user {user_db_id}")
-                conversation_result = process_english_conversation(user_db_id, transcript)
+                conversation_result = process_english_conversation(user_db_id, transcript, use_rag=True)
             
             # Check if conversation is ready to execute
             if not conversation_result.get('ready_to_execute'):
@@ -519,11 +574,20 @@ def process_voice_command_task(
                                 "verification_token": db_result.get("verification_token")
                             }
                             logger.info(f"Sending batch verification QR code to Telegram chat {target_id}")
-                            success = send_batch_verification_qr(target_id, batch_info)
-                            if success:
-                                logger.info(f"Notification sent successfully to {target_id}")
-                            else:
-                                logger.error(f"Failed to send notification to {target_id}")
+                            
+                            # Run async function in event loop
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                success = loop.run_until_complete(
+                                    send_batch_verification_qr(target_id, batch_info)
+                                )
+                                if success:
+                                    logger.info(f"Notification sent successfully to {target_id}")
+                                else:
+                                    logger.error(f"Failed to send notification to {target_id}")
+                            finally:
+                                loop.close()
                         else:
                             # Error notification
                             logger.info(f"Sending error notification to Telegram chat {target_id}")

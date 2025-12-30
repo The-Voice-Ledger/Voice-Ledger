@@ -9,8 +9,9 @@ import os
 import logging
 import json
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
+import openai
 
 from .conversation_manager import ConversationManager
 
@@ -21,6 +22,111 @@ logger = logging.getLogger(__name__)
 ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
 ADDIS_AI_URL = "https://api.addisassistant.com/api/v1/chat_generate"
 ADDIS_TRANSLATE_URL = "https://api.addisassistant.com/api/v1/translate"
+
+# OpenAI configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
+
+async def translate_amharic_to_english(text: str) -> Optional[str]:
+    """
+    Translate Amharic text to English using OpenAI.
+    Returns None if translation fails.
+    """
+    try:
+        if not OPENAI_API_KEY:
+            logger.warning("OpenAI API key not configured, skipping translation")
+            return None
+        
+        # Use new OpenAI API (v1.0+)
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Translate this Amharic text to English. Only provide the translation, nothing else:\n\n{text}"
+                }
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        translation = response.choices[0].message.content.strip()
+        logger.info(f"Translated Amharic query to English: {translation}")
+        return translation
+        
+    except Exception as e:
+        logger.warning(f"Translation failed: {e}, will skip RAG")
+        return None
+
+
+async def enhance_with_rag_context(user_input: str, system_prompt: str) -> str:
+    """
+    Enhance system prompt with RAG context if applicable.
+    
+    - Translates Amharic query to English
+    - Searches documentation using hybrid_search
+    - Appends relevant context to system prompt
+    
+    Returns enhanced system prompt or original if RAG not applicable.
+    """
+    try:
+        # Import here to avoid circular dependency
+        from voice.rag.hybrid_router import classify_query_type, hybrid_search, QueryType
+        
+        # Translate Amharic to English for RAG search
+        english_query = await translate_amharic_to_english(user_input)
+        if not english_query:
+            logger.info("Translation failed, skipping RAG")
+            return system_prompt
+        
+        # Classify query type (not async)
+        query_type = classify_query_type(english_query)
+        logger.info(f"Query classified as: {query_type}")
+        
+        # Skip RAG for transactional queries (operational commands)
+        if query_type == QueryType.TRANSACTIONAL:
+            logger.info("Transactional query detected, skipping RAG")
+            return system_prompt
+        
+        # Get RAG context for DOCUMENTATION and HYBRID queries
+        if query_type in [QueryType.DOCUMENTATION, QueryType.HYBRID]:
+            rag_results = hybrid_search(english_query, query_type)
+            
+            if rag_results and rag_results.get('combined_context'):
+                context_text = rag_results['combined_context']
+                
+                # For documentation queries, use a different system prompt that prioritizes answering from context
+                doc_prompt = f"""አንተ የቴክኒካል መረጃ ረዳት ነህ። ተጠቃሚው ቴክኒካል ጥያቄ ጠይቋል እና አግባብ ያለው መጻሕፍት አለ።
+
+የመጻሕፍት አውድ (Documentation Context):
+{context_text}
+
+ወሳኝ መመሪያዎች:
+1. ከላይ ያለው መጻሕፍት አውድ ለጥያቄው መልስ ይዟል
+2. ከዚህ መረጃ ጋር የተያያዘውን ነገር በአማርኛ በግልጽ ማስረዳት አለብህ
+3. "ስለ ቡና ስራዎች ብቻ እረዳለሁ" ወይም የመሳሰሉትን አትበል - መረጃው እዚህ አለ
+4. "RFQ አይሰራም" አትበል - በመረጃው ውስጥ ካለ አስረዳው
+5. መልስ መስጠትን አትከልክል - መረጃው በተለይ ለዚህ ጥያቄ ተመርጧል
+6. መረጃው በእንግሊዝኛ ቢሆንም መልስህ በአማርኛ ግልጽ እና ተግባራዊ መሆን አለበት
+7. ፋይሎችን፣ ተግባራትን ወይም መጻሕፍት ክፍሎችን መጥቀስ ትችላለህ
+
+ተጠቃሚው ጥያቄ: {user_input}
+
+ከላይ ያለውን የመጻሕፍት መረጃ በመጠቀም በአማርኛ መልስ ስጥ።"""
+                
+                logger.info(f"Using documentation-focused prompt with RAG context ({len(context_text)} chars)")
+                return doc_prompt
+        
+        return system_prompt
+        
+    except Exception as e:
+        logger.warning(f"RAG enhancement failed: {e}, using original prompt")
+        return system_prompt
+
 
 # System prompt for Amharic coffee supply chain assistant
 SYSTEM_PROMPT_AM = """አንተ ለኢትዮጵያ የቡና ገበሬዎች እና የአቅርቦት ሰንሰለት ተዋናዮች የምትረዳ ረዳት ነህ። የቡና ባች ምዝገባና የአቅርቦት ሰንሰለት ክስተቶችን በተፈጥሮ ውይይት እንዲመዘግቡ ታግዛለህ።
@@ -130,6 +236,85 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
         }
     """
     try:
+        # LAB 20: Check for workflow triggers FIRST (batch recording, shipment tracking)
+        from voice.workflows.state_machine import StateManager, ConversationState
+        from voice.workflows.batch_recording import BatchRecordingWorkflow
+        from voice.workflows.shipment_tracking import ShipmentTrackingWorkflow
+        
+        # Check if user is in active workflow
+        state_data = StateManager.get_user_state(user_id)
+        if state_data:
+            workflow_name = state_data.get('workflow')
+            current_state_str = state_data.get('state')
+            
+            try:
+                current_state = ConversationState(current_state_str)
+            except ValueError:
+                logger.warning(f"Unknown state {current_state_str}, clearing")
+                StateManager.clear_user_state(user_id)
+                state_data = None
+            
+            if state_data and workflow_name:
+                # Route to appropriate workflow
+                logger.info(f"User {user_id} in active workflow: {workflow_name}, state: {current_state_str}")
+                
+                if workflow_name == 'batch_recording':
+                    workflow = BatchRecordingWorkflow()
+                    result = await workflow.handle_message(user_id, transcript, current_state)
+                    
+                    return {
+                        'message': result.get('message', ''),
+                        'ready_to_execute': False,  # Workflows handle their own execution
+                        'intent': None,
+                        'entities': {},
+                        'needs_clarification': result.get('keep_state', True)
+                    }
+                
+                elif workflow_name == 'shipment_tracking':
+                    workflow = ShipmentTrackingWorkflow()
+                    result = await workflow.handle_message(user_id, transcript, current_state)
+                    
+                    return {
+                        'message': result.get('message', ''),
+                        'ready_to_execute': False,
+                        'intent': None,
+                        'entities': {},
+                        'needs_clarification': result.get('keep_state', True)
+                    }
+        
+        # Check for workflow trigger keywords (Amharic)
+        text_lower = transcript.lower()
+        
+        # Batch recording triggers (Amharic keywords)
+        batch_triggers = ['ባች መዝግብ', 'አዲስ ባች', 'ምርት መዝግብ', 'ቡና መዝግብ', 'አጨድ']
+        if any(trigger in text_lower for trigger in batch_triggers):
+            logger.info(f"Batch recording workflow triggered for user {user_id} (Amharic)")
+            workflow = BatchRecordingWorkflow()
+            result = await workflow.start(user_id)
+            
+            return {
+                'message': result.get('message', ''),
+                'ready_to_execute': False,
+                'intent': None,
+                'entities': {},
+                'needs_clarification': True
+            }
+        
+        # Shipment tracking triggers (Amharic keywords)
+        shipment_triggers = ['መላኪያ ክትትል', 'የእኔ መላኪያዎች', 'ቡናዬ የት', 'መላኪያ መፈተሽ']
+        if any(trigger in text_lower for trigger in shipment_triggers):
+            logger.info(f"Shipment tracking workflow triggered for user {user_id} (Amharic)")
+            workflow = ShipmentTrackingWorkflow()
+            result = await workflow.start(user_id)
+            
+            return {
+                'message': result.get('message', ''),
+                'ready_to_execute': False,
+                'intent': None,
+                'entities': {},
+                'needs_clarification': True
+            }
+        
         # Get conversation history
         history = ConversationManager.get_history(user_id)
         ConversationManager.set_language(user_id, 'am')
@@ -145,6 +330,19 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
         
         logger.info(f"Sending Amharic conversation to Addis AI for user {user_id}, turn {ConversationManager.get_turn_count(user_id)}")
         
+        # RAG Enhancement (enabled by default)
+        use_rag = True
+        # SAFETY FLAG: Uncomment the line below to disable RAG for Amharic if issues arise
+        # use_rag = False
+        
+        enhanced_prompt = SYSTEM_PROMPT_AM
+        if use_rag:
+            try:
+                enhanced_prompt = await enhance_with_rag_context(transcript, SYSTEM_PROMPT_AM)
+            except Exception as e:
+                logger.warning(f"RAG enhancement failed: {e}, continuing without RAG")
+                enhanced_prompt = SYSTEM_PROMPT_AM
+        
         # Call Addis AI
         async with httpx.AsyncClient(timeout=30.0) as client_http:
             response = await client_http.post(
@@ -154,7 +352,7 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
                     "Content-Type": "application/json"
                 },
                 json={
-                    "prompt": transcript,
+                    "prompt": f"{enhanced_prompt}\n\nUser: {transcript}",
                     "target_language": "am",
                     "conversation_history": conversation_history,
                     "generation_config": {
@@ -166,8 +364,15 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
             response.raise_for_status()
             addis_response = response.json()
         
-        # Extract response text
-        assistant_response = addis_response.get("response_text", "").strip()
+        # Extract response text (AddisAI returns {status, data: {response_text}})
+        if addis_response.get("status") == "success" and "data" in addis_response:
+            assistant_response = addis_response["data"].get("response_text", "").strip()
+        else:
+            assistant_response = addis_response.get("response_text", "").strip()
+        
+        if not assistant_response:
+            logger.error(f"Empty response from AddisAI: {addis_response}")
+            raise ValueError("AddisAI returned empty response")
         
         # Clean up response - remove markdown code blocks if present
         if assistant_response.startswith('```'):

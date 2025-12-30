@@ -11,7 +11,7 @@ Commands:
 
 import os
 import logging
-import requests
+import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from database.models import UserIdentity, Organization, SessionLocal
@@ -296,14 +296,42 @@ async def handle_location_input(user_id: int, text: str, session: Dict) -> Dict[
 
 
 async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[str, Any]:
-    """Handle deadline input (Step 6)"""
+    """Handle deadline input (Step 6) - accepts natural language dates"""
     try:
-        # Parse date
-        deadline = datetime.strptime(text.strip(), '%Y-%m-%d').date()
+        from dateutil import parser as date_parser
+        import re
         
+        text_clean = text.strip().lower()
+        deadline = None
+        
+        # Try parsing relative dates first
+        if re.search(r'(\d+)\s*(day|days|week|weeks|month|months)', text_clean):
+            # Extract number and unit
+            match = re.search(r'(\d+)\s*(day|days|week|weeks|month|months)', text_clean)
+            if match:
+                num = int(match.group(1))
+                unit = match.group(2)
+                
+                if 'day' in unit:
+                    deadline = (datetime.now() + timedelta(days=num)).date()
+                elif 'week' in unit:
+                    deadline = (datetime.now() + timedelta(weeks=num)).date()
+                elif 'month' in unit:
+                    deadline = (datetime.now() + timedelta(days=num*30)).date()
+        
+        # Try parsing absolute dates (natural language)
+        if not deadline:
+            try:
+                parsed = date_parser.parse(text, fuzzy=True)
+                deadline = parsed.date()
+            except:
+                # Try standard format as fallback
+                deadline = datetime.strptime(text.strip(), '%Y-%m-%d').date()
+        
+        # Validate deadline is in the future
         if deadline <= datetime.now().date():
             return {
-                'message': "⚠️ Deadline must be in the future. Please enter a valid date.",
+                'message': "⚠️ Deadline must be in the future. Please try again.",
                 'keyboard': [[{'text': '❌ Cancel'}]]
             }
         
@@ -328,11 +356,15 @@ async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[
                 [{'text': '✅ Confirm & Broadcast'}, {'text': '❌ Cancel'}]
             ]
         }
-    except ValueError:
+    except Exception as e:
+        logger.warning(f"Date parsing failed for '{text}': {e}")
         return {
             'message': (
-                "⚠️ Invalid date format. Please use YYYY-MM-DD\n"
-                "Example: 2025-02-15"
+                "⚠️ I couldn't understand that date.\n\n"
+                "Try saying:\n"
+                "• '30 days' or '2 months'\n"
+                "• 'March 15' or '15th of March'\n"
+                "• '2025-03-15' (YYYY-MM-DD)\n"
             ),
             'keyboard': [[{'text': '❌ Cancel'}]]
         }
@@ -340,11 +372,26 @@ async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[
 
 async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[str, Any]:
     """Handle confirmation and create RFQ via API (Step 7)"""
-    if text.strip().lower() not in ['✅ confirm & broadcast', 'confirm', 'yes']:
+    text_lower = text.strip().lower()
+    
+    # Check for cancellation keywords
+    cancel_keywords = ['cancel', 'no', 'stop', 'abort', 'nevermind', 'never mind']
+    if any(keyword in text_lower for keyword in cancel_keywords):
         del rfq_sessions[user_id]
         return {
             'message': "❌ RFQ creation cancelled.",
             'keyboard': [[{'text': '/rfq - Create New RFQ'}]]
+        }
+    
+    # Check for confirmation keywords (more lenient)
+    confirm_keywords = ['yes', 'confirm', 'ok', 'okay', 'sure', 'proceed', 'broadcast', 'ready']
+    if not any(keyword in text_lower for keyword in confirm_keywords):
+        # Unclear response - ask again
+        return {
+            'message': "⚠️ I didn't understand. Please confirm or cancel:",
+            'keyboard': [
+                [{'text': '✅ Confirm & Broadcast'}, {'text': '❌ Cancel'}]
+            ]
         }
     
     # Call API to create RFQ
@@ -352,17 +399,19 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
         data = session['data']
         api_url = f"{API_BASE_URL}/rfq?user_id={session['user_id']}"
         
-        response = requests.post(api_url, json={
-            'quantity_kg': data['quantity_kg'],
-            'variety': data['variety'],
-            'grade': data['grade'],
-            'processing_method': data.get('processing_method'),
-            'delivery_location': data['delivery_location'],
-            'delivery_deadline': data['delivery_deadline']
-        }, timeout=10)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(api_url, json={
+                'quantity_kg': data['quantity_kg'],
+                'variety': data['variety'],
+                'grade': data['grade'],
+                'processing_method': data.get('processing_method'),
+                'delivery_location': data['delivery_location'],
+                'delivery_deadline': data['delivery_deadline']
+            })
         
         if response.status_code == 201:
             rfq = response.json()
+            broadcast_count = rfq.get('broadcast_count', 0)
             
             # Clean up session
             del rfq_sessions[user_id]
@@ -373,10 +422,13 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
                     f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
                     f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
                     f"☕ Variety: {rfq['variety']}\n"
-                    f"📍 Location: {rfq['delivery_location']}\n"
-                    f"📅 Deadline: {rfq['delivery_deadline']}\n\n"
-                    f"🔔 Broadcast to cooperatives: In progress...\n\n"
-                    "Use /myrfqs to track offers as they come in."
+                    f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
+                    f"🔧 Processing: {rfq['processing_method']}\n"
+                    f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                    f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
+                    f"Status: {rfq['status']}\n"
+                    f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                    f"💡 Use /myrfqs to track offers as they come in."
                 ),
                 'parse_mode': 'Markdown',
                 'keyboard': [
@@ -441,7 +493,8 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         
         # Fetch open RFQs from API
         api_url = f"{API_BASE_URL}/rfqs?status=OPEN"
-        response = requests.get(api_url, timeout=10)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
         
         if response.status_code != 200:
             return {
@@ -529,7 +582,8 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
         
         # Fetch offers from API
         api_url = f"{API_BASE_URL}/offers?user_id={user.id}"
-        response = requests.get(api_url, timeout=10)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
         
         if response.status_code != 200:
             return {
@@ -616,7 +670,8 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
         
         # Fetch buyer's RFQs from API
         api_url = f"{API_BASE_URL}/rfqs?buyer_id={user.id}"
-        response = requests.get(api_url, timeout=10)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
         
         if response.status_code != 200:
             return {
@@ -679,6 +734,49 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
         db.close()
 
 
+async def handle_rfq_voice_clarification(
+    user_id: int,
+    transcript: str,
+    metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Handle voice clarification messages during RFQ creation flow.
+    
+    When a user has an active RFQ session and sends a voice message,
+    this routes it to the appropriate step handler.
+    
+    Args:
+        user_id: Telegram user ID
+        transcript: Voice transcript
+        metadata: Request metadata
+        
+    Returns:
+        Response dict with message and keyboard
+    """
+    from voice.channels.processor import get_processor
+    
+    processor = get_processor()
+    
+    # Route to text message handler (reuse existing logic)
+    response = await handle_rfq_message(user_id, transcript)
+    
+    # Send response via Telegram (use processor for voice support)
+    try:
+        # Always use processor for consistent voice delivery
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=response['message'],
+            parse_mode=response.get('parse_mode', 'Markdown'),
+            reply_markup=response.get('keyboard') or response.get('inline_keyboard'),
+            send_voice=True  # Clarification questions should have voice
+        )
+    except Exception as e:
+        logger.error(f"Failed to send RFQ clarification response: {e}")
+    
+    return {"ok": True, "message": "RFQ clarification processed"}
+
+
 async def handle_voice_rfq_creation(
     user_id: int,
     transcript: str,
@@ -713,7 +811,8 @@ async def handle_voice_rfq_creation(
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
-                message="❌ Not registered. Use /register to get started."
+                message="❌ Not registered. Use /register to get started.",
+                send_voice=False  # Error message - text only
             )
             return {"ok": False}
         
@@ -721,7 +820,8 @@ async def handle_voice_rfq_creation(
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
-                message="⏳ Your registration is pending admin approval."
+                message="⏳ Your registration is pending admin approval.",
+                send_voice=False  # Status notification - text only
             )
             return {"ok": False}
         
@@ -736,7 +836,8 @@ async def handle_voice_rfq_creation(
                     f"Your role: {user.role}\n\n"
                     "Cooperatives: Use /offers to view available RFQs."
                 ),
-                parse_mode='Markdown'
+                parse_mode='Markdown',
+                send_voice=False  # Access error - text only
             )
             return {"ok": False}
         
@@ -754,11 +855,12 @@ async def handle_voice_rfq_creation(
             channel_name='telegram',
             user_id=user_id,
             message=preview,
-            parse_mode='Markdown'
+            parse_mode='Markdown',
+            send_voice=True  # Preview - conversational content
         )
         
-        # If confidence is low or many fields missing, start conversation flow
-        if confidence < 0.6 or len(missing) >= 3:
+        # If confidence is low or ANY fields missing, start conversation flow
+        if confidence < 0.6 or len(missing) > 0:
             # Store partial data in session
             rfq_sessions[user_id] = {
                 'user_id': user.id,
@@ -793,7 +895,8 @@ async def handle_voice_rfq_creation(
                 channel_name='telegram',
                 user_id=user_id,
                 message=question['message'],
-                reply_markup=question.get('keyboard')
+                reply_markup=question.get('keyboard'),
+                send_voice=True  # Question - conversational content
             )
             
             return {"ok": True, "needs_clarification": True}
@@ -814,14 +917,16 @@ async def handle_voice_rfq_creation(
                 "status": "OPEN"
             }
             
-            response = requests.post(
-                f"{API_BASE_URL}/rfq",
-                json=rfq_data,
-                headers={"Content-Type": "application/json"}
-            )
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{API_BASE_URL}/rfq?user_id={user.id}",
+                    json=rfq_data,
+                    headers={"Content-Type": "application/json"}
+                )
             
-            if response.status_code == 200:
+            if response.status_code in [200, 201]:  # Accept both 200 and 201
                 rfq = response.json()
+                broadcast_count = rfq.get('broadcast_count', 0)
                 
                 await processor.send_notification(
                     channel_name='telegram',
@@ -834,8 +939,10 @@ async def handle_voice_rfq_creation(
                         f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
                         f"🔧 Processing: {rfq['processing_method']}\n"
                         f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
-                        f"🔔 Relevant cooperatives will be notified!\n\n"
-                        f"Use /myrfqs to track offers."
+                        f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
+                        f"Status: {rfq['status']}\n"
+                        f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                        f"💡 Use /myrfqs to track offers as they come in."
                     ),
                     parse_mode='Markdown'
                 )
@@ -849,7 +956,8 @@ async def handle_voice_rfq_creation(
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
-                message=f"❌ Failed to create RFQ: {str(api_error)}\n\nPlease try using /rfq command."
+                message=f"❌ Failed to create RFQ: {str(api_error)}\n\nPlease try using /rfq command.",
+                send_voice=False  # Error message - text only
             )
             return {"ok": False, "error": str(api_error)}
     

@@ -28,6 +28,166 @@ class VoiceCommandError(Exception):
     pass
 
 
+# Required entities for each intent
+REQUIRED_ENTITIES = {
+    "record_commission": {
+        "required": ["quantity", "origin"],
+        "optional": ["product", "unit"],
+        "description": "Create a new coffee batch",
+        "example": "Record commission of 50 bags from Abebe farm"
+    },
+    "record_shipment": {
+        "required": ["batch_id", "destination"],
+        "optional": ["quantity_kg", "carrier", "transport_mode"],
+        "description": "Ship an existing batch",
+        "example": "Ship batch ABC-123 to Addis Ababa warehouse"
+    },
+    "record_receipt": {
+        "required": ["batch_id"],
+        "optional": ["source_location", "condition"],
+        "description": "Receive a shipped batch",
+        "example": "Received batch ABC-123 from Jimma"
+    },
+    "record_transformation": {
+        "required": ["batch_id", "process_type"],
+        "optional": ["output_quantity", "output_product"],
+        "description": "Process coffee (washing, drying, etc.)",
+        "example": "Washed batch ABC-123 at processing facility"
+    },
+    "pack_batches": {
+        "required": ["batch_ids"],
+        "optional": ["container_type"],
+        "description": "Pack multiple batches into container",
+        "example": "Pack batches ABC-123 and DEF-456 into shipping container"
+    },
+    "aggregate_batches": {  # Alias
+        "required": ["batch_ids"],
+        "optional": ["container_type"],
+        "description": "Pack multiple batches into container",
+        "example": "Pack batches ABC-123 and DEF-456 into shipping container"
+    },
+    "unpack_batches": {
+        "required": ["container_id"],
+        "optional": [],
+        "description": "Unpack container to release batches",
+        "example": "Unpack container SSCC-789"
+    },
+    "disaggregate_batches": {  # Alias
+        "required": ["container_id"],
+        "optional": [],
+        "description": "Unpack container to release batches",
+        "example": "Unpack container SSCC-789"
+    },
+    "split_batch": {
+        "required": ["parent_batch_id", "splits"],
+        "optional": [],
+        "description": "Split one batch into multiple smaller batches",
+        "example": "Split batch ABC-123 into 6000kg and 4000kg"
+    }
+}
+
+
+def validate_entities(intent: str, entities: Dict[str, Any]) -> Tuple[bool, list]:
+    """
+    Validate if all required entities are present for the given intent.
+    
+    Args:
+        intent: The intent to validate entities for
+        entities: Dictionary of extracted entities
+        
+    Returns:
+        Tuple of (is_valid, missing_entities)
+        - is_valid: True if all required entities present, False otherwise
+        - missing_entities: List of missing required entity names
+        
+    Example:
+        >>> is_valid, missing = validate_entities("record_commission", {"quantity": 50})
+        >>> print(is_valid, missing)
+        False ['origin']
+    """
+    if intent not in REQUIRED_ENTITIES:
+        # Unknown intent - let execute_voice_command handle it
+        return True, []
+    
+    intent_spec = REQUIRED_ENTITIES[intent]
+    required_fields = intent_spec["required"]
+    
+    # Check for missing required entities
+    missing = []
+    for field in required_fields:
+        value = entities.get(field)
+        # Consider empty strings, empty lists, and None as missing
+        if value is None or (isinstance(value, (str, list)) and not value):
+            missing.append(field)
+    
+    is_valid = len(missing) == 0
+    return is_valid, missing
+
+
+def generate_clarification_question(intent: str, missing_entities: list) -> str:
+    """
+    Generate a natural, helpful clarification question for missing entities.
+    
+    Args:
+        intent: The intent being executed
+        missing_entities: List of missing required entity names
+        
+    Returns:
+        A natural language question asking for the missing information
+        
+    Example:
+        >>> q = generate_clarification_question("record_commission", ["origin"])
+        >>> print(q)
+        "I need more information to create a new batch. Where is the coffee from?"
+    """
+    if intent not in REQUIRED_ENTITIES:
+        return "I need more information to complete this action. Could you provide more details?"
+    
+    intent_spec = REQUIRED_ENTITIES[intent]
+    description = intent_spec["description"]
+    example = intent_spec["example"]
+    
+    # Map entity names to natural language questions
+    entity_questions = {
+        "quantity": "How much coffee (quantity and unit)?",
+        "origin": "Where is the coffee from (farm or location)?",
+        "batch_id": "Which batch (use batch ID or GTIN)?",
+        "destination": "Where is it being shipped to?",
+        "process_type": "What type of processing (washing, drying, roasting)?",
+        "batch_ids": "Which batches should be packed (provide batch IDs)?",
+        "container_id": "Which container (SSCC or container ID)?",
+        "parent_batch_id": "Which batch should be split?",
+        "splits": "How should it be split (quantities for each part)?",
+        "product": "What type of coffee?",
+        "unit": "What unit (bags, kg)?",
+        "carrier": "Who is the carrier?",
+        "transport_mode": "How is it being transported (truck, ship, air)?",
+        "source_location": "Where was it shipped from?",
+        "condition": "What is the condition of the batch?",
+        "output_quantity": "What is the output quantity after processing?",
+        "output_product": "What is the product after processing?",
+        "container_type": "What type of container?"
+    }
+    
+    # Build clarification message
+    questions = [entity_questions.get(entity, f"What is the {entity}?") 
+                 for entity in missing_entities]
+    
+    if len(missing_entities) == 1:
+        question_text = questions[0]
+    elif len(missing_entities) == 2:
+        question_text = f"{questions[0]} Also, {questions[1].lower()}"
+    else:
+        question_text = ", ".join(questions[:-1]) + f", and {questions[-1].lower()}"
+    
+    clarification = (
+        f"I need more information to {description.lower()}. {question_text}\n\n"
+        f"For example: '{example}'"
+    )
+    
+    return clarification
+
+
 def generate_batch_id_from_entities(entities: dict) -> str:
     """
     Generate a unique batch_id from voice command entities.
@@ -915,6 +1075,12 @@ def execute_voice_command(db: Session, intent: str, entities: dict, user_id: int
             f"• 'Received batch XYZ...' - Receive batch\n"
             f"• 'Washed batch DEF...' - Process coffee"
         )
+    
+    # Validate entities before executing handler
+    is_valid, missing_entities = validate_entities(intent, entities)
+    if not is_valid:
+        clarification = generate_clarification_question(intent, missing_entities)
+        raise VoiceCommandError(clarification)
     
     # Get handler for this intent
     handler = INTENT_HANDLERS[intent]

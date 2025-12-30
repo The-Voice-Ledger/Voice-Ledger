@@ -133,28 +133,47 @@ class TelegramChannel(VoiceChannel):
         **kwargs
     ) -> bool:
         """
-        Send notification message to Telegram user.
+        Send notification message to Telegram user with dual delivery (text + voice).
+        
+        Implements TrustVoice pattern for accessibility:
+        - Text sent immediately (fast feedback)
+        - Voice follows ~2 seconds later (accessible for illiterate users)
         
         Args:
             user_id: Telegram chat ID (can be user or group)
             message: Text message to send
             parse_mode: 'Markdown', 'HTML', or None for plain text
             **kwargs: Additional Telegram send_message parameters
+                     - send_voice: bool = True (disable voice if needed)
+                     - language: str = None (auto-detected if not specified)
             
         Returns:
             bool: True if sent successfully
         """
         try:
+            from voice.telegram.voice_responses import send_voice_reply
+            
             chat_id = int(user_id)
             
-            await self.bot.send_message(
+            # Extract voice-specific kwargs
+            send_voice = kwargs.pop('send_voice', True)
+            language = kwargs.pop('language', None)
+            reply_to_message_id = kwargs.pop('reply_to_message_id', None)
+            reply_markup = kwargs.pop('reply_markup', None)
+            
+            # Use dual delivery (text + voice) with reply_markup support
+            await send_voice_reply(
+                bot=self.bot,
                 chat_id=chat_id,
-                text=message,
+                message=message,
                 parse_mode=parse_mode,
-                **kwargs
+                language=language,
+                send_voice=send_voice,
+                reply_to_message_id=reply_to_message_id,
+                reply_markup=reply_markup
             )
             
-            logger.info(f"Sent Telegram notification to {user_id}")
+            logger.info(f"Sent dual delivery notification to {user_id} (voice={'enabled' if send_voice else 'disabled'})")
             return True
             
         except TelegramError as e:

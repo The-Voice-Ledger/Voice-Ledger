@@ -22,12 +22,15 @@ Architecture:
 
 import sys
 import os
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -36,6 +39,7 @@ from database.models import (
     RFQ, RFQOffer, RFQAcceptance, RFQBroadcast,
     UserIdentity, Organization, Buyer, SessionLocal
 )
+from voice.marketplace.payment_messaging import send_payment_instructions
 
 # Database dependency for FastAPI
 def get_db():
@@ -80,6 +84,7 @@ class RFQResponse(BaseModel):
     created_at: datetime
     expires_at: Optional[datetime]
     offer_count: int = 0
+    broadcast_count: int = 0  # Number of cooperatives RFQ was broadcasted to
 
     class Config:
         from_attributes = True
@@ -188,6 +193,12 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
     # Get all cooperatives
     cooperatives = db.query(Organization).filter_by(type="COOPERATIVE").all()
     
+    # Quick exit if no cooperatives
+    if not cooperatives:
+        logger.info(f"No cooperatives to broadcast RFQ {rfq.id}")
+        return
+    
+    broadcast_count = 0
     for coop in cooperatives:
         relevance_score = calculate_relevance_score(rfq, coop, db)
         
@@ -201,8 +212,10 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
                 notified_at=datetime.utcnow()
             )
             db.add(broadcast)
+            broadcast_count += 1
     
     db.commit()
+    logger.info(f"Broadcasted RFQ {rfq.id} to {broadcast_count} cooperatives")
 
 # ============================================================================
 # API Endpoints
@@ -277,10 +290,13 @@ def create_rfq(
     # Smart broadcast to cooperatives
     broadcast_rfq_to_cooperatives(rfq, db)
     
+    # Count how many cooperatives were notified
+    broadcast_count = db.query(RFQBroadcast).filter_by(rfq_id=rfq.id).count()
+    
     # Get buyer organization
     buyer_org = db.query(Organization).filter_by(id=user.organization_id).first()
     
-    return RFQResponse(
+    response = RFQResponse(
         id=rfq.id,
         rfq_number=rfq.rfq_number,
         buyer_id=rfq.buyer_id,
@@ -296,6 +312,12 @@ def create_rfq(
         expires_at=rfq.expires_at,
         offer_count=0
     )
+    
+    # Add broadcast_count to response (not in schema, but useful for client)
+    response_dict = response.model_dump()
+    response_dict['broadcast_count'] = broadcast_count
+    
+    return response_dict
 
 @router.get("/rfqs", response_model=List[RFQResponse])
 def list_rfqs(
@@ -481,7 +503,7 @@ def get_rfq_offers(
     return results
 
 @router.post("/rfq/{rfq_id}/accept", response_model=AcceptanceResponse, status_code=201)
-def accept_offer(
+async def accept_offer(
     rfq_id: int,
     acceptance: AcceptOfferRequest,
     user_id: int = Query(..., description="User ID (buyer)"),
@@ -555,6 +577,24 @@ def accept_offer(
     
     db.commit()
     db.refresh(acceptance_record)
+    
+    # NEW: Send payment instructions to buyer and cooperative
+    try:
+        # Get cooperative organization
+        cooperative_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
+        
+        # Send payment instructions
+        await send_payment_instructions(
+            acceptance=acceptance_record,
+            offer=offer,
+            rfq=rfq,
+            buyer=user,
+            cooperative_org=cooperative_org,
+            db=db
+        )
+    except Exception as e:
+        # Log error but don't fail the acceptance
+        print(f"Warning: Failed to send payment instructions: {e}")
     
     return AcceptanceResponse(
         id=acceptance_record.id,

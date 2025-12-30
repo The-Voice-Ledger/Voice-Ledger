@@ -96,6 +96,14 @@ except ImportError as e:
     MARKETPLACE_AVAILABLE = False
     print(f"ℹ️  Marketplace module not available: {e}")
 
+# Import Container Offerings router (Phase 4.5 - fractional ownership)
+try:
+    from voice.marketplace.container_api import router as container_router
+    CONTAINER_API_AVAILABLE = True
+except ImportError as e:
+    CONTAINER_API_AVAILABLE = False
+    print(f"ℹ️  Container API module not available: {e}")
+
 # Import Batch Photo Verification router (Phase C - EUDR GPS photo compliance)
 try:
     from voice.verification.batch_photo_api import router as batch_photo_router
@@ -104,6 +112,36 @@ except ImportError as e:
     BATCH_PHOTO_AVAILABLE = False
     print(f"ℹ️  Batch photo verification module not available: {e}")
 
+# Import Web Admin Dashboard router (Lab 17 - bilingual web interface)
+try:
+    from voice.web.admin_api import router as web_admin_router
+    WEB_ADMIN_AVAILABLE = True
+except ImportError as e:
+    WEB_ADMIN_AVAILABLE = False
+    print(f"ℹ️  Web admin module not available: {e}")
+
+# Import User Profile API router (Lab 17 - bilingual voice UI)
+try:
+    from voice.web.user_profile_api import router as user_profile_router
+    USER_PROFILE_AVAILABLE = True
+except ImportError as e:
+    USER_PROFILE_AVAILABLE = False
+    print(f"ℹ️  User profile module not available: {e}")
+
+# Import Web Voice API router (Lab 17 - bilingual voice UI with TTS)
+try:
+    from voice.web.voice_api import router as voice_web_router
+    VOICE_WEB_AVAILABLE = True
+except ImportError as e:
+    VOICE_WEB_AVAILABLE = False
+    print(f"ℹ️  Web voice module not available: {e}")
+# Import Mini App API router (Lab 22 - Telegram Mini Apps)
+try:
+    from voice.telegram.miniapp_api import router as miniapp_router, mini_app_router
+    MINIAPP_AVAILABLE = True
+except ImportError as e:
+    MINIAPP_AVAILABLE = False
+    print(f"ℹ️  Mini app module not available: {e}")
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -126,9 +164,10 @@ if VERIFICATION_AVAILABLE:
     print("✅ Verification endpoints registered at /voice/verify/*")
 
 # Include Admin router if available (Phase 5)
-if ADMIN_AVAILABLE:
-    app.include_router(admin_router, prefix="/admin")
-    print("✅ Admin endpoints registered at /admin/*")
+# DISABLED: Replaced by Web Admin Dashboard (Lab 17)
+# if ADMIN_AVAILABLE:
+#     app.include_router(admin_router, prefix="/admin")
+#     print("✅ Admin endpoints registered at /admin/*")
 
 # Include Batch Verification router (Lab 10)
 if BATCH_VERIFY_AVAILABLE:
@@ -140,10 +179,36 @@ if MARKETPLACE_AVAILABLE:
     app.include_router(marketplace_router)
     print("✅ Marketplace/RFQ endpoints registered at /api/*")
 
+# Include Container Offerings router (Phase 4.5)
+if CONTAINER_API_AVAILABLE:
+    app.include_router(container_router)
+    print("✅ Container/fractional ownership endpoints registered at /api/container/*")
+
 # Include Batch Photo Verification router (Phase C - EUDR)
 if BATCH_PHOTO_AVAILABLE:
     app.include_router(batch_photo_router)
     print("✅ Batch photo verification endpoints registered at /batches/*")
+
+# Include Web Admin Dashboard router (Lab 17)
+if WEB_ADMIN_AVAILABLE:
+    app.include_router(web_admin_router)
+    print("✅ Web admin dashboard endpoints registered at /admin/* and /api/auth/*")
+
+# Include User Profile API router (Lab 17)
+if USER_PROFILE_AVAILABLE:
+    app.include_router(user_profile_router)
+    print("✅ User profile endpoints registered at /api/users/*")
+
+# Include Web Voice API router (Lab 17)
+if VOICE_WEB_AVAILABLE:
+    app.include_router(voice_web_router)
+    print("✅ Web voice interface endpoints registered at /api/voice/*")
+
+# Include Mini App API router (Lab 22)
+if MINIAPP_AVAILABLE:
+    app.include_router(miniapp_router)
+    app.include_router(mini_app_router)
+    print("✅ Mini app endpoints registered at /api/miniapp/* and /miniapps/*")
 
 # Allow local tools and UIs
 app.add_middleware(
@@ -739,6 +804,51 @@ async def get_task_status(
             "result": None,
             "error": None
         }
+
+
+# Serve static frontend files (Lab 17 - Web UI)
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, RedirectResponse
+from pathlib import Path
+
+frontend_dir = Path(__file__).parent.parent.parent / "frontend"
+if frontend_dir.exists():
+    # Mount static asset directories
+    app.mount("/css", StaticFiles(directory=str(frontend_dir / "css")), name="css")
+    app.mount("/js", StaticFiles(directory=str(frontend_dir / "js")), name="js")
+    
+    # Serve HTML pages as specific routes
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        return FileResponse(str(frontend_dir / "index.html"))
+    
+    @app.get("/login.html", include_in_schema=False)
+    async def serve_login():
+        return FileResponse(str(frontend_dir / "login.html"))
+    
+    @app.get("/admin.html", include_in_schema=False)
+    async def serve_admin():
+        return FileResponse(str(frontend_dir / "admin.html"))
+    
+    @app.get("/voice-ui.html", include_in_schema=False)
+    async def serve_voice_ui():
+        return FileResponse(str(frontend_dir / "voice-ui.html"))
+    
+    @app.get("/test-voice-ui.html", include_in_schema=False)
+    async def serve_test_voice_ui():
+        return FileResponse(str(frontend_dir / "test-voice-ui.html"))
+    
+    @app.get("/simple-test.html", include_in_schema=False)
+    async def serve_simple_test():
+        return FileResponse(str(frontend_dir / "simple-test.html"))
+    
+    @app.get("/test-rag.html", include_in_schema=False)
+    async def serve_test_rag():
+        return FileResponse(str(frontend_dir / "test-rag.html"))
+    
+    print(f"✅ Serving frontend from {frontend_dir}")
+else:
+    print(f"⚠️  Frontend directory not found at {frontend_dir}")
 
 
 if __name__ == "__main__":

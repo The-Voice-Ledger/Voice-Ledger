@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Ledger</title>
+  <link rel="stylesheet" href="/css/theme.css">
+  <style>
+    .landing-container {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: var(--spacing-lg);
+    }
+    
+    .landing-card {
+      background: var(--accent-white);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: var(--spacing-2xl);
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+    
+    .landing-logo {
+      font-size: 5rem;
+      margin-bottom: var(--spacing-lg);
+    }
+    
+    .landing-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--primary-blue);
+      margin-bottom: var(--spacing-md);
+    }
+    
+    .landing-subtitle {
+      color: var(--text-secondary);
+      font-size: 1.125rem;
+      margin-bottom: var(--spacing-xl);
+      line-height: 1.6;
+    }
+    
+    .landing-buttons {
+      display: flex;
+      gap: var(--spacing-md);
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--spacing-md);
+      margin-top: var(--spacing-xl);
+      text-align: left;
+    }
+    
+    .feature-item {
+      padding: var(--spacing-md);
+      background: var(--accent-gray);
+      border-radius: var(--radius-md);
+    }
+    
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: var(--spacing-sm);
+    }
+    
+    .feature-title {
+      font-weight: 600;
+      color: var(--primary-blue);
+      margin-bottom: var(--spacing-xs);
+    }
+    
+    .feature-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="landing-container">
+    <div class="landing-card">
+      <div class="landing-logo">☕</div>
+      <h1 class="landing-title">Voice Ledger</h1>
+      <p class="landing-subtitle">
+        Ethiopian Coffee Supply Chain Traceability<br>
+        Powered by Voice & Blockchain
+      </p>
+      
+      <div class="landing-buttons">
+        <a href="/login.html" class="btn btn-primary">
+          🔐 Login to Dashboard
+        </a>
+        <a href="/voice-ui.html" class="btn btn-secondary">
+          🎤 Voice Interface
+        </a>
+      </div>
+      
+      <div class="features-grid">
+        <div class="feature-item">
+          <div class="feature-icon">🌍</div>
+          <div class="feature-title">Bilingual</div>
+          <div class="feature-desc">Amharic & English voice support</div>
+        </div>
+        
+        <div class="feature-item">
+          <div class="feature-icon">🔗</div>
+          <div class="feature-title">Blockchain</div>
+          <div class="feature-desc">Immutable supply chain records</div>
+        </div>
+        
+        <div class="feature-item">
+          <div class="feature-icon">📱</div>
+          <div class="feature-title">Multi-Channel</div>
+          <div class="feature-desc">Telegram, Web, & Phone</div>
+        </div>
+        
+        <div class="feature-item">
+          <div class="feature-icon">🏪</div>
+          <div class="feature-title">Marketplace</div>
+          <div class="feature-desc">RFQ system for B2B trade</div>
+        </div>
+      </div>
+      
+      <div style="margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--accent-gray);">
+        <p style="color: var(--text-secondary); font-size: 0.75rem;">
+          Voice Ledger v1.8 - Lab 17 | © 2025 Voice Ledger
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Auto-redirect if already logged in
+    const token = localStorage.getItem('vl_token');
+    if (token) {
+      fetch(`${window.location.origin}/api/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(user => {
+        if (user.role === 'ADMIN') {
+          window.location.href = '/admin.html';
+        } else {
+          window.location.href = '/voice-ui.html';
+        }
+      })
+      .catch(() => {
+        // Token invalid, clear it
+        localStorage.removeItem('vl_token');
+        localStorage.removeItem('vl_user');
+      });
+    }
+  </script>
+</body>
+</html>

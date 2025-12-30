@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Interface - Voice Ledger</title>
+    <link rel="stylesheet" href="/css/theme.css?v=3">
+    <link rel="stylesheet" href="/css/voice.css?v=3">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="voice-header">
+            <div class="header-content">
+                <h1>🎙️ Voice Assistant</h1>
+                <div class="user-info">
+                    <span id="user-name">Loading...</span>
+                    <a href="/admin.html" class="btn-link">Dashboard</a>
+                    <button id="logout-btn" class="btn-secondary">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Language Selector -->
+        <div class="language-selector">
+            <div class="language-label">Voice Language:</div>
+            <div class="language-buttons">
+                <button id="lang-en" class="lang-btn active">
+                    🇺🇸 English
+                </button>
+                <button id="lang-am" class="lang-btn">
+                    🇪🇹 አማርኛ
+                </button>
+            </div>
+        </div>
+
+        <!-- Voice Interface -->
+        <div class="voice-interface">
+            
+            <!-- Conversation Display -->
+            <div class="conversation-container">
+                <div id="conversation-history" class="conversation-history">
+                    <div class="message system">
+                        <div class="message-content">
+                            Welcome! Press the microphone button and start speaking.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voice Controls -->
+            <div class="voice-controls">
+                <button id="mic-button" class="mic-button" title="Click to start recording">
+                    <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
+                <div id="recording-indicator" class="recording-indicator hidden">
+                    <div class="recording-dot"></div>
+                    <span>Recording...</span>
+                </div>
+                <div id="processing-indicator" class="processing-indicator hidden">
+                    <div class="spinner"></div>
+                    <span id="processing-text">Processing...</span>
+                </div>
+            </div>
+
+            <!-- Status Message -->
+            <div id="status-message" class="status-message hidden"></div>
+
+            <!-- Audio Player (hidden, for TTS playback) -->
+            <audio id="tts-player" style="display: none;"></audio>
+        </div>
+
+        <!-- Instructions -->
+        <div class="instructions">
+            <h3>How to Use:</h3>
+            <ol>
+                <li>Select your preferred language (English or Amharic)</li>
+                <li>Click the microphone button to start recording</li>
+                <li>Speak your command or question</li>
+                <li>Click again to stop recording</li>
+                <li>Wait for the AI assistant to respond with voice and text</li>
+            </ol>
+            
+            <h3>Example Commands:</h3>
+            <div class="examples">
+                <div class="example-card">
+                    <strong>🌾 Record New Batch:</strong>
+                    <p>"I harvested 50 kilograms of Sidama coffee from my farm in Gedeo"</p>
+                </div>
+                <div class="example-card">
+                    <strong>📦 Ship Batch:</strong>
+                    <p>"Ship batch ABC123 to Addis warehouse"</p>
+                </div>
+                <div class="example-card">
+                    <strong>☕ Process Coffee:</strong>
+                    <p>"Roasted batch XYZ456, output 850 kilograms"</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/voice-controller.js?v=4"></script>
+    <script>
+        // Initialize voice controller when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM fully loaded');
+            try {
+                window.voiceController = new VoiceController();
+                console.log('✅ Voice Controller created successfully');
+            } catch (error) {
+                console.error('❌ Error creating Voice Controller:', error);
+            }
+        });
+    </script>
+</body>
+</html>

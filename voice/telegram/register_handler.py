@@ -443,42 +443,17 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
                 # User already has phone from /start - skip phone question
                 logger.info(f"Reusing phone {existing_user.phone_number} from /start for user {user_id}")
                 data['phone_number'] = existing_user.phone_number
+                db.close()
                 
-                # Route directly to role-specific questions
-                role = data.get('role')
-                
-                if role == 'EXPORTER':
-                    conversation_states[user_id]['state'] = STATE_EXPORT_LICENSE
-                    db.close()
-                    return {
-                        'message': (
-                            "What is your export license number?\n"
-                            "(e.g., 'EXP-2024-1234' or similar official license)"
-                        )
-                    }
-                elif role == 'BUYER':
-                    conversation_states[user_id]['state'] = STATE_BUSINESS_TYPE
-                    db.close()
-                    return {
-                        'message': "What type of business are you?",
-                        'inline_keyboard': [
-                            [{'text': "☕ Coffee Roaster", 'callback_data': 'reg_business_ROASTER'}],
-                            [{'text': "📦 Importer", 'callback_data': 'reg_business_IMPORTER'}],
-                            [{'text': "🏪 Wholesaler", 'callback_data': 'reg_business_WHOLESALER'}],
-                            [{'text': "🛒 Retailer", 'callback_data': 'reg_business_RETAILER'}],
-                            [{'text': "☕ Cafe Chain", 'callback_data': 'reg_business_CAFE_CHAIN'}]
-                        ]
-                    }
-                else:
-                    # COOPERATIVE_MANAGER - go to registration number
-                    conversation_states[user_id]['state'] = STATE_REG_NUMBER
-                    db.close()
-                    return {
-                        'message': (
-                            "What is your cooperative's registration number? (optional)\n\n"
-                            "Reply with 'skip' if not applicable."
-                        )
-                    }
+                # Go to PIN setup (v1.7 - Phase 3)
+                conversation_states[user_id]['state'] = STATE_SET_PIN
+                return {
+                    'message': (
+                        "🔒 Set up a 4-digit PIN for web access\n\n"
+                        "This PIN will allow you to log into the Voice Ledger web dashboard.\n\n"
+                        "📌 Please enter exactly 4 digits (e.g., 1234):"
+                    )
+                }
             
             db.close()
         except Exception as e:

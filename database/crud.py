@@ -157,6 +157,89 @@ def get_event_by_hash(db: Session, event_hash: str) -> Optional[EPCISEvent]:
     """Query event by hash."""
     return db.query(EPCISEvent).filter(EPCISEvent.event_hash == event_hash).first()
 
+
+def get_user_shipments(db: Session, user_id: int) -> List[dict]:
+    """
+    Get all shipment events for batches created by a user.
+    
+    Args:
+        db: Database session
+        user_id: User's database ID (created_by_user_id)
+    
+    Returns:
+        List of shipment dicts with tracking info, status, and locations
+    """
+    from sqlalchemy import and_
+    
+    # Query shipment events for user's batches
+    shipments = db.query(EPCISEvent, CoffeeBatch).join(
+        CoffeeBatch,
+        EPCISEvent.batch_id == CoffeeBatch.id
+    ).filter(
+        and_(
+            CoffeeBatch.created_by_user_id == user_id,
+            EPCISEvent.biz_step == "shipping"
+        )
+    ).order_by(EPCISEvent.created_at.desc()).all()
+    
+    result = []
+    for event, batch in shipments:
+        # Parse EPCIS event JSON for location details
+        event_json = event.event_json or {}
+        
+        # Extract source and destination from EPCIS
+        source_location = "Unknown"
+        destination_location = "Unknown"
+        
+        source_list = event_json.get("sourceList", [])
+        if source_list and len(source_list) > 0:
+            source_gln = source_list[0].get("source", "")
+            # Could look up location name from GLN registry if available
+            source_location = batch.origin or source_gln[-10:] if source_gln else "Unknown"
+        
+        destination_list = event_json.get("destinationList", [])
+        if destination_list and len(destination_list) > 0:
+            dest_gln = destination_list[0].get("destination", "")
+            destination_location = dest_gln[-10:] if dest_gln else "Unknown"
+        
+        # Extract carrier info
+        carrier = event_json.get("gdst:vesselName")
+        tracking_number = event_json.get("gdst:vesselID")
+        
+        # Determine status based on disposition
+        disposition = event_json.get("disposition", "")
+        status = "in_transit"
+        if "in_transit" in disposition:
+            status = "in_transit"
+        elif "arriving" in disposition:
+            status = "arriving"
+        elif "received" in disposition:
+            status = "delivered"
+        else:
+            status = "pending"
+        
+        result.append({
+            'id': event.id,
+            'tracking_id': f"{batch.batch_id}-SHIP-{event.id}",
+            'batch_id': batch.batch_id,
+            'gtin': batch.gtin,
+            'quantity_kg': batch.quantity_kg,
+            'variety': batch.variety,
+            'status': status,
+            'current_location': source_location,
+            'destination': destination_location,
+            'carrier': carrier,
+            'tracking_number': tracking_number,
+            'event_time': event.event_time.isoformat() if event.event_time else None,
+            'created_at': event.created_at.strftime('%Y-%m-%d'),
+            'ipfs_cid': event.ipfs_cid,
+            'blockchain_tx_hash': event.blockchain_tx_hash,
+            'event_hash': event.event_hash
+        })
+    
+    return result
+
+
 def update_event_blockchain_tx(db: Session, event_id: int, tx_hash: str) -> EPCISEvent:
     """Update event with blockchain transaction hash and confirmation timestamp."""
     event = db.query(EPCISEvent).filter(EPCISEvent.id == event_id).first()
