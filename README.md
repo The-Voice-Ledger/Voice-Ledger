@@ -1,6 +1,6 @@
 # Voice Ledger
 
-**Voice-first blockchain traceability for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
+**A Voice-first blockchain traceability System for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
 **Current:** v2.0 (Production) - Telegram Mini Apps, RAG-enhanced AI, conversational UI  
 **Status:** Deployed, tested, ready for scale
@@ -9,7 +9,7 @@
 
 ## What It Does
 
-Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. The system transcribes, understands intent using RAG-enhanced conversational AI, generates standardized EPCIS 2.0 events, stores full data on IPFS, and anchors cryptographic hashes on-chain.
+The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. The system transcribes, understands intent using RAG-enhanced conversational AI, generates standardized EPCIS 2.0 events, stores full data on IPFS, and anchors cryptographic hashes on-chain.
 
 **The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. Minutes later, that batch has a tokenized identity (ERC-1155), blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that buyers can scan for full supply chain history. All accessible through Telegram Mini Apps with voice-first interaction.
 
