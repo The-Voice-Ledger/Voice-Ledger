@@ -10,7 +10,7 @@ Lab 18 Enhancement: RAG (Retrieval-Augmented Generation) integration for knowled
 import os
 import logging
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -42,6 +42,15 @@ Your role is to:
 3. Ask clarifying questions when information is missing or unclear
 4. Confirm collected information before executing commands
 5. Provide encouragement and guidance to users
+
+CRITICAL COMMUNICATION GUIDELINES:
+- Speak conversationally and naturally, as if talking to a farmer or supply chain worker
+- Your knowledge base (vector database) IS your brain - present information as if you know it directly
+- NEVER cite sources, mention documentation, file paths, lab numbers, or reference materials
+- NEVER say: "according to...", "as per Lab X", "the documentation shows", "based on the files", "in the system", etc.
+- Simply state facts confidently: "Here's how it works:", "The process is:", "You can do this by:"
+- Focus on WHAT happens and HOW to use it
+- Use everyday language, not technical jargon unless absolutely necessary
 
 SUPPLY CHAIN OPERATIONS:
 
@@ -133,22 +142,41 @@ DO NOT include any text outside the JSON structure. DO NOT include markdown code
 """
 
 
-def process_english_conversation(user_id: int, transcript: str, use_rag: bool = True) -> Dict[str, Any]:
+def process_english_conversation(
+    user_id: int, 
+    transcript: str, 
+    use_rag: bool = True,
+    context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Process English voice transcript using GPT-4 conversational AI.
+    
+    VOICE-FIRST ARCHITECTURE:
+    - Context-aware: Uses app context to resolve references and determine intent
+    - Action-oriented: Returns executable actions when user confirms
+    - Workflow-enabled: Manages multi-turn conversations
     
     This function:
     1. Retrieves conversation history
     2. (Lab 18) Enhances prompt with RAG-retrieved context if applicable
-    3. Sends transcript + history to GPT-4
-    4. Parses GPT-4 response
-    5. Updates conversation state
-    6. Returns result (ready to execute or needs more info)
+    3. Adds app context to system prompt (which app, visible data, etc.)
+    4. Sends transcript + history to GPT-4
+    5. Parses GPT-4 response
+    6. Updates conversation state
+    7. Returns result (ready to execute or needs more info)
     
     Args:
         user_id: Database user ID
         transcript: Transcribed text from user's voice message
         use_rag: Whether to use RAG enhancement (default: True)
+        context: App context dict with structure:
+            {
+                'app': 'batch_browser',
+                'visible_batches': [{id, origin, quantity, ...}],
+                'user_role': 'farmer',
+                'can_create': True,
+                'view': 'list'
+            }
         
     Returns:
         {
@@ -156,7 +184,11 @@ def process_english_conversation(user_id: int, transcript: str, use_rag: bool = 
             "ready_to_execute": bool,  # Whether we can execute command
             "intent": str,  # Operation name (if ready)
             "entities": dict,  # Collected entities (if ready)
-            "needs_clarification": bool  # Whether we need more info
+            "needs_clarification": bool,  # Whether we need more info
+            "action": dict,  # Executable action (if ready)
+            "workflow_state": str,  # Current workflow state
+            "workflow_type": str,  # Type of workflow
+            "session_id": str  # Workflow session ID
         }
     """
     try:
@@ -276,17 +308,88 @@ def process_english_conversation(user_id: int, transcript: str, use_rag: bool = 
         
         # Lab 18: Enhance system prompt with RAG if available and enabled
         system_prompt = SYSTEM_PROMPT
+        
+        # VOICE-FIRST: Add app context to system prompt
+        if context:
+            context_prompt = f"""
+
+CURRENT CONTEXT (Mini App):
+App: {context.get('app', 'unknown')}
+User Role: {context.get('user_role', 'unknown')}
+View: {context.get('view', 'unknown')}
+
+"""
+            # Add visible data context
+            if context.get('visible_batches'):
+                batches_summary = []
+                for b in context.get('visible_batches', [])[:5]:  # First 5 for context
+                    batches_summary.append(
+                        f"- {b.get('batch_id', b.get('id'))}: {b.get('origin', 'unknown')} "
+                        f"{b.get('quantity_kg', 0)}kg, {b.get('status', 'unknown')}"
+                    )
+                context_prompt += "Visible Batches:\n" + "\n".join(batches_summary) + "\n\n"
+            
+            if context.get('visible_rfqs'):
+                rfqs_summary = []
+                for r in context.get('visible_rfqs', [])[:5]:
+                    rfqs_summary.append(
+                        f"- RFQ#{r.get('id')}: {r.get('quantity_kg')}kg {r.get('origin')} "
+                        f"at ${r.get('price_per_kg', 0)}/kg"
+                    )
+                context_prompt += "Visible RFQs:\n" + "\n".join(rfqs_summary) + "\n\n"
+            
+            if context.get('visible_offers'):
+                offers_summary = []
+                for o in context.get('visible_offers', [])[:5]:
+                    offers_summary.append(
+                        f"- Offer#{o.get('id')}: {o.get('quantity_kg')}kg {o.get('origin')} "
+                        f"at ${o.get('price_per_kg', 0)}/kg"
+                    )
+                context_prompt += "Visible Offers:\n" + "\n".join(offers_summary) + "\n\n"
+            
+            if context.get('current_batch'):
+                batch = context['current_batch']
+                context_prompt += f"""Current Batch Being Viewed:
+- ID: {batch.get('batch_id', batch.get('id'))}
+- Origin: {batch.get('origin_region', 'unknown')}
+- Quantity: {batch.get('quantity_kg', 0)}kg
+- Grade: {batch.get('grade', 'unknown')}
+- Status: {batch.get('status', 'unknown')}
+
+"""
+            
+            if context.get('user_data'):
+                user = context['user_data']
+                context_prompt += f"""User Profile:
+- Name: {user.get('name', 'unknown')}
+- Role: {user.get('role', 'unknown')}
+- Language: {user.get('language', 'en')}
+- Batch Count: {user.get('stats', {}).get('batch_count', 0)}
+
+"""
+            
+            context_prompt += """Use this context to:
+1. Resolve references like "this batch", "the top one", "my latest"
+2. Determine if user wants to CREATE something or VIEW/FILTER existing data
+3. Extract specific IDs/values from visible data when user references them
+4. Return executable actions when user confirms operations
+
+When user says "this" or "that", refer to the current/visible data above.
+When user wants to create (batch, RFQ, offer), start appropriate workflow.
+"""
+            
+            system_prompt = SYSTEM_PROMPT + context_prompt
+        
         if use_rag and RAG_AVAILABLE:
             try:
                 system_prompt = enhance_query_with_rag(
                     query=transcript,
-                    base_prompt=SYSTEM_PROMPT,
+                    base_prompt=system_prompt,
                     max_context_tokens=2000
                 )
                 logger.info(f"Enhanced prompt with RAG for user {user_id}")
             except Exception as rag_error:
                 logger.warning(f"RAG enhancement failed, using base prompt: {rag_error}")
-                system_prompt = SYSTEM_PROMPT
         
         # Build messages for GPT-4
         messages = [{"role": "system", "content": system_prompt}]

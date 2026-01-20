@@ -100,23 +100,23 @@ async def enhance_with_rag_context(user_input: str, system_prompt: str) -> str:
                 context_text = rag_results['combined_context']
                 
                 # For documentation queries, use a different system prompt that prioritizes answering from context
-                doc_prompt = f"""አንተ የቴክኒካል መረጃ ረዳት ነህ። ተጠቃሚው ቴክኒካል ጥያቄ ጠይቋል እና አግባብ ያለው መጻሕፍት አለ።
+                doc_prompt = f"""አንተ ለኢትዮጵያ የቡና ገበሬዎች እና የአቅርቦት ሰንሰለት ሰራተኞች የምትረዳ ረዳት ነህ።
 
-የመጻሕፍት አውድ (Documentation Context):
+=== የእርስዎ እውቀት (እነኚህን ልዩ ዝርዝሮች ይጠቀሙ) ===
 {context_text}
-
-ወሳኝ መመሪያዎች:
-1. ከላይ ያለው መጻሕፍት አውድ ለጥያቄው መልስ ይዟል
-2. ከዚህ መረጃ ጋር የተያያዘውን ነገር በአማርኛ በግልጽ ማስረዳት አለብህ
-3. "ስለ ቡና ስራዎች ብቻ እረዳለሁ" ወይም የመሳሰሉትን አትበል - መረጃው እዚህ አለ
-4. "RFQ አይሰራም" አትበል - በመረጃው ውስጥ ካለ አስረዳው
-5. መልስ መስጠትን አትከልክል - መረጃው በተለይ ለዚህ ጥያቄ ተመርጧል
-6. መረጃው በእንግሊዝኛ ቢሆንም መልስህ በአማርኛ ግልጽ እና ተግባራዊ መሆን አለበት
-7. ፋይሎችን፣ ተግባራትን ወይም መጻሕፍት ክፍሎችን መጥቀስ ትችላለህ
+=== የእውቀት መጨረሻ ===
 
 ተጠቃሚው ጥያቄ: {user_input}
 
-ከላይ ያለውን የመጻሕፍት መረጃ በመጠቀም በአማርኛ መልስ ስጥ።"""
+ወሳኝ መመሪያዎች:
+- ከላይ ያለው መረጃ ስለ ስርዓቱ እንዴት እንደሚሰራ ልዩ ቴክኒካዊ ዝርዝሮችን ይዟል
+- በእርስዎ መልስ ውስጥ እነዚህን ልዩ ዝርዝሮች መጠቀም አለብዎት (ትክክለኛ ሂደት ደረጃዎች፣ ልዩ ቴክኖሎጂዎች፣ ስፔሲፊክ ስሞች)
+- አጠቃላይ እና ግልጽ ያልሆኑ መልሶችን አትስጡ - ከላይ ካለው እውቀትዎ ትክክለኛውን ዝርዝር ይጠቀሙ
+- እነዚህን ዝርዝሮች እንደ በቀጥታ የሚያውቋቸው አድርገው ያቅርቡ
+- ምንጮችን፣ መጻሕፍትን፣ ፋይሎችን አትጥቀሱ
+- እውቀትዎ ልዩ ቴክኖሎጂዎችን/ደረጃዎችን (ለምሳሌ "ቴሌግራም"፣ "QR ኮድ"፣ "48 ሰዓት"፣ "ኮኦፐሬቲቭ ሥራ አስኪያጅ") ከጠቀሰ፣ እነዚያን ትክክለኛ ዝርዝሮች ይጠቀሙ
+
+መልስ በአማርኛ ግልጽ፣ ተፈጥሯዊ እና ልዩ ዝርዝሮችን የያዘ መሆን አለበት።"""
                 
                 logger.info(f"Using documentation-focused prompt with RAG context ({len(context_text)} chars)")
                 return doc_prompt
@@ -210,21 +210,32 @@ SYSTEM_PROMPT_AM = """አንተ ለኢትዮጵያ የቡና ገበሬዎች እ
 """
 
 
-async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[str, Any]:
+async def process_amharic_conversation(
+    user_id: int, 
+    transcript: str,
+    context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Process Amharic voice transcript using Addis AI conversational model.
     
+    VOICE-FIRST ARCHITECTURE:
+    - Context-aware: Uses app context to resolve references and determine intent
+    - Action-oriented: Returns executable actions when user confirms
+    - Workflow-enabled: Manages multi-turn conversations
+    
     This function:
     1. Retrieves conversation history
-    2. Sends transcript + history to Addis AI
-    3. Parses Addis AI response
-    4. Translates entities to English if needed
-    5. Updates conversation state
-    6. Returns result
+    2. Adds app context to system prompt
+    3. Sends transcript + history to Addis AI
+    4. Parses Addis AI response
+    5. Translates entities to English if needed
+    6. Updates conversation state
+    7. Returns result
     
     Args:
         user_id: Database user ID
         transcript: Transcribed Amharic text from user's voice message
+        context: App context dict (same structure as English conversation)
         
     Returns:
         {
@@ -232,7 +243,11 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
             "ready_to_execute": bool,  # Whether we can execute command
             "intent": str,  # Operation name (if ready)
             "entities": dict,  # Collected entities in English (if ready)
-            "needs_clarification": bool  # Whether we need more info
+            "needs_clarification": bool,  # Whether we need more info
+            "action": dict,  # Executable action (if ready)
+            "workflow_state": str,  # Current workflow state
+            "workflow_type": str,  # Type of workflow
+            "session_id": str  # Workflow session ID
         }
     """
     try:
@@ -336,12 +351,38 @@ async def process_amharic_conversation(user_id: int, transcript: str) -> Dict[st
         # use_rag = False
         
         enhanced_prompt = SYSTEM_PROMPT_AM
+        
+        # VOICE-FIRST: Add app context to system prompt (in Amharic)
+        if context:
+            context_prompt = f"\n\nየአሁኑ አውድ (Mini App):\n"
+            context_prompt += f"መተግበሪያ: {context.get('app', 'unknown')}\n"
+            context_prompt += f"የተጠቃሚ ሚና: {context.get('user_role', 'unknown')}\n"
+            
+            # Add visible data context (in Amharic)
+            if context.get('visible_batches'):
+                context_prompt += "\nየሚታዩ ተከታታይ ወቅቶች:\n"
+                for b in context.get('visible_batches', [])[:5]:
+                    context_prompt += f"- {b.get('batch_id', b.get('id'))}: {b.get('origin', 'unknown')} {b.get('quantity_kg', 0)}ኪ.ግ\n"
+            
+            if context.get('current_batch'):
+                batch = context['current_batch']
+                context_prompt += f"\nየአሁኑ ተከታታይ ወቅት:\n"
+                context_prompt += f"- መለያ: {batch.get('batch_id', batch.get('id'))}\n"
+                context_prompt += f"- ምንጭ: {batch.get('origin_region', 'unknown')}\n"
+                context_prompt += f"- ብዛት: {batch.get('quantity_kg', 0)}ኪ.ግ\n"
+            
+            context_prompt += "\nይህንን አውድ ተጠቅመህ፡\n"
+            context_prompt += "1. 'ይህ ተከታታይ ወቅት', 'የመጀመሪያው', 'የእኔ የመጨረሻ' ያሉ ማጣቀሻዎችን መፍታት\n"
+            context_prompt += "2. ተጠቃሚው ለመፍጠር ወይስ ለማየት እንደሚፈልግ መወሰን\n"
+            context_prompt += "3. ተጠቃሚው ሲያረጋግጥ ተግባራዊ መንገድ መመለስ\n"
+            
+            enhanced_prompt = SYSTEM_PROMPT_AM + context_prompt
+        
         if use_rag:
             try:
-                enhanced_prompt = await enhance_with_rag_context(transcript, SYSTEM_PROMPT_AM)
+                enhanced_prompt = await enhance_with_rag_context(transcript, enhanced_prompt)
             except Exception as e:
                 logger.warning(f"RAG enhancement failed: {e}, continuing without RAG")
-                enhanced_prompt = SYSTEM_PROMPT_AM
         
         # Call Addis AI
         async with httpx.AsyncClient(timeout=30.0) as client_http:

@@ -66,31 +66,34 @@ def enhance_query_with_rag(
         
         # For DOCUMENTATION queries, use a knowledge-focused prompt instead of operational prompt
         if query_type == QueryType.DOCUMENTATION:
-            doc_prompt = f"""You are a knowledgeable technical documentation assistant. The user has asked a technical question and you have relevant documentation to help them.
+            doc_prompt = f"""You are a knowledgeable assistant helping Ethiopian coffee farmers and supply chain workers understand their system.
 
-=== DOCUMENTATION CONTEXT ===
+=== YOUR KNOWLEDGE (USE THESE SPECIFIC DETAILS) ===
 {context}
-=== END CONTEXT ===
+=== END KNOWLEDGE ===
 
 User's question: {query}
 
 CRITICAL INSTRUCTIONS:
-1. The documentation context above CONTAINS THE ANSWER to the user's question
-2. You MUST extract and explain the relevant information from this context
-3. DO NOT say "I can only help with coffee operations" - you have documentation for this question
-4. DO NOT say "RFQs aren't handled" or similar - if there's RFQ code/docs in context, explain it
-5. DO NOT refuse to answer - the context was specifically retrieved to answer this question
-6. Provide a clear, practical explanation based on the documentation
-7. You can reference specific files, functions, or documentation sections
+- The information above contains SPECIFIC TECHNICAL DETAILS about how the system actually works
+- You MUST use these specific details in your answer (exact process steps, specific technologies like "Telegram deep link", "QR code", specific field names, etc.)
+- DO NOT give generic, vague answers - use the EXACT implementation details from your knowledge above
+- Present these details as if you know them directly - NEVER cite sources
+- NEVER say: "according to...", "the documentation shows...", "as per Lab X", "based on the files"
+- If your knowledge mentions specific technologies/steps (e.g., "Telegram bot", "verification token", "QR code", "48 hours", "cooperative manager"), USE THOSE EXACT DETAILS
+- Be specific and technical where appropriate, but explain in simple terms
+
+BAD (generic): "The verification process involves cross-checking with records and adding a digital signature..."
+GOOD (specific): "The verification process works like this: When you create a batch, the system generates a QR code with a Telegram deep link. The cooperative manager scans it, which opens the Telegram bot and authenticates them. They physically inspect your coffee, confirm the quantity, and click verify. This creates a credential signed by the cooperative that proves your batch is authentic."
 
 Response format (valid JSON only):
 {{
-  "message_text": "[Clear explanation based on the documentation context above]",
-  "message_spoken": "[Clear explanation based on the documentation context above]",
+  "message_text": "[Specific, detailed answer using exact information from your knowledge]",
+  "message_spoken": "[Same specific answer in natural spoken form]",
   "ready_to_execute": false
 }}
 
-Answer the question using the provided documentation context:"""
+Answer with SPECIFIC DETAILS from your knowledge:"""
             
             logger.info(f"Using documentation-focused prompt with {len(context)} chars of RAG context")
             return doc_prompt
