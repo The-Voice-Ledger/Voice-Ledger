@@ -138,8 +138,105 @@ def require_admin(user: UserIdentity = Depends(get_current_user)) -> UserIdentit
     Raises:
         HTTPException: If user is not an admin
     """
-    if user.role != 'ADMIN':
+    if user.role != 'ADMIN' and not user.is_approved:
         logger.warning(f"User {user.id} ({user.role}) attempted to access admin endpoint")
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return user
+
+
+def get_user_from_telegram(
+    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id")
+) -> Optional[UserIdentity]:
+    """
+    Get user from Telegram ID header (for mini apps).
+    
+    Returns:
+        UserIdentity object or None if header missing
+    """
+    if not x_telegram_user_id:
+        return None
+    
+    with get_db() as db:
+        user = db.query(UserIdentity).filter(
+            UserIdentity.telegram_user_id == str(x_telegram_user_id)
+        ).first()
+        
+        if user:
+            # Expunge to make accessible outside session
+            db.expunge(user)
+        return user
+
+
+def get_current_user_flexible(
+    authorization: Optional[str] = Header(None),
+    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id")
+) -> UserIdentity:
+    """
+    FastAPI dependency that accepts EITHER JWT token OR Telegram ID.
+    
+    Priority:
+    1. JWT Authorization header (for web interface)
+    2. X-Telegram-User-Id header (for mini apps)
+    
+    Usage:
+        @app.get("/api/resource")
+        async def get_resource(user: UserIdentity = Depends(get_current_user_flexible)):
+            return {"user_id": user.id}
+    
+    Returns:
+        UserIdentity object
+        
+    Raises:
+        HTTPException: If neither auth method provided or user not found
+    """
+    # Try JWT first
+    if authorization and authorization.startswith('Bearer '):
+        token = authorization.replace('Bearer ', '')
+        payload = verify_jwt_token(token)
+        user_id = payload.get('user_id')
+        
+        with get_db() as db:
+            from sqlalchemy.orm import joinedload
+            user = db.query(UserIdentity).options(joinedload(UserIdentity.organization)).filter_by(id=user_id).first()
+            if user:
+                db.expunge_all()
+                return user
+    
+    # Try Telegram ID
+    if x_telegram_user_id:
+        user = get_user_from_telegram(x_telegram_user_id)
+        if user:
+            return user
+    
+    # No valid auth
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required. Provide either Authorization header or X-Telegram-User-Id header"
+    )
+
+
+def require_admin_flexible(user: UserIdentity = Depends(get_current_user_flexible)) -> UserIdentity:
+    """
+    FastAPI dependency that requires admin access via EITHER JWT OR Telegram ID.
+    
+    Checks:
+    - User has is_approved=True (for any authenticated user with admin privileges)
+    - OR user.role == 'ADMIN' or 'SYSTEM_ADMIN' (legacy admin roles)
+    
+    Usage:
+        @app.get("/admin/dashboard")
+        async def admin_dashboard(admin: UserIdentity = Depends(require_admin_flexible)):
+            return {"message": "Admin dashboard"}
+    
+    Returns:
+        UserIdentity with admin privileges
+        
+    Raises:
+        HTTPException: If user doesn't have admin access
+    """
+    if not user.is_approved and user.role not in ['ADMIN', 'SYSTEM_ADMIN']:
+        logger.warning(f"User {user.id} ({user.role}, approved={user.is_approved}) attempted to access admin endpoint")
         raise HTTPException(status_code=403, detail="Admin access required")
     
     return user

@@ -210,13 +210,22 @@ if MINIAPP_AVAILABLE:
     app.include_router(mini_app_router)
     print("✅ Mini app endpoints registered at /api/miniapp/* and /miniapps/*")
 
-# Allow local tools and UIs
+# CORS Configuration - Allow frontend origins
+# Development: localhost:3000 (local Next.js)
+# Production: Vercel deployment
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://the-voice-ledger.vercel.app",
+    "https://*.vercel.app",  # All Vercel preview deployments
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -817,6 +826,11 @@ if frontend_dir.exists():
     app.mount("/css", StaticFiles(directory=str(frontend_dir / "css")), name="css")
     app.mount("/js", StaticFiles(directory=str(frontend_dir / "js")), name="js")
     
+    # Mount miniapps directory for shared resources
+    miniapps_dir = Path(__file__).parent.parent.parent / "miniapps"
+    if miniapps_dir.exists():
+        app.mount("/miniapps", StaticFiles(directory=str(miniapps_dir)), name="miniapps")
+    
     # Serve HTML pages as specific routes
     @app.get("/", include_in_schema=False)
     async def serve_index():
@@ -845,6 +859,34 @@ if frontend_dir.exists():
     @app.get("/test-rag.html", include_in_schema=False)
     async def serve_test_rag():
         return FileResponse(str(frontend_dir / "test-rag.html"))
+    
+    @app.get("/api/test-chromadb")
+    async def test_chromadb():
+        """Test ChromaDB connection and retrieval"""
+        try:
+            from voice.rag.config import get_chroma_client
+            client = get_chroma_client()
+            collection = client.get_collection('voice_ledger_docs_v2')
+            
+            # Test query
+            results = collection.query(
+                query_texts=['How does the RFQ marketplace work?'],
+                n_results=3
+            )
+            
+            return {
+                "status": "connected",
+                "collection": "voice_ledger_docs_v2",
+                "document_count": collection.count(),
+                "test_query": "How does the RFQ marketplace work?",
+                "results_found": len(results['documents'][0]),
+                "sample_result": results['documents'][0][0][:200] if results['documents'][0] else None
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
     
     print(f"✅ Serving frontend from {frontend_dir}")
 else:

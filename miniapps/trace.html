@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trace Coffee</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/miniapps/shared/voice.js"></script>
+    <link rel="stylesheet" href="/css/theme.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+
+        /* SVG Icons */
+        .icon {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .icon-sm {
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon-lg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .icon-xl {
+            width: 48px;
+            height: 48px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            color: white;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        /* Voice Button */
+        .voice-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+            color: white;
+        }
+
+        .voice-button:active {
+            transform: scale(0.95);
+            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);
+        }
+        
+        .voice-button:nth-of-type(2) {
+            width: 40px;
+            height: 40px;
+            background: #6366f1;
+        }
+        
+        .voice-button:nth-of-type(2):hover {
+            background: #4f46e5;
+        }
+
+        .voice-button.recording {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* Search Bar */
+        .search-bar {
+            background: white;
+            border-radius: 16px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+        }
+
+        .search-bar::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%);
+            pointer-events: none;
+        }
+
+        .search-bar input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            background: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .search-bar input::placeholder {
+            color: #999;
+        }
+
+        .search-icon {
+            color: #667eea;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Batch Selector */
+        .batch-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .batch-selector::-webkit-scrollbar {
+            display: none;
+        }
+
+        .batch-chip {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 24px;
+            padding: 10px 20px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .batch-chip:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .batch-chip.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-radius: 16px 16px 0 0;
+            pointer-events: none;
+        }
+
+        .card-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+
+        /* Batch Metadata */
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .metadata-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .metadata-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .metadata-value {
+            font-size: 16px;
+            color: #1a1a1a;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: 40px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 16px;
+            top: 30px;
+            bottom: 30px;
+            width: 2px;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .timeline-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .timeline-icon {
+            position: absolute;
+            left: -40px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 2;
+        }
+
+        .timeline-icon.commissioning {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+        }
+
+        .timeline-icon.shipping {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            color: white;
+        }
+
+        .timeline-icon.receiving {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: white;
+        }
+
+        .timeline-icon.transformation {
+            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+            color: white;
+        }
+
+        .timeline-icon.aggregation {
+            background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
+            color: white;
+        }
+
+        .timeline-icon.observation {
+            background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+            color: white;
+        }
+
+        .timeline-content {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .timeline-event-type {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+            text-transform: capitalize;
+        }
+
+        .timeline-details {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .timeline-timestamp {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+        }
+
+        /* Map Placeholder */
+        .map-placeholder {
+            height: 200px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            margin-top: 16px;
+        }
+
+        .map-placeholder .icon {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        /* Blockchain Section */
+        .blockchain-hash {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+            color: white;
+        }
+
+        .blockchain-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .blockchain-value {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            color: #4ade80;
+        }
+
+        .verified-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            margin-top: 12px;
+        }
+
+        /* Loading & Empty States */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+        }
+
+        .empty-state .icon {
+            margin-bottom: 16px;
+            opacity: 0.6;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- SVG Sprite Definitions -->
+    <svg style="display: none;">
+        <defs>
+            <!-- Microphone Icon -->
+            <symbol id="icon-microphone" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </symbol>
+
+            <!-- Trace Icon (3 connected circles) -->
+            <symbol id="icon-trace" viewBox="0 0 24 24">
+                <circle cx="6" cy="12" r="3" fill="currentColor"/>
+                <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                <circle cx="18" cy="12" r="3" fill="currentColor"/>
+                <line x1="9" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2"/>
+                <line x1="15" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2"/>
+            </symbol>
+
+            <!-- Search Icon -->
+            <symbol id="icon-search" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </symbol>
+
+            <!-- Box Icon -->
+            <symbol id="icon-box" viewBox="0 0 24 24">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" fill="none" stroke="currentColor" stroke-width="2"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" fill="none" stroke="currentColor" stroke-width="2"/>
+                <line x1="12" y1="22.08" x2="12" y2="12" stroke="currentColor" stroke-width="2"/>
+            </symbol>
+
+            <!-- Coffee Icon -->
+            <symbol id="icon-coffee" viewBox="0 0 24 24">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="none" stroke="currentColor" stroke-width="2"/>
+                <line x1="6" y1="1" x2="6" y2="4" stroke="currentColor" stroke-width="2"/>
+                <line x1="10" y1="1" x2="10" y2="4" stroke="currentColor" stroke-width="2"/>
+                <line x1="14" y1="1" x2="14" y2="4" stroke="currentColor" stroke-width="2"/>
+            </symbol>
+
+            <!-- Map Pin Icon -->
+            <symbol id="icon-map-pin" viewBox="0 0 24 24">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="none" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="10" r="3" fill="currentColor"/>
+            </symbol>
+
+            <!-- Check Icon -->
+            <symbol id="icon-check" viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+
+            <!-- Truck Icon -->
+            <symbol id="icon-truck" viewBox="0 0 24 24">
+                <rect x="1" y="3" width="15" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M16 8h5l3 3v5h-2" fill="none" stroke="currentColor" stroke-width="2"/>
+                <circle cx="5.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+                <circle cx="18.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+            </symbol>
+
+            <!-- Refresh Icon -->
+            <symbol id="icon-refresh" viewBox="0 0 24 24">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </symbol>
+
+            <!-- Link Icon -->
+            <symbol id="icon-link" viewBox="0 0 24 24">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </symbol>
+
+            <!-- Globe Icon -->
+            <symbol id="icon-globe" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="currentColor" stroke-width="2"/>
+            </symbol>
+        </defs>
+    </svg>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <svg class="icon icon-lg">
+                <use href="#icon-trace"/>
+            </svg>
+            <h1 class="header-title">Trace Coffee</h1>
+        </div>
+        <button class="voice-button" id="voiceButton">
+            <svg class="icon icon-lg">
+                <use href="#icon-microphone"/>
+            </svg>
+        </button>
+        <button class="voice-button" id="voiceHelpButton">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-bar">
+        <svg class="icon search-icon">
+            <use href="#icon-search"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="Search batch ID or lot number...">
+    </div>
+
+    <!-- Batch Selector -->
+    <div class="batch-selector" id="batchSelector">
+        <!-- Chips will be dynamically added here -->
+    </div>
+
+    <!-- Loading State -->
+    <div class="loading hidden" id="loadingState">
+        <div class="spinner"></div>
+        <p>Loading trace data...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state hidden" id="emptyState">
+        <svg class="icon icon-xl">
+            <use href="#icon-box"/>
+        </svg>
+        <h3>No Batch Selected</h3>
+        <p>Select a batch from above or search to view trace information</p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+        <!-- Batch Metadata Card -->
+        <div class="card">
+            <div class="card-content">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <svg class="icon">
+                            <use href="#icon-coffee"/>
+                        </svg>
+                    </div>
+                    <h2 class="card-title">Batch Details</h2>
+                </div>
+                <div class="metadata-grid" id="batchMetadata">
+                    <!-- Metadata items will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Card -->
+        <div class="card">
+            <div class="card-content">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <svg class="icon">
+                            <use href="#icon-trace"/>
+                        </svg>
+                    </div>
+                    <h2 class="card-title">Journey Timeline</h2>
+                </div>
+                <div class="timeline" id="timeline">
+                    <!-- Timeline items will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Card -->
+        <div class="card">
+            <div class="card-content">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <svg class="icon">
+                            <use href="#icon-map-pin"/>
+                        </svg>
+                    </div>
+                    <h2 class="card-title">Location Trail</h2>
+                </div>
+                <div class="map-placeholder">
+                    <svg class="icon icon-xl">
+                        <use href="#icon-map-pin"/>
+                    </svg>
+                    <p>Map visualization coming soon</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blockchain Card -->
+        <div class="card">
+            <div class="card-content">
+                <div class="card-header">
+                    <div class="card-icon">
+                        <svg class="icon">
+                            <use href="#icon-link"/>
+                        </svg>
+                    </div>
+                    <h2 class="card-title">Blockchain Verification</h2>
+                </div>
+                <div class="blockchain-hash">
+                    <div class="blockchain-label">Transaction Hash</div>
+                    <div class="blockchain-value" id="blockchainHash">
+                        Loading...
+                    </div>
+                </div>
+                <div class="verified-badge">
+                    <svg class="icon icon-sm">
+                        <use href="#icon-check"/>
+                    </svg>
+                    Verified on Blockchain
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Show back button
+        tg.BackButton.show();
+        tg.BackButton.onClick(() => {
+            window.location.href = '/miniapps/index';
+        });
+
+        // Get user ID
+        const userId = tg.initDataUnsafe?.user?.id || 'demo_user';
+
+        // State
+        let userBatches = [];
+        let currentBatch = null;
+        let isRecording = false;
+        let recordingTimeout = null;
+
+        // DOM Elements
+        const voiceButton = document.getElementById('voiceButton');
+        const searchInput = document.getElementById('searchInput');
+        const batchSelector = document.getElementById('batchSelector');
+        const loadingState = document.getElementById('loadingState');
+        const emptyState = document.getElementById('emptyState');
+        const mainContent = document.getElementById('mainContent');
+        const batchMetadata = document.getElementById('batchMetadata');
+        const timeline = document.getElementById('timeline');
+        const blockchainHash = document.getElementById('blockchainHash');
+
+        // Event type to icon mapping
+        const eventIconMap = {
+            'commissioning': 'check',
+            'commission': 'check',
+            'shipping': 'truck',
+            'ship': 'truck',
+            'receiving': 'box',
+            'receive': 'box',
+            'transformation': 'refresh',
+            'transform': 'refresh',
+            'aggregation': 'link',
+            'aggregate': 'link',
+            'observation': 'globe',
+            'observe': 'globe'
+        };
+
+        // Initialize
+        async function init() {
+            await loadUserBatches();
+            setupEventListeners();
+            
+            // Show empty state initially
+            emptyState.classList.remove('hidden');
+        }
+
+        // Load user's batches for selector
+        async function loadUserBatches() {
+            try {
+                const response = await fetch(`/api/miniapp/batches?user_id=${userId}`);
+                const data = await response.json();
+                
+                if (data.success && data.batches) {
+                    userBatches = data.batches;
+                    renderBatchSelector();
+                }
+            } catch (error) {
+                console.error('Error loading batches:', error);
+                // Add default batch for demo
+                userBatches = [{ identifier: 'DEMO-001', name: 'Demo Batch' }];
+                renderBatchSelector();
+            }
+        }
+
+        // Render batch selector chips
+        function renderBatchSelector() {
+            batchSelector.innerHTML = userBatches.map(batch => `
+                <div class="batch-chip" data-batch="${batch.batch_id || batch.gtin}">
+                    <svg class="icon icon-sm">
+                        <use href="#icon-box"/>
+                    </svg>
+                    ${batch.batch_id || batch.gtin}
+                </div>
+            `).join('');
+
+            // Add click listeners
+            document.querySelectorAll('.batch-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    tg.HapticFeedback.impactOccurred('light');
+                    selectBatch(chip.dataset.batch);
+                });
+            });
+        }
+
+        // Select and load batch
+        async function selectBatch(batchId) {
+            // Update active state
+            document.querySelectorAll('.batch-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.dataset.batch === batchId);
+            });
+
+            // Show loading
+            loadingState.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            mainContent.classList.add('hidden');
+
+            try {
+                const response = await fetch(`/api/miniapp/trace/${batchId}?user_id=${userId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    currentBatch = data.batch;
+                    renderBatchData(data);
+                    
+                    // Show content
+                    loadingState.classList.add('hidden');
+                    mainContent.classList.remove('hidden');
+                    tg.HapticFeedback.notificationOccurred('success');
+                } else {
+                    throw new Error(data.error || 'Failed to load batch');
+                }
+            } catch (error) {
+                console.error('Error loading batch trace:', error);
+                tg.showAlert('Failed to load batch trace data');
+                tg.HapticFeedback.notificationOccurred('error');
+                
+                loadingState.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            }
+        }
+
+        // Render batch data
+        function renderBatchData(data) {
+            const { batch, events, blockchain_hash } = data;
+
+            // Render metadata
+            batchMetadata.innerHTML = `
+                <div class="metadata-item">
+                    <div class="metadata-label">Batch ID</div>
+                    <div class="metadata-value">${batch.batch_id || 'N/A'}</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Quantity</div>
+                    <div class="metadata-value">${batch.quantity_kg || '0'} kg</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Variety</div>
+                    <div class="metadata-value">${batch.variety || 'Arabica'}</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Status</div>
+                    <div class="metadata-value">
+                        <span class="status-badge">${batch.display_status || batch.status || 'pending'}</span>
+                    </div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Origin</div>
+                    <div class="metadata-value">${batch.origin || batch.origin_region || 'Ethiopia'}</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Grade</div>
+                    <div class="metadata-value">${batch.quality_grade || 'N/A'}</div>
+                </div>
+            `;
+
+            // Render timeline
+            if (events && events.length > 0) {
+                timeline.innerHTML = events.map(event => {
+                    const eventType = (event.event_type || event.biz_step || '').toLowerCase();
+                    const iconType = getEventIcon(eventType);
+                    const timestamp = formatTimestamp(event.event_time);
+
+                    return `
+                        <div class="timeline-item">
+                            <div class="timeline-icon ${eventType}">
+                                <svg class="icon icon-sm">
+                                    <use href="#icon-${iconType}"/>
+                                </svg>
+                            </div>
+                            <div class="timeline-content">
+                                <div class="timeline-event-type">${event.event_type || event.biz_step || 'Event'}</div>
+                                <div class="timeline-details">
+                                    ${event.biz_location ? `Location: ${event.biz_location}` : ''}
+                                    ${event.biz_step ? `<br>Step: ${event.biz_step}` : ''}
+                                    ${event.blockchain_tx_hash ? `<br>Blockchain: ${event.blockchain_tx_hash.substring(0, 16)}...` : ''}
+                                </div>
+                                <div class="timeline-timestamp">${timestamp}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                timeline.innerHTML = '<p style="color: #666;">No events recorded yet</p>';
+            }
+
+            // Render blockchain hash
+            if (blockchain_hash) {
+                blockchainHash.textContent = blockchain_hash;
+            } else {
+                blockchainHash.textContent = 'Not yet anchored';
+            }
+        }
+
+        // Get icon for event type
+        function getEventIcon(eventType) {
+            for (const [key, icon] of Object.entries(eventIconMap)) {
+                if (eventType.includes(key)) {
+                    return icon;
+                }
+            }
+            return 'check'; // default
+        }
+
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'Unknown';
+            
+            try {
+                const date = new Date(timestamp);
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+
+                if (diffMins < 1) return 'Just now';
+                if (diffMins < 60) return `${diffMins} min ago`;
+                if (diffHours < 24) return `${diffHours} hours ago`;
+                if (diffDays < 7) return `${diffDays} days ago`;
+                
+                return date.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                });
+            } catch (error) {
+                return timestamp;
+            }
+        }
+
+        // Voice Interface with trace context
+        const voiceInterface = new VoiceInterface(tg, {
+            context: {
+                app: 'trace_viewer',
+                view: 'search'
+            }
+        });
+
+        // Voice recording
+        voiceButton.addEventListener('click', async () => {
+            if (!voiceInterface.isRecording) {
+                await voiceInterface.startRecording(voiceButton);
+            } else {
+                await voiceInterface.stopRecording(voiceButton);
+            }
+        });
+        
+        document.getElementById('voiceHelpButton').addEventListener('click', () => {
+            tg.showPopup({
+                title: '🎤 Voice Commands',
+                message: 'Try saying:\n\n• "Trace batch [SSCC number]"\n• "When was this harvested?"\n• "Show verification details"\n• "Where did this come from?"\n• "What\'s the processing method?"\n\nTip: You can search by batch ID or SSCC code.',
+                buttons: [{ type: 'ok' }]
+            });
+        });
+        
+        // Register action handlers (Priority 3: Complete coverage)
+        voiceInterface.onAction('search_sscc', async (params) => {
+            const sscc = params.sscc || params.batch_id || params.query;
+            if (sscc) {
+                searchInput.value = sscc;
+                performSearch(sscc);
+                tg.HapticFeedback.impactOccurred('light');
+            } else {
+                tg.showAlert('Please specify a batch ID or SSCC to search');
+            }
+        });
+        
+        voiceInterface.onAction('show_verification', async (params) => {
+            if (currentBatchData) {
+                const verificationSection = document.getElementById('verificationSection');
+                if (verificationSection) {
+                    verificationSection.scrollIntoView({ behavior: 'smooth' });
+                    tg.HapticFeedback.impactOccurred('light');
+                }
+            } else {
+                tg.showAlert('Please load a batch first');
+            }
+        });
+        
+        voiceInterface.onAction('view_location', async (params) => {
+            if (!currentBatchData) {
+                tg.showAlert('Please load a batch first');
+                return;
+            }
+            
+            const location = params.location || params.location_name;
+            if (location) {
+                const events = currentBatchData.events || [];
+                const event = events.find(e => 
+                    e.location_name && e.location_name.toLowerCase().includes(location.toLowerCase())
+                );
+                
+                if (event) {
+                    tg.showPopup({
+                        title: '📍 Location Details',
+                        message: `${event.location_name}\n\nEvent: ${event.event_type}\nTime: ${new Date(event.event_time).toLocaleString()}`,
+                        buttons: [{ type: 'ok' }]
+                    });
+                    tg.HapticFeedback.impactOccurred('light');
+                } else {
+                    tg.showAlert(`Location "${location}" not found in batch history`);
+                }
+            } else {
+                // Show all locations
+                const events = currentBatchData.events || [];
+                const locations = [...new Set(events.map(e => e.location_name).filter(Boolean))];
+                tg.showPopup({
+                    title: '📍 All Locations',
+                    message: locations.join('\n') || 'No locations recorded',
+                    buttons: [{ type: 'ok' }]
+                });
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        });
+        
+        voiceInterface.onAction('show_route', async (params) => {
+            if (!currentBatchData) {
+                tg.showAlert('Please load a batch first');
+                return;
+            }
+            
+            const events = currentBatchData.events || [];
+            const locations = events
+                .filter(e => e.location_name)
+                .map(e => `${e.event_type}: ${e.location_name}`)
+                .join('\n↓\n');
+            
+            tg.showPopup({
+                title: '🗺️ Batch Route',
+                message: locations || 'No route data available',
+                buttons: [{ type: 'ok' }]
+            });
+            tg.HapticFeedback.impactOccurred('light');
+        });
+        
+        voiceInterface.onAction('export_data', async (params) => {
+            if (!currentBatchData) {
+                tg.showAlert('Please load a batch first');
+                return;
+            }
+            
+            return new Promise(resolve => {
+                tg.showPopup({
+                    title: '⚠️ Export Data',
+                    message: `Export traceability data for batch ${currentBatchData.batch_id}?\n\nFormat: JSON`,
+                    buttons: [
+                        { id: 'yes', type: 'default', text: 'Export' },
+                        { id: 'no', type: 'cancel' }
+                    ]
+                }, async (buttonId) => {
+                    if (buttonId === 'yes') {
+                        try {
+                            const dataStr = JSON.stringify(currentBatchData, null, 2);
+                            const blob = new Blob([dataStr], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `batch_${currentBatchData.batch_id}_trace.json`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                            
+                            tg.HapticFeedback.notificationOccurred('success');
+                            tg.showAlert('✅ Data exported');
+                        } catch (error) {
+                            tg.showAlert('Export failed: ' + error.message);
+                        }
+                    }
+                    resolve();
+                });
+            });
+        });
+        
+        voiceInterface.onAction('go_back', async (params) => {
+            if (currentBatchData) {
+                currentBatchData = null;
+                currentSSCC = null;
+                searchInput.value = '';
+                document.getElementById('results').innerHTML = '<div class="empty-state">🔍 Search for a batch to view trace</div>';
+                updateVoiceContext();
+                tg.HapticFeedback.impactOccurred('light');
+            } else {
+                tg.showAlert('Already in search view');
+            }
+        });
+        
+        /**
+         * Update voice context dynamically (Priority 1: Context Precision)
+         * Enhanced version with more detailed event context
+         */
+        function updateVoiceContext() {
+            if (currentBatchData) {
+                // Detail view: Include batch + events context
+                const events = currentBatchData.events || [];
+                
+                voiceInterface.setContext({
+                    view: 'detail',
+                    current_batch: {
+                        id: currentBatchData.batch_id,
+                        batch_id: currentBatchData.batch_id,
+                        origin_region: currentBatchData.origin_region,
+                        quantity_kg: currentBatchData.quantity_kg,
+                        grade: currentBatchData.grade,
+                        status: currentBatchData.status,
+                        verification_status: currentBatchData.eudr_compliant ? 'compliant' : 'pending',
+                        variety: currentBatchData.variety,
+                        processing_method: currentBatchData.processing_method
+                    },
+                    sscc: currentSSCC,
+                    event_count: events.length,
+                    recent_events: events.slice(0, 5).map(e => ({
+                        type: e.event_type,
+                        location: e.location_name,
+                        timestamp: e.event_time
+                    })),
+                    available_actions: ['show_verification', 'view_location', 'export_data', 'go_back']
+                });
+                
+                voiceInterface.clearContextKeys('search_query');
+            } else {
+                // Search view context
+                voiceInterface.setContext({
+                    view: 'search',
+                    available_actions: ['search_sscc', 'trace_batch']
+                });
+                
+                voiceInterface.clearContextKeys('current_batch', 'sscc', 'event_count', 'recent_events');
+            }
+            
+            console.log('Voice context updated - View:', currentBatchData ? 'detail' : 'search');
+        }
+
+        // Search functionality
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            
+            // Filter batch chips
+            document.querySelectorAll('.batch-chip').forEach(chip => {
+                const batchId = chip.dataset.batch.toLowerCase();
+                chip.style.display = batchId.includes(query) ? 'flex' : 'none';
+            });
+        });
+
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const query = e.target.value.trim();
+                if (query) {
+                    // Try to load the batch directly
+                    selectBatch(query);
+                }
+            }
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Theme
+            if (tg.colorScheme === 'dark') {
+                document.body.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #581c87 100%)';
+            }
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>

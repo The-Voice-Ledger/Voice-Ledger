@@ -19,7 +19,7 @@ from database.models import (
     UserIdentity, Organization, CoffeeBatch, 
     RFQ, RFQOffer, RFQAcceptance, PendingRegistration
 )
-from voice.web.auth import require_admin, create_jwt_token
+from voice.web.auth import require_admin, require_admin_flexible, create_jwt_token
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -127,7 +127,7 @@ def get_registrations(
     role: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """
     Get list of user registrations with filtering.
@@ -183,7 +183,7 @@ def get_registrations(
 def approve_registration(
     user_id: int,
     request: ApprovalRequest,
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """
     Approve a pending registration.
@@ -244,7 +244,7 @@ def approve_registration(
 def reject_registration(
     user_id: int,
     request: ApprovalRequest,
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """
     Reject a pending registration.
@@ -285,7 +285,7 @@ def get_users(
     approved: Optional[bool] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """
     Search and filter users.
@@ -335,7 +335,7 @@ def get_users(
 @router.get("/admin/users/{user_id}")
 def get_user_detail(
     user_id: int,
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get detailed user profile."""
     with get_db() as db:
@@ -377,7 +377,7 @@ def get_user_detail(
 def update_user(
     user_id: int,
     request: UserUpdateRequest,
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Update user profile."""
     with get_db() as db:
@@ -417,7 +417,7 @@ def get_rfqs(
     status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get RFQs with filtering."""
     with get_db() as db:
@@ -450,7 +450,7 @@ def get_rfqs(
 def get_offers(
     rfq_id: Optional[int] = Query(None),
     limit: int = Query(50, le=200),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get offers with optional RFQ filtering."""
     with get_db() as db:
@@ -481,7 +481,7 @@ def get_offers(
 def get_settlements(
     payment_status: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get acceptances (settlements) with filtering."""
     with get_db() as db:
@@ -518,7 +518,7 @@ def get_settlements(
 
 @router.get("/admin/analytics/summary")
 def get_analytics_summary(
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get dashboard summary statistics."""
     with get_db() as db:
@@ -539,12 +539,23 @@ def get_analytics_summary(
         
         # Batch stats
         total_batches = db.query(CoffeeBatch).count()
+        verified_batches = db.query(CoffeeBatch).filter(CoffeeBatch.verified_at.isnot(None)).count()
         
-        # Acceptance stats (instead of settlements)
+        # Acceptance stats (payments and deliveries)
         total_acceptances = db.query(RFQAcceptance).count()
-        pending_acceptances = db.query(RFQAcceptance).filter_by(status='PENDING').count()
+        pending_payments = db.query(RFQAcceptance).filter_by(payment_status='PENDING').count()
+        pending_deliveries = db.query(RFQAcceptance).filter_by(delivery_status='PENDING').count()
         
         return {
+            "pending_registrations": pending_registrations,
+            "total_users": total_users,
+            "active_rfqs": active_rfqs,
+            "total_offers": total_offers,
+            "total_batches": total_batches,
+            "verified_batches": verified_batches,
+            "total_acceptances": total_acceptances,
+            "pending_payments": pending_payments,
+            "pending_deliveries": pending_deliveries,
             "users": {
                 "total": total_users,
                 "pending_approval": pending_registrations,
@@ -556,11 +567,13 @@ def get_analytics_summary(
                 "total_offers": total_offers
             },
             "batches": {
-                "total": total_batches
+                "total": total_batches,
+                "verified": verified_batches
             },
-            "settlements": {
+            "acceptances": {
                 "total": total_acceptances,
-                "pending": pending_acceptances
+                "pending_payments": pending_payments,
+                "pending_deliveries": pending_deliveries
             }
         }
 
@@ -568,7 +581,7 @@ def get_analytics_summary(
 @router.get("/admin/analytics/registrations")
 def get_registration_analytics(
     days: int = Query(30, le=365),
-    admin: UserIdentity = Depends(require_admin)
+    admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """Get registration trends over time."""
     with get_db() as db:

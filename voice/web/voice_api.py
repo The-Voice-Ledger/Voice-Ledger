@@ -277,6 +277,11 @@ class VoiceUploadResponse(BaseModel):
     intent: Optional[str] = None
     entities: Optional[Dict[str, Any]] = None
     result: Optional[Dict[str, Any]] = None
+    # VOICE-FIRST ARCHITECTURE: Action execution and workflow support
+    action: Optional[Dict[str, Any]] = None  # Executable action for frontend
+    workflow: Optional[Dict[str, Any]] = None  # Workflow state info
+    session_id: Optional[str] = None  # Workflow session ID
+    workflow_completed: bool = False  # True when workflow finishes
 
 
 class VoiceStatusResponse(BaseModel):
@@ -301,10 +306,17 @@ class VoiceStatusResponse(BaseModel):
 async def upload_voice(
     file: UploadFile = File(...),
     language: str = 'en',
+    context: Optional[str] = None,
+    session_id: Optional[str] = None,
     user: Optional[UserIdentity] = Depends(get_optional_user)
 ):
     """
     Upload voice audio for instant conversational processing.
+    
+    VOICE-FIRST ARCHITECTURE:
+    - Context-aware: Accepts app context to understand what user is viewing/doing
+    - Workflow support: Manages multi-turn conversations via session_id
+    - Action execution: Returns executable actions for frontend
     
     Now supports anonymous users! No authentication required.
     
@@ -315,18 +327,21 @@ async def upload_voice(
     conversational experience:
     
     1. Transcribe audio (STT)
-    2. Process with conversational AI
+    2. Process with conversational AI (with context)
     3. Generate voice response (TTS)
-    4. Return transcript + audio URL
+    4. Return transcript + audio URL + actions
     
     Flow:
-    - User records voice → Upload
-    - Server transcribes → Processes conversation → Generates TTS
-    - Returns JSON with transcript, message, and audio_url
-    - Frontend plays audio and displays message
+    - User records voice → Upload with context
+    - Server transcribes → Processes conversation with context → Generates TTS
+    - Returns JSON with transcript, message, audio_url, and executable actions
+    - Frontend plays audio, displays message, executes actions
     
     Args:
         file: Audio file (WAV, WebM, MP3, M4A, OGG)
+        language: User's preferred language ('en' or 'am')
+        context: JSON string with app context (which app, visible data, user role, etc.)
+        session_id: Workflow session ID for multi-turn conversations
         user: Authenticated user from JWT
         
     Returns:
@@ -337,10 +352,23 @@ async def upload_voice(
             "audio_url": "/api/voice/audio/{audio_id}",
             "needs_clarification": true/false,
             "intent": "record_commission" (if ready),
-            "entities": {...} (if ready)
+            "entities": {...} (if ready),
+            "action": {"type": "share_batch", "params": {...}},
+            "workflow": {"type": "batch_recording", "state": "COLLECTING_ORIGIN"},
+            "session_id": "workflow_12345",
+            "workflow_completed": false
         }
     """
     try:
+        # Parse context from mini app
+        context_data = {}
+        if context:
+            try:
+                context_data = json.loads(context)
+                logger.info(f"Voice upload with context: {context_data.get('app', 'unknown')}")
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse context JSON")
+        
         # Validate file size (max 25MB like Telegram)
         contents = await file.read()
         if len(contents) > 25 * 1024 * 1024:
@@ -383,10 +411,14 @@ async def upload_voice(
                 detail=f"Speech recognition failed: {str(asr_error)}"
             )
         
-        # Step 2: Process conversation
+        # Step 2: Process conversation with context
         try:
             if user_language == 'am':
-                conv_result = await process_amharic_conversation(user_id, transcript)
+                conv_result = await process_amharic_conversation(
+                    user_id, 
+                    transcript,
+                    context=context_data
+                )
             else:
                 # process_english_conversation is sync, need to handle
                 import asyncio
@@ -395,7 +427,13 @@ async def upload_voice(
                 # Bind all parameters in partial for correct execution
                 conv_result = await loop.run_in_executor(
                     None,
-                    partial(process_english_conversation, user_id, transcript, use_rag=True)
+                    partial(
+                        process_english_conversation, 
+                        user_id, 
+                        transcript, 
+                        use_rag=True,
+                        context=context_data
+                    )
                 )
             
             # Debug: Check if conv_result is a dict or string
@@ -462,37 +500,44 @@ async def upload_voice(
         Path(audio_path).unlink(missing_ok=True)
         
         # Step 4: Return response
+        response_data = {
+            "transcript": transcript,
+            "message": assistant_message,
+            "message_text": conv_result.get('message_text', assistant_message),
+            "message_spoken": conv_result.get('message_spoken', assistant_message),
+            "audio_url": audio_url,
+            "needs_clarification": not ready_to_execute,
+            "needs_auth": conv_result.get('needs_auth', False),
+            "telegram_bot_url": conv_result.get('telegram_bot_url')
+        }
+        
+        # Add action if available
+        if conv_result.get('action'):
+            response_data["action"] = conv_result['action']
+        
+        # Add workflow info if in workflow
+        if conv_result.get('workflow_state'):
+            response_data["workflow"] = {
+                "type": conv_result.get('workflow_type'),
+                "state": conv_result.get('workflow_state')
+            }
+            response_data["session_id"] = conv_result.get('session_id', session_id)
+            response_data["workflow_completed"] = False
+        
+        if conv_result.get('workflow_completed'):
+            response_data["workflow_completed"] = True
+        
         if ready_to_execute:
             # Command is ready to execute
-            # In a full implementation, would call execute_voice_command here
-            # For now, just return the intent and entities
-            return VoiceUploadResponse(
-                status="success",
-                transcript=transcript,
-                message=assistant_message,
-                message_text=conv_result.get('message_text', assistant_message),
-                message_spoken=conv_result.get('message_spoken', assistant_message),
-                audio_url=audio_url,
-                needs_clarification=False,
-                needs_auth=conv_result.get('needs_auth', False),
-                telegram_bot_url=conv_result.get('telegram_bot_url'),
-                intent=conv_result.get('intent'),
-                entities=conv_result.get('entities'),
-                result=None  # Would contain database operation result
-            )
+            response_data["status"] = "success"
+            response_data["intent"] = conv_result.get('intent')
+            response_data["entities"] = conv_result.get('entities')
+            response_data["result"] = None  # Would contain database operation result
         else:
             # Need more information - continue conversation
-            return VoiceUploadResponse(
-                status="conversation",
-                transcript=transcript,
-                message=assistant_message,
-                message_text=conv_result.get('message_text', assistant_message),
-                message_spoken=conv_result.get('message_spoken', assistant_message),
-                audio_url=audio_url,
-                needs_clarification=True,
-                needs_auth=conv_result.get('needs_auth', False),
-                telegram_bot_url=conv_result.get('telegram_bot_url')
-            )
+            response_data["status"] = "conversation"
+        
+        return VoiceUploadResponse(**response_data)
     
     except HTTPException:
         raise

@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coffee Marketplace</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/miniapps/shared/voice.js"></script>
+    <link rel="stylesheet" href="/css/theme.css">
+    <style>
+        body {
+            padding: 20px;
+            padding-top: 80px;
+            min-height: 100vh;
+        }
+
+        .voice-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--primary-blue);
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .voice-button:hover {
+            background: var(--primary-blue-dark);
+            transform: scale(1.05);
+        }
+
+        .voice-button svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+        
+        .voice-button:nth-child(2) {
+            right: 78px;
+            width: 40px;
+            height: 40px;
+            background: #6366f1;
+        }
+        
+        .voice-button:nth-child(2):hover {
+            background: #4f46e5;
+        }
+        
+        .voice-button:nth-child(2) svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .voice-button.recording {
+            animation: pulse 1.5s ease-in-out infinite;
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            color: var(--primary-blue-dark);
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 svg {
+            width: 28px;
+            height: 28px;
+            color: var(--primary-blue);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-icon:hover {
+            background: #f9fafb;
+            border-color: var(--primary-blue);
+        }
+
+        .btn-icon svg {
+            width: 20px;
+            height: 20px;
+            color: var(--primary-blue);
+        }
+
+        .search-bar {
+            position: relative;
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 48px 12px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 16px;
+            background: white;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .search-icon svg {
+            width: 20px;
+            height: 20px;
+            color: #9ca3af;
+        }
+
+        .filters {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .filter-chip {
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .filter-chip.active {
+            background: var(--primary-blue);
+            color: white;
+            border-color: var(--primary-blue);
+        }
+
+        .rfq-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .rfq-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: var(--shadow-md);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rfq-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: var(--gradient-glossy);
+            pointer-events: none;
+        }
+
+        .rfq-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .rfq-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .rfq-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary-blue-dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .rfq-title svg {
+            width: 20px;
+            height: 20px;
+            color: var(--primary-blue);
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.open {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-badge.closed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .rfq-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .detail-item {
+            font-size: 14px;
+        }
+
+        .detail-label {
+            color: #6b7280;
+            font-size: 12px;
+            margin-bottom: 2px;
+        }
+
+        .detail-value {
+            color: var(--primary-blue-dark);
+            font-weight: 600;
+        }
+
+        .rfq-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .deadline {
+            font-size: 12px;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .deadline svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .btn-view {
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: var(--primary-blue);
+            color: white;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-view:hover {
+            background: var(--primary-blue-dark);
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-blue-dark);
+        }
+
+        .btn-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #f3f4f6;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .btn-close svg {
+            width: 20px;
+            height: 20px;
+            color: #6b7280;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary-blue-dark);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            background: var(--primary-blue);
+            color: white;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-submit:hover {
+            background: var(--primary-blue-dark);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            color: #d1d5db;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <!-- SVG Icons -->
+    <svg style="display: none;">
+        <symbol id="icon-microphone" viewBox="0 0 24 24">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="12" y1="19" x2="12" y2="23"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="23" x2="16" y2="23"/>
+        </symbol>
+        <symbol id="icon-dollar" viewBox="0 0 24 24">
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="12" y1="1" x2="12" y2="23"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24">
+            <circle fill="none" stroke="currentColor" stroke-width="2" cx="11" cy="11" r="8"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </symbol>
+        <symbol id="icon-filter" viewBox="0 0 24 24">
+            <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        </symbol>
+        <symbol id="icon-refresh" viewBox="0 0 24 24">
+            <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="23 4 23 10 17 10"/>
+            <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="1 20 1 14 7 14"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </symbol>
+        <symbol id="icon-calendar" viewBox="0 0 24 24">
+            <rect fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="16" y1="2" x2="16" y2="6"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="2" x2="8" y2="6"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="3" y1="10" x2="21" y2="10"/>
+        </symbol>
+        <symbol id="icon-coffee" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M8.5 3C5.5 3 3 5.5 3 8.5c0 2.4 1.5 4.4 3.7 5.2.3 2.2 1.9 4 4 4.6.5.2 1 .2 1.5.2s1-.1 1.5-.2c2.1-.6 3.7-2.4 4-4.6C20.5 12.9 22 10.9 22 8.5 22 5.5 19.5 3 16.5 3c-1.3 0-2.5.5-3.5 1.2C12 3.5 10.8 3 9.5 3H8.5z"/>
+        </symbol>
+        <symbol id="icon-x" viewBox="0 0 24 24">
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="18" y1="6" x2="6" y2="18"/>
+            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="6" y1="6" x2="18" y2="18"/>
+        </symbol>
+    </svg>
+
+    <!-- Voice Button -->
+    <button class="voice-button" id="voiceButton" title="Voice Input">
+        <svg><use href="#icon-microphone"/></svg>
+    </button>
+    <button class="voice-button" id="voiceHelpButton" title="Voice Help">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+    </button>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>
+            <svg><use href="#icon-dollar"/></svg>
+            Marketplace
+        </h1>
+        <div class="header-actions">
+            <button class="btn-icon" id="filterBtn" title="Filter">
+                <svg><use href="#icon-filter"/></svg>
+            </button>
+            <button class="btn-icon" id="refreshBtn" title="Refresh">
+                <svg><use href="#icon-refresh"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-bar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search RFQs...">
+        <div class="search-icon">
+            <svg><use href="#icon-search"/></svg>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters" id="filters">
+        <div class="filter-chip active" data-filter="all">All</div>
+        <div class="filter-chip" data-filter="open">Open</div>
+        <div class="filter-chip" data-filter="closed">Closed</div>
+        <div class="filter-chip" data-filter="arabica">Arabica</div>
+        <div class="filter-chip" data-filter="robusta">Robusta</div>
+    </div>
+
+    <!-- RFQ Grid -->
+    <div id="rfqContainer">
+        <div class="loading">Loading RFQs...</div>
+    </div>
+
+    <!-- Offer Modal -->
+    <div class="modal-overlay" id="offerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Submit Offer</h2>
+                <button class="btn-close" onclick="closeModal()">
+                    <svg><use href="#icon-x"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="rfqDetails"></div>
+                <form id="offerForm">
+                    <input type="hidden" id="rfqId">
+                    <div class="form-group">
+                        <label class="form-label">Quantity (kg)</label>
+                        <input type="number" class="form-input" id="offerQuantity" required min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Price per kg (USD)</label>
+                        <input type="number" class="form-input" id="offerPrice" required min="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Delivery Timeline (days)</label>
+                        <input type="number" class="form-input" id="deliveryDays" required min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Additional Notes</label>
+                        <textarea class="form-input" id="offerNotes" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn-submit">Submit Offer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+        tg.BackButton.show();
+        tg.BackButton.onClick(() => {
+            window.location.href = '/miniapps/index';
+        });
+
+        let rfqs = [];
+        let currentFilter = 'all';
+        let searchQuery = '';
+        let currentView = 'rfqs'; // Track current tab (rfqs/offers)
+        let currentRFQId = null; // Track selected RFQ
+        
+        // Voice Interface - Initialize BEFORE functions that use it
+        const voiceInterface = new VoiceInterface(tg, {
+            context: {
+                app: 'marketplace',
+                view: currentView,
+                user_role: 'buyer',
+                can_create_rfq: true,
+                can_create_offer: false
+            }
+        });
+        
+        /**
+         * Update voice context dynamically (Priority 1: Context Precision)
+         * Call this whenever the view or data changes
+         */
+        function updateVoiceContext() {
+            const filteredRFQs = rfqs.filter(rfq => {
+                const matchesFilter = currentFilter === 'all' || 
+                    (currentFilter === 'open' && rfq.status === 'open') ||
+                    (currentFilter === 'closed' && rfq.status === 'closed') ||
+                    (currentFilter.toLowerCase() === rfq.variety?.toLowerCase());
+                const matchesSearch = !searchQuery || 
+                    rfq.rfq_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    rfq.variety?.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesFilter && matchesSearch;
+            });
+            
+            if (currentRFQId) {
+                // Detail view context
+                const rfq = rfqs.find(r => r.id === currentRFQId);
+                if (rfq) {
+                    voiceInterface.setContext({
+                        view: 'rfq_detail',
+                        selected_rfq: {
+                            id: rfq.id,
+                            rfq_number: rfq.rfq_number,
+                            quantity_kg: rfq.quantity_kg,
+                            variety: rfq.variety,
+                            grade: rfq.grade,
+                            status: rfq.status,
+                            buyer_organization: rfq.buyer_organization,
+                            delivery_deadline: rfq.delivery_deadline
+                        },
+                        available_actions: ['submit_offer', 'view_details', 'go_back']
+                    });
+                }
+            } else {
+                // List view context
+                voiceInterface.setContext({
+                    view: 'rfq_list',
+                    current_filter: currentFilter,
+                    search_query: searchQuery,
+                    total_rfqs: rfqs.length,
+                    filtered_rfqs: filteredRFQs.length,
+                    visible_rfqs: filteredRFQs.slice(0, 10).map(r => ({
+                        id: r.id,
+                        rfq_number: r.rfq_number,
+                        quantity_kg: r.quantity_kg,
+                        variety: r.variety,
+                        status: r.status
+                    })),
+                    available_actions: ['view_rfq', 'create_rfq', 'filter_rfqs', 'search_rfqs']
+                });
+                
+                voiceInterface.clearContextKeys('selected_rfq');
+            }
+            
+            console.log('Voice context updated - View:', currentRFQId ? 'rfq_detail' : 'rfq_list');
+        }
+
+        // Load RFQs
+        async function loadRFQs() {
+            try {
+                const response = await fetch('/api/rfqs', {
+                    headers: {
+                        'X-Telegram-User-Id': tg.initDataUnsafe.user?.id || 0
+                    }
+                });
+                rfqs = await response.json();
+                renderRFQs();
+                
+                // Update voice context (Priority 1)
+                updateVoiceContext();
+            } catch (error) {
+                console.error('Error loading RFQs:', error);
+                document.getElementById('rfqContainer').innerHTML = '<div class="empty-state"><svg><use href="#icon-coffee"/></svg><p>Error loading RFQs</p></div>';
+            }
+        }
+
+        // Render RFQs
+        function renderRFQs() {
+            const container = document.getElementById('rfqContainer');
+            const filtered = rfqs.filter(rfq => {
+                const matchesFilter = currentFilter === 'all' || 
+                    (currentFilter === 'open' && rfq.status === 'open') ||
+                    (currentFilter === 'closed' && rfq.status === 'closed') ||
+                    (currentFilter.toLowerCase() === rfq.variety?.toLowerCase());
+                const matchesSearch = !searchQuery || 
+                    rfq.rfq_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    rfq.variety?.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesFilter && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="empty-state"><svg><use href="#icon-coffee"/></svg><p>No RFQs found</p></div>';
+                return;
+            }
+
+            container.innerHTML = '<div class="rfq-grid">' + filtered.map(rfq => `
+                <div class="rfq-card" onclick="showOffer(${rfq.id})">
+                    <div class="rfq-header">
+                        <div class="rfq-title">
+                            <svg><use href="#icon-coffee"/></svg>
+                            ${rfq.rfq_number || 'Coffee RFQ'}
+                        </div>
+                        <div class="status-badge ${rfq.status}">${rfq.status?.toUpperCase() || 'OPEN'}</div>
+                    </div>
+                    <div class="rfq-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Quantity</div>
+                            <div class="detail-value">${rfq.quantity_kg} kg</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Variety</div>
+                            <div class="detail-value">${rfq.variety || 'Arabica'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Grade</div>
+                            <div class="detail-value">${rfq.grade || 'Grade 1'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Buyer</div>
+                            <div class="detail-value">${rfq.buyer_organization || 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="rfq-footer">
+                        <div class="deadline">
+                            <svg><use href="#icon-calendar"/></svg>
+                            Deadline: ${rfq.delivery_deadline ? new Date(rfq.delivery_deadline).toLocaleDateString() : 'N/A'}
+                        </div>
+                        <button class="btn-view">View Details</button>
+                    </div>
+                </div>
+            `).join('') + '</div>';
+        }
+
+        // Show offer modal
+        function showOffer(rfqId) {
+            currentRFQId = rfqId; // Track selected RFQ
+            updateVoiceContext(); // Update voice context (Priority 1)
+            
+            const rfq = rfqs.find(r => r.id === rfqId);
+            if (!rfq) return;
+
+            document.getElementById('rfqId').value = rfqId;
+            document.getElementById('rfqDetails').innerHTML = `
+                <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 12px;">
+                    <h3 style="margin-bottom: 8px;">${rfq.title || 'Coffee RFQ'}</h3>
+                    <p style="color: #6b7280; font-size: 14px;">Quantity: ${rfq.quantity_kg} kg | Type: ${rfq.coffee_type || 'Arabica'}</p>
+                </div>
+            `;
+            document.getElementById('offerModal').classList.add('active');
+            tg.HapticFeedback.impactOccurred('light');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('offerModal').classList.remove('active');
+        }
+
+        // Submit offer
+        document.getElementById('offerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const rfqId = document.getElementById('rfqId').value;
+            const offerData = {
+                quantity_kg: parseFloat(document.getElementById('offerQuantity').value),
+                price_per_kg: parseFloat(document.getElementById('offerPrice').value),
+                delivery_timeline_days: parseInt(document.getElementById('deliveryDays').value),
+                notes: document.getElementById('offerNotes').value
+            };
+
+            try {
+                const response = await fetch(`/api/rfqs/${rfqId}/offers`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-User-Id': tg.initDataUnsafe.user?.id || 0
+                    },
+                    body: JSON.stringify(offerData)
+                });
+
+                if (response.ok) {
+                    tg.showPopup({
+                        title: 'Success',
+                        message: 'Your offer has been submitted!',
+                        buttons: [{ type: 'ok' }]
+                    });
+                    closeModal();
+                    document.getElementById('offerForm').reset();
+                } else {
+                    throw new Error('Failed to submit offer');
+                }
+            } catch (error) {
+                console.error('Error submitting offer:', error);
+                tg.showAlert('Failed to submit offer. Please try again.');
+            }
+        });
+
+        // Filter chips
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                currentFilter = chip.dataset.filter;
+                renderRFQs();
+                tg.HapticFeedback.impactOccurred('light');
+            });
+        });
+
+        // Search
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            renderRFQs();
+        });
+
+        // Refresh
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            loadRFQs();
+            tg.HapticFeedback.impactOccurred('medium');
+        });
+
+        const voiceButton = document.getElementById('voiceButton');
+
+        voiceButton.addEventListener('click', async () => {
+            if (!voiceInterface.isRecording) {
+                await voiceInterface.startRecording(voiceButton);
+            } else {
+                await voiceInterface.stopRecording(voiceButton);
+            }
+        });
+        
+        document.getElementById('voiceHelpButton').addEventListener('click', () => {
+            tg.showPopup({
+                title: '🎤 Voice Commands',
+                message: 'Try saying:\n\n• "Create an RFQ for 500kg"\n• "Show me active RFQs"\n• "Accept this offer"\n• "Filter by origin"\n• "What offers do I have?"\n\nTip: Switch between RFQs and Offers tabs to see different commands.',
+                buttons: [{ type: 'ok' }]
+            });
+        });
+        
+        // Register action handlers (Priority 3: Complete coverage)
+        voiceInterface.onAction('create_rfq', async (params) => {
+            console.log('Creating RFQ:', params);
+            const quantity = params.quantity_kg || params.quantity;
+            const origin = params.origin || 'coffee';
+            const price = params.price_per_kg || params.price;
+            
+            tg.showPopup({
+                title: '🎤 Create RFQ',
+                message: `Creating RFQ for ${quantity}kg ${origin} coffee${price ? ` at $${price}/kg` : ''}`,
+                buttons: [{ type: 'ok' }]
+            });
+            tg.HapticFeedback.notificationOccurred('success');
+            // TODO: Actually create RFQ via API
+        });
+        
+        voiceInterface.onAction('view_rfq', async (params) => {
+            const rfqId = params.rfq_id || params.id;
+            if (!rfqId) {
+                tg.showAlert('Please specify which RFQ to view');
+                return;
+            }
+            
+            const rfq = allRFQs.find(r => r.id === rfqId || r.rfq_number === rfqId);
+            if (rfq) {
+                currentRFQId = rfq.id;
+                showRFQDetail(rfq);
+                tg.HapticFeedback.impactOccurred('light');
+            } else {
+                tg.showAlert('RFQ not found');
+            }
+        });
+        
+        voiceInterface.onAction('submit_offer', async (params) => {
+            const rfqId = params.rfq_id || params.id || currentRFQId;
+            if (!rfqId) {
+                tg.showAlert('Please specify which RFQ to submit an offer for');
+                return;
+            }
+            
+            return new Promise(resolve => {
+                const quantity = params.quantity_kg || 'specified';
+                const price = params.price_per_kg ? `$${params.price_per_kg}/kg` : 'your price';
+                
+                tg.showPopup({
+                    title: '⚠️ Confirm Offer',
+                    message: `Submit offer for RFQ ${rfqId}?\n\nQuantity: ${quantity}kg\nPrice: ${price}`,
+                    buttons: [
+                        { id: 'yes', type: 'default', text: 'Submit' },
+                        { id: 'no', type: 'cancel' }
+                    ]
+                }, async (buttonId) => {
+                    if (buttonId === 'yes') {
+                        // TODO: Call API to submit offer
+                        tg.HapticFeedback.notificationOccurred('success');
+                        tg.showAlert('✅ Offer submitted');
+                    }
+                    resolve();
+                });
+            });
+        });
+        
+        voiceInterface.onAction('accept_offer', async (params) => {
+            const offerId = params.offer_id || params.id;
+            if (!offerId) {
+                tg.showAlert('Please specify which offer to accept');
+                return;
+            }
+            
+            return new Promise(resolve => {
+                tg.showPopup({
+                    title: '⚠️ Confirm Accept',
+                    message: `Accept offer ${offerId}?\n\nThis will create a binding agreement.`,
+                    buttons: [
+                        { id: 'yes', type: 'default', text: 'Accept' },
+                        { id: 'no', type: 'cancel' }
+                    ]
+                }, async (buttonId) => {
+                    if (buttonId === 'yes') {
+                        // TODO: Call API to accept offer
+                        tg.HapticFeedback.notificationOccurred('success');
+                        tg.showAlert('✅ Offer accepted');
+                    }
+                    resolve();
+                });
+            });
+        });
+        
+        voiceInterface.onAction('filter_rfqs', async (params) => {
+            const filter = params.filter || params.status;
+            if (filter && ['all', 'open', 'closed', 'my-rfqs'].includes(filter)) {
+                currentFilter = filter;
+                document.querySelectorAll('.filter-chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.filter === filter);
+                });
+                renderRFQs();
+                updateVoiceContext();
+                tg.HapticFeedback.impactOccurred('light');
+                tg.showPopup({
+                    title: 'Filter Applied',
+                    message: `Showing ${filter === 'all' ? 'all' : filter} RFQs`,
+                    buttons: [{ type: 'ok' }]
+                });
+            } else {
+                tg.showAlert('Invalid filter. Use: all, open, closed, or my-rfqs');
+            }
+        });
+        
+        voiceInterface.onAction('go_back', async (params) => {
+            if (currentRFQId) {
+                currentRFQId = null;
+                document.getElementById('detailView').style.display = 'none';
+                document.getElementById('listView').style.display = 'block';
+                updateVoiceContext();
+                tg.HapticFeedback.impactOccurred('light');
+            } else {
+                tg.showAlert('Already in list view');
+            }
+        });
+        
+        voiceInterface.onWorkflow('rfq_creation', async (workflow) => {
+            console.log('RFQ creation workflow started:', workflow);
+            tg.showPopup({
+                title: 'Creating RFQ',
+                message: 'Starting RFQ creation workflow via voice...',
+                buttons: [{ type: 'ok' }]
+            });
+        });
+        
+        voiceInterface.onWorkflow('container_listing', async (workflow) => {
+            console.log('Container listing workflow started:', workflow);
+            tg.showPopup({
+                title: 'Listing Container',
+                message: 'Starting container listing workflow via voice...',
+                buttons: [{ type: 'ok' }]
+            });
+        });
+        
+        // Add event listeners for filter and search (Priority 1)
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+                currentFilter = this.dataset.filter;
+                renderRFQs();
+                updateVoiceContext(); // Update context on filter change
+            });
+        });
+        
+        document.getElementById('searchInput')?.addEventListener('input', function(e) {
+            searchQuery = e.target.value;
+            renderRFQs();
+            updateVoiceContext(); // Update context on search
+        });
+
+        // Initial load
+        loadRFQs();
+    </script>
+</body>
+</html>

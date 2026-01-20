@@ -16,7 +16,7 @@ from typing import Optional
 from datetime import datetime
 from database.connection import get_db
 from database.models import UserIdentity
-from voice.web.auth import get_current_user
+from voice.web.auth import get_current_user, get_current_user_flexible
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,10 +54,11 @@ class LanguageUpdateResponse(BaseModel):
 # ============================================================
 
 @router.get("/api/users/me/profile", response_model=UserProfileResponse)
-def get_my_profile(user: UserIdentity = Depends(get_current_user)):
+def get_my_profile(user: UserIdentity = Depends(get_current_user_flexible)):
     """
     Get current user's profile including language preference.
     
+    Supports both JWT (web) and Telegram ID (mini apps) authentication.
     Used by voice UI to know which provider to use (AddisAI vs OpenAI).
     """
     return UserProfileResponse(

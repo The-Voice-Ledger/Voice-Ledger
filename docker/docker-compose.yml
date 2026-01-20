@@ -18,6 +18,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: voiceledger-chromadb
+    ports:
+      - "8001:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["http://localhost:3000","https://the-voice-ledger.vercel.app"]
+    volumes:
+      - chromadb-data:/chroma/chroma
+    networks:
+      - voiceledger-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   # Voice API Service
   voice-api:
     build:
@@ -29,6 +49,9 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - VOICE_LEDGER_API_KEY=${VOICE_LEDGER_API_KEY}
+      - CHROMA_CLIENT_TYPE=http
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
     volumes:
       - voice-uploads:/app/voice/uploads
       - epcis-events:/app/epcis/events
@@ -36,6 +59,8 @@ services:
       - voiceledger-network
     depends_on:
       blockchain:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/')"]
@@ -51,7 +76,7 @@ services:
       dockerfile: docker/dpp.Dockerfile
     container_name: voiceledger-dpp-resolver
     ports:
-      - "8001:8001"
+      - "8002:8001"
     volumes:
       - twin-data:/app/twin
       - dpp-passports:/app/dpp/passports
@@ -74,6 +99,8 @@ networks:
     name: voiceledger-network
 
 volumes:
+  chromadb-data:
+    name: voiceledger-chromadb-data
   voice-uploads:
     name: voiceledger-voice-uploads
   epcis-events:
