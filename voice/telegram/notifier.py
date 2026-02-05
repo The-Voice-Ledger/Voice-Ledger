@@ -91,10 +91,10 @@ def send_batch_confirmation(chat_id: int, batch_info: Dict[str, Any]) -> bool:
 
 async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -> bool:
     """
-    Send batch confirmation with verification QR code.
+    Send batch confirmation with verification QR code AND voice message.
     
-    Sends a photo (QR code) with caption containing batch details.
-    The QR code links to the verification page.
+    Sends a photo (QR code) with caption containing batch details,
+    followed by a voice message for accessibility.
     
     Args:
         chat_id: Telegram user/chat ID
@@ -104,6 +104,7 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
         True if sent successfully, False otherwise
     """
     import httpx
+    from telegram import Bot
     
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
     if not bot_token:
@@ -181,6 +182,39 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
         
         if response.status_code == 200:
             logger.info(f"Verification QR code sent to {chat_id}")
+            
+            # Now send voice message with TTS for accessibility
+            try:
+                from voice.telegram.voice_responses import send_voice_reply
+                bot = Bot(token=bot_token)
+                
+                # Simplified text for voice (without markdown and emojis)
+                voice_text = (
+                    f"Batch Created - Awaiting Verification. "
+                    f"Batch ID: {batch_id}. "
+                    f"GTIN: {gtin}. "
+                    f"Variety: {variety}. "
+                    f"Quantity: {quantity} kilograms. "
+                    f"Origin: {origin}. "
+                    f"Status: {status}. "
+                    f"Next Step: Physical Verification. "
+                    f"Take this QR code to the cooperative collection center. "
+                    f"The manager will scan it to verify your batch. "
+                    f"Valid for 48 hours. "
+                    f"Verification Token: {verification_token}"
+                )
+                
+                await send_voice_reply(
+                    bot=bot,
+                    chat_id=chat_id,
+                    message=voice_text,
+                    parse_mode=None,  # Plain text for voice
+                    send_voice=True
+                )
+                logger.info(f"Voice message sent for batch confirmation to {chat_id}")
+            except Exception as voice_err:
+                logger.warning(f"Failed to send voice message (QR sent successfully): {voice_err}")
+            
             return True
         else:
             logger.error(f"Telegram API error: {response.status_code} - {response.text}")

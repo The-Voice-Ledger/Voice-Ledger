@@ -452,13 +452,39 @@ def process_voice_command_task(
                 follow_up_message = conversation_result.get('message', 'Please provide more information.')
                 logger.info(f"Conversation not ready, sending follow-up: {follow_up_message}")
                 
-                # Send follow-up via Telegram if available
+                # Send follow-up via Telegram with TTS if available
                 if metadata and metadata.get("channel") == "telegram":
                     user_id = metadata.get("user_id")
                     if user_id:
                         try:
-                            from voice.telegram.notifier import send_telegram_notification
-                            send_telegram_notification(int(user_id), follow_up_message)
+                            # Use TTS-enabled channel notification for accessibility
+                            from voice.channels.telegram_channel import TelegramChannel
+                            channel = TelegramChannel()
+                            
+                            # Create new event loop for async call
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                loop.run_until_complete(
+                                    channel.send_notification(
+                                        user_id=str(user_id),
+                                        message=follow_up_message,
+                                        parse_mode='Markdown',
+                                        send_voice=True  # Enable TTS for follow-up questions
+                                    )
+                                )
+                                # Wait for voice generation to complete
+                                pending = asyncio.all_tasks(loop)
+                                if pending:
+                                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                            finally:
+                                try:
+                                    if hasattr(loop, 'shutdown_asyncgens'):
+                                        loop.run_until_complete(loop.shutdown_asyncgens())
+                                except:
+                                    pass
+                                loop.close()
                         except Exception as msg_error:
                             logger.error(f"Failed to send follow-up message: {msg_error}")
                 

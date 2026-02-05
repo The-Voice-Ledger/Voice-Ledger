@@ -192,18 +192,21 @@ def generate_batch_id_from_entities(entities: dict) -> str:
     """
     Generate a unique batch_id from voice command entities.
     
-    Format: FARMER_PRODUCT_TIMESTAMP
+    Format: FARMER_PRODUCT_TIMESTAMP (max 50 chars for DB)
     Example: ABEBE_ARABICA_20251214_143025
     
     Args:
         entities: Extracted entities from NLU
         
     Returns:
-        Generated batch_id (unique per second)
+        Generated batch_id (unique per second, max 50 characters)
     """
-    origin = entities.get("origin", "UNKNOWN").upper().replace(" ", "_")[:20]
-    product = entities.get("product", "COFFEE").upper().replace(" ", "_")[:15]
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")  # Include time for uniqueness
+    # Timestamp is 15 chars (YYYYMMDD_HHMMSS), need room for 2 underscores
+    # Max length: origin + "_" + product + "_" + timestamp = 50
+    # Therefore: origin (16) + product (17) + timestamp (15) + 2 underscores = 50
+    origin = entities.get("origin", "UNKNOWN").upper().replace(" ", "_")[:16]
+    product = entities.get("product", "COFFEE").upper().replace(" ", "_")[:17]
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")  # Include time for uniqueness (15 chars)
     
     return f"{origin}_{product}_{timestamp}"
 

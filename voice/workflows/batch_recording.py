@@ -229,7 +229,9 @@ class BatchRecordingWorkflow(ConversationWorkflow):
         return {
             'success': True,
             'message': f"📋 Summary:\n{summary}\n\n"
-                      f"Type 'confirm' to create the batch or 'cancel' to start over."
+                      f"Say 'confirm' to create the batch, or\n"
+                      f"'change [field]' to correct something (e.g., 'change origin'),\n"
+                      f"or 'cancel' to start over."
         }
     
     async def _handle_confirmation(
@@ -248,6 +250,60 @@ class BatchRecordingWorkflow(ConversationWorkflow):
                 'success': True,
                 'message': "❌ Batch recording cancelled. Type 'record batch' to start again."
             }
+        
+        # Handle field corrections (e.g., "change origin", "fix weight", "correct grade")
+        # Check for correction keywords
+        correction_keywords = ['change', 'fix', 'correct', 'edit', 'update', 'wrong']
+        is_correction = any(keyword in message_lower for keyword in correction_keywords)
+        
+        if is_correction:
+            # Detect which field to correct
+            if 'weight' in message_lower or 'quantity' in message_lower or 'kg' in message_lower or 'kilo' in message_lower:
+                StateManager.set_user_state(
+                    user_id=user_id,
+                    state=ConversationState.BATCH_RECORDING_WEIGHT,
+                    workflow_name="batch_recording",
+                    data=session_data
+                )
+                return {
+                    'success': True,
+                    'message': f"📝 Current weight: {session_data.get('weight_kg')}kg\n\nWhat's the correct weight?"
+                }
+            elif 'origin' in message_lower or 'location' in message_lower or 'where' in message_lower or 'from' in message_lower or 'place' in message_lower:
+                StateManager.set_user_state(
+                    user_id=user_id,
+                    state=ConversationState.BATCH_RECORDING_ORIGIN,
+                    workflow_name="batch_recording",
+                    data=session_data
+                )
+                return {
+                    'success': True,
+                    'message': f"📝 Current origin: {session_data.get('origin')}\n\nWhat's the correct origin?"
+                }
+            elif 'grade' in message_lower or 'quality' in message_lower:
+                StateManager.set_user_state(
+                    user_id=user_id,
+                    state=ConversationState.BATCH_RECORDING_GRADE,
+                    workflow_name="batch_recording",
+                    data=session_data
+                )
+                return {
+                    'success': True,
+                    'message': f"📝 Current grade: {session_data.get('grade')}\n\nWhat's the correct grade? (A, B, C, or UG for ungraded)"
+                }
+            else:
+                # General correction request - show what can be corrected
+                return {
+                    'success': False,
+                    'message': (
+                        "What would you like to correct?\n\n"
+                        f"• Weight: {session_data.get('weight_kg')}kg\n"
+                        f"• Origin: {session_data.get('origin')}\n"
+                        f"• Grade: {session_data.get('grade')}\n\n"
+                        "Say 'change origin', 'fix weight', or 'correct grade'"
+                    ),
+                    'keep_state': True
+                }
         
         # Handle confirmation
         if 'confirm' in message_lower or 'yes' in message_lower or message_lower == 'y':

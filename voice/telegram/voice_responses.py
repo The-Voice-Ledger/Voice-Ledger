@@ -456,12 +456,11 @@ async def send_voice_reply(
         except Exception as e:
             logger.warning(f"Could not lookup user preference: {e}")
         
-        # Run in background - doesn't block
-        # BUT: if we're in a short-lived event loop (Celery), await directly
+        # Run in background - but must await in Celery context
+        # In Celery workers, the event loop closes when task completes,
+        # so we must await the voice generation to ensure it completes
         try:
-            current_task = asyncio.current_task()
-            # Check if we should await or create_task based on context
-            voice_task = _generate_and_send_voice(
+            await _generate_and_send_voice(
                 bot, 
                 chat_id, 
                 message, 
@@ -469,10 +468,8 @@ async def send_voice_reply(
                 text_message.message_id,  # Reply to the text message
                 user_preference_language  # Pass user preference
             )
-            # Create as background task - caller responsible for awaiting if needed
-            asyncio.create_task(voice_task)
         except Exception as e:
-            logger.error(f"Could not create voice generation task: {e}")
+            logger.error(f"Voice generation failed: {e}")
 
 
 def send_voice_reply_sync(
