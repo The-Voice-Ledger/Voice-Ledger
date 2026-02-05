@@ -144,7 +144,7 @@ class BatchRecordingWorkflow(ConversationWorkflow):
         session_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Parse and validate origin/location input"""
-        origin = message.strip()
+        origin = self._parse_origin(message)
         
         if len(origin) < 2:
             return {
@@ -413,6 +413,41 @@ class BatchRecordingWorkflow(ConversationWorkflow):
             return float(match.group(1))
         
         return None
+    
+    def _parse_origin(self, text: str) -> str:
+        """
+        Parse origin/location from input, extracting just the place name.
+        
+        Examples:
+        - "Sidama" → "Sidama"
+        - "The coffee is from Sidama" → "Sidama"
+        - "from Yirgacheffe" → "Yirgacheffe"
+        - "It's from Gedeo region" → "Gedeo"
+        """
+        text = text.strip()
+        
+        # Remove common sentence patterns
+        patterns_to_remove = [
+            r'^[Tt]he coffee is from\s+',
+            r'^[Ii]t\'?s? from\s+',
+            r'^[Ff]rom\s+',
+            r'^[Ii]t comes from\s+',
+            r'^[Oo]rigin:?\s+',
+            r'^[Ll]ocation:?\s+',
+            r'\s+region\.?$',
+            r'\s+area\.?$',
+        ]
+        
+        for pattern in patterns_to_remove:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+        
+        # Remove trailing punctuation
+        text = text.rstrip('.!?,;:')
+        
+        # Capitalize first letter of each word (proper noun)
+        text = text.strip().title()
+        
+        return text
     
     def _parse_grade(self, text: str) -> Optional[str]:
         """

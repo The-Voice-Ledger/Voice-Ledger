@@ -501,31 +501,62 @@ def process_voice_command_task(
             entities = conversation_result.get('entities', {})
             logger.info(f"Conversation ready: intent={intent}, entities={entities}")
             
-            # CRITICAL: Force confirmation for batch creation (prevents transcription errors)
-            # Even if all entities are present, we need user to confirm before creating batch
+            # If no intent/entities returned, it means the task is complete (e.g., batch created via workflow)
+            # Don't try to execute command again
+            if not intent:
+                logger.info("No intent returned - workflow likely completed the task")
+                return {
+                    "status": "success",
+                    "transcript": transcript,
+                    "message": conversation_result.get('message', 'Task completed'),
+                    "audio_metadata": metadata
+                }
+            
+            # CRITICAL: Route batch creation through workflow for confirmation
+            # This ensures ALL batch creation (workflow-triggered or free-form) gets confirmation
             if intent == 'record_commission' and metadata and metadata.get("channel") == "telegram":
                 user_id = metadata.get("user_id")
                 if user_id:
-                    logger.info(f"Forcing confirmation workflow for batch creation (user {user_id})")
-                    
-                    # Send confirmation message with extracted entities
-                    weight = entities.get('quantity', '?')
-                    unit = entities.get('unit', 'kg')
-                    origin = entities.get('origin', '?')
-                    product = entities.get('product', 'Arabica Coffee')
-                    
-                    confirmation_message = (
-                        f"📝 *Please confirm the details:*\n\n"
-                        f"• Weight: {weight} {unit}\n"
-                        f"• Origin: {origin}\n"
-                        f"• Product: {product}\n\n"
-                        f"Is this correct? Reply with:\n"
-                        f"✅ *Yes* to create the batch\n"
-                        f"❌ *No* to cancel\n"
-                        f"✏️ *Change [field]* to correct (e.g., 'change origin')"
-                    )
+                    logger.info(f"Routing record_commission to workflow with pre-extracted entities for user {user_id}")
                     
                     try:
+                        from voice.workflows.batch_recording import BatchRecordingWorkflow
+                        from voice.workflows.state_machine import StateManager, ConversationState
+                        
+                        # Extract and parse entities
+                        quantity = entities.get('quantity', 0)
+                        origin = entities.get('origin', '')
+                        product = entities.get('product', 'Arabica Coffee')
+                        
+                        # Pre-populate workflow state with extracted entities
+                        # Jump directly to confirmation state
+                        StateManager.set_user_state(
+                            user_id=int(user_id),
+                            state=ConversationState.BATCH_RECORDING_CONFIRM,
+                            workflow_name="batch_recording",
+                            data={
+                                'weight_kg': float(quantity) if quantity else 0,
+                                'origin': origin,
+                                'variety': product,
+                                'grade': entities.get('grade', 'A'),
+                                'processing_notes': entities.get('notes', ''),
+                                'started_at': datetime.utcnow().isoformat()
+                            }
+                        )
+                        
+                        # Create confirmation message
+                        confirmation_message = (
+                            f"📋 *Summary:*\n"
+                            f"• Weight: {quantity}kg\n"
+                            f"• Origin: {origin}\n"
+                            f"• Variety: {product}\n"
+                            f"• Grade: {entities.get('grade', 'A')}\n\n"
+                            f"Say *'confirm'* to create the batch, or\n"
+                            f"*'change [field]'* to correct something (e.g., 'change origin'),\n"
+                            f"or *'cancel'* to start over."
+                        )
+                        
+                        # Send confirmation via Telegram
                         from voice.channels.telegram_channel import TelegramChannel
                         channel = TelegramChannel()
                         
@@ -538,7 +569,7 @@ def process_voice_command_task(
                                     user_id=str(user_id),
                                     message=confirmation_message,
                                     parse_mode='Markdown',
-                                    send_voice=True  # Enable TTS for accessibility
+                                    send_voice=True
                                 )
                             )
                             # Wait for voice generation
@@ -552,26 +583,10 @@ def process_voice_command_task(
                             except:
                                 pass
                             loop.close()
-                            
-                        # Store entities in workflow state for later execution
-                        from voice.workflows.state_machine import StateManager, ConversationState
-                        StateManager.set_user_state(
-                            user_id=int(user_id),
-                            state=ConversationState.BATCH_RECORDING_CONFIRM,
-                            workflow_name="batch_recording",
-                            data={
-                                'weight_kg': float(weight) if isinstance(weight, (int, float, str)) and str(weight).replace('.', '').isdigit() else 50.0,
-                                'origin': origin,
-                                'variety': product,
-                                'grade': entities.get('grade', 'A'),
-                                'notes': entities.get('notes', ''),
-                                'started_at': datetime.utcnow().isoformat()
-                            }
-                        )
                         
-                        logger.info(f"Batch confirmation requested from user {user_id}, workflow state saved")
+                        logger.info(f"Batch confirmation requested from user {user_id} (routed from intent extraction)")
                         
-                        # Return awaiting response - DO NOT execute yet
+                        # Return awaiting confirmation - workflow will handle next response
                         return {
                             "status": "awaiting_confirmation",
                             "transcript": transcript,
@@ -582,8 +597,8 @@ def process_voice_command_task(
                         }
                         
                     except Exception as e:
-                        logger.error(f"Failed to send confirmation message: {e}", exc_info=True)
-                        # Fall through to execution if confirmation fails
+                        logger.error(f"Failed to route to workflow confirmation: {e}", exc_info=True)
+                        # Fall through to direct execution if workflow routing fails
             
         except Exception as conv_error:
             # Fallback to single-shot NLU (GPT-3.5) if conversational AI fails
