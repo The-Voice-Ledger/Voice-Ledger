@@ -60,7 +60,9 @@ class BlockchainAnchor:
         )
         
         with open(abi_path, 'r') as f:
-            abi = json.load(f)
+            contract_json = json.load(f)
+            # Extract just the ABI array (file has {"abi": [...]})
+            abi = contract_json.get('abi', contract_json)
         
         # Initialize contract
         self.contract = self.w3.eth.contract(

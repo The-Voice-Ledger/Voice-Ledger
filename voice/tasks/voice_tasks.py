@@ -501,6 +501,90 @@ def process_voice_command_task(
             entities = conversation_result.get('entities', {})
             logger.info(f"Conversation ready: intent={intent}, entities={entities}")
             
+            # CRITICAL: Force confirmation for batch creation (prevents transcription errors)
+            # Even if all entities are present, we need user to confirm before creating batch
+            if intent == 'record_commission' and metadata and metadata.get("channel") == "telegram":
+                user_id = metadata.get("user_id")
+                if user_id:
+                    logger.info(f"Forcing confirmation workflow for batch creation (user {user_id})")
+                    
+                    # Send confirmation message with extracted entities
+                    weight = entities.get('quantity', '?')
+                    unit = entities.get('unit', 'kg')
+                    origin = entities.get('origin', '?')
+                    product = entities.get('product', 'Arabica Coffee')
+                    
+                    confirmation_message = (
+                        f"📝 *Please confirm the details:*\n\n"
+                        f"• Weight: {weight} {unit}\n"
+                        f"• Origin: {origin}\n"
+                        f"• Product: {product}\n\n"
+                        f"Is this correct? Reply with:\n"
+                        f"✅ *Yes* to create the batch\n"
+                        f"❌ *No* to cancel\n"
+                        f"✏️ *Change [field]* to correct (e.g., 'change origin')"
+                    )
+                    
+                    try:
+                        from voice.channels.telegram_channel import TelegramChannel
+                        channel = TelegramChannel()
+                        
+                        import asyncio
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(
+                                channel.send_notification(
+                                    user_id=str(user_id),
+                                    message=confirmation_message,
+                                    parse_mode='Markdown',
+                                    send_voice=True  # Enable TTS for accessibility
+                                )
+                            )
+                            # Wait for voice generation
+                            pending = asyncio.all_tasks(loop)
+                            if pending:
+                                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        finally:
+                            try:
+                                if hasattr(loop, 'shutdown_asyncgens'):
+                                    loop.run_until_complete(loop.shutdown_asyncgens())
+                            except:
+                                pass
+                            loop.close()
+                            
+                        # Store entities in workflow state for later execution
+                        from voice.workflows.state_machine import StateManager, ConversationState
+                        StateManager.set_user_state(
+                            user_id=int(user_id),
+                            state=ConversationState.BATCH_RECORDING_CONFIRM,
+                            workflow_name="batch_recording",
+                            data={
+                                'weight_kg': float(weight) if isinstance(weight, (int, float, str)) and str(weight).replace('.', '').isdigit() else 50.0,
+                                'origin': origin,
+                                'variety': product,
+                                'grade': entities.get('grade', 'A'),
+                                'notes': entities.get('notes', ''),
+                                'started_at': datetime.utcnow().isoformat()
+                            }
+                        )
+                        
+                        logger.info(f"Batch confirmation requested from user {user_id}, workflow state saved")
+                        
+                        # Return awaiting response - DO NOT execute yet
+                        return {
+                            "status": "awaiting_confirmation",
+                            "transcript": transcript,
+                            "message": confirmation_message,
+                            "intent": intent,
+                            "entities": entities,
+                            "audio_metadata": metadata
+                        }
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to send confirmation message: {e}", exc_info=True)
+                        # Fall through to execution if confirmation fails
+            
         except Exception as conv_error:
             # Fallback to single-shot NLU (GPT-3.5) if conversational AI fails
             logger.warning(f"Conversational AI failed, falling back to single-shot: {conv_error}")
