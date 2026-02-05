@@ -438,8 +438,9 @@ async def send_voice_reply(
     logger.info(f"✅ Text sent: {len(message)} chars to chat {chat_id}")
     
     # 2. Generate and send voice (non-blocking)
-    # BUT: Don't send voice if there's a keyboard - it interferes with button interaction
-    if send_voice and not telegram_reply_markup:
+    # Send voice if enabled, regardless of keyboard presence
+    # (Dual delivery is important for accessibility)
+    if send_voice:
         # Look up user preference from database
         user_preference_language = None
         try:
@@ -460,6 +461,7 @@ async def send_voice_reply(
         # In Celery workers, the event loop closes when task completes,
         # so we must await the voice generation to ensure it completes
         try:
+            logger.info(f"Using user preference language: {user_preference_language}")
             await _generate_and_send_voice(
                 bot, 
                 chat_id, 

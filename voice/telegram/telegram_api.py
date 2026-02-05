@@ -542,6 +542,69 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Role-based access control configuration
+COMMAND_ROLES = {
+    'commission': ['FARMER', 'COOPERATIVE_MANAGER'],
+    'ship': ['FARMER', 'COOPERATIVE_MANAGER', 'EXPORTER', 'TRADER'],
+    'receive': ['COOPERATIVE_MANAGER', 'EXPORTER', 'TRADER', 'BUYER'],
+    'transform': ['COOPERATIVE_MANAGER', 'TRADER'],
+    'pack': ['COOPERATIVE_MANAGER', 'EXPORTER'],
+    'unpack': ['TRADER'],
+    'split': ['TRADER'],
+    'verify': ['COOPERATIVE_MANAGER'],
+    'export': ['COOPERATIVE_MANAGER', 'EXPORTER'],
+    'dpp': ['COOPERATIVE_MANAGER', 'EXPORTER', 'TRADER']
+}
+
+
+async def check_command_access(user_id: str, command: str, processor) -> tuple[bool, str, str]:
+    """
+    Check if user has access to execute a command based on their role.
+    
+    Args:
+        user_id: Telegram user ID
+        command: Command name (without /)
+        processor: Channel processor for sending messages
+        
+    Returns:
+        Tuple of (has_access: bool, user_role: str, error_message: str)
+    """
+    if command not in COMMAND_ROLES:
+        return True, None, None  # No access control for this command
+    
+    from ssi.user_identity import get_user_by_telegram_id
+    from database.models import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        user = get_user_by_telegram_id(user_id, db_session=db)
+        if not user:
+            return False, None, "❌ No identity found. Use /register to create one."
+        
+        user_role = user.role
+        required_roles = COMMAND_ROLES[command]
+        
+        if user_role not in required_roles:
+            roles_display = ', '.join([r.replace('_', ' ').title() for r in required_roles])
+            error_msg = (
+                f"❌ *Permission Denied*\n\n"
+                f"Only {roles_display} can use /{command}.\n"
+                f"Your role: {user_role.replace('_', ' ').title()}"
+            )
+            return False, user_role, error_msg
+        
+        if not user.is_approved:
+            error_msg = (
+                "⏳ *Approval Pending*\n\n"
+                "Your account is pending approval. Please contact an administrator."
+            )
+            return False, user_role, error_msg
+        
+        return True, user_role, None
+    finally:
+        db.close()
+
+
 async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Handle text commands from Telegram (optional feature).
@@ -794,6 +857,19 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
         # Handle text commands for supply chain operations (dev/testing alternatives to voice)
         if text.startswith('/commission '):
             logger.info(f"Handling /commission command for user {user_id}: {text}")
+            
+            # Check access control
+            has_access, user_role, error_msg = await check_command_access(user_id, 'commission', processor)
+            if not has_access:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=error_msg,
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                return {"ok": True}
+            
             from database.models import SessionLocal
             from voice.command_integration import execute_voice_command
             from ssi.user_identity import get_or_create_user_identity
@@ -895,6 +971,18 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             return {"ok": True, "message": "Commission processed"}
         
         if text.startswith('/ship '):
+            # Check access control
+            has_access, user_role, error_msg = await check_command_access(user_id, 'ship', processor)
+            if not has_access:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=error_msg,
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                return {"ok": True}
+            
             from database.models import SessionLocal
             from voice.command_integration import execute_voice_command
             from ssi.user_identity import get_or_create_user_identity
@@ -1296,7 +1384,6 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
         # Handle /batches command - launch mini app
         if text.startswith('/batches'):
             import requests
-            import os
             
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
             api_base = os.getenv('API_BASE_URL', 'https://your-ngrok-url.ngrok.io')
@@ -1725,6 +1812,18 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Handle /verify command - Verify a batch (COOPERATIVE_MANAGER only)
         if text.startswith('/verify'):
+            # Check access control (uses new unified system)
+            has_access, user_role, error_msg = await check_command_access(user_id, 'verify', processor)
+            if not has_access:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=error_msg,
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                return {"ok": True}
+            
             from ssi.user_identity import get_user_by_telegram_id
             from database.models import SessionLocal
             from database import get_batch_by_id_or_gtin
@@ -1732,38 +1831,6 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             db = SessionLocal()
             try:
-                # Check authorization
-                user = get_user_by_telegram_id(user_id, db_session=db)
-                if not user:
-                    await processor.send_notification(
-                        channel_name='telegram',
-                        user_id=user_id,
-                        message="❌ No identity found. Use /register to create one."
-                    )
-                    return {"ok": True}
-                
-                if user.role != 'COOPERATIVE_MANAGER':
-                    await processor.send_notification(
-                        channel_name='telegram',
-                        user_id=user_id,
-                        message=(
-                            "❌ *Permission Denied*\n\n"
-                            "Only cooperative managers can verify batches.\n"
-                            f"Your role: {user.role.replace('_', ' ').title()}"
-                        )
-                    )
-                    return {"ok": True}
-                
-                if not user.is_approved:
-                    await processor.send_notification(
-                        channel_name='telegram',
-                        user_id=user_id,
-                        message=(
-                            "⏳ *Approval Pending*\n\n"
-                            "Your account is pending approval. Please contact an administrator."
-                        )
-                    )
-                    return {"ok": True}
                 
                 # Parse: /verify <gtin_or_batch_id> <verified_quantity> [notes]
                 parts = text.split(maxsplit=3)
@@ -1890,7 +1957,30 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             return {"ok": True, "message": "Batch verified"}
         
         # Handle /dpp command - Generate Digital Product Passport for aggregated container
-        if text.startswith('/dpp '):
+        if text.startswith('/dpp'):
+            # Check if command has parameter
+            if not text.startswith('/dpp '):
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message="❌ *Usage:* /dpp <container\\_id>\\n\\n*Example:* `/dpp 306141411234567892`",
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                return {"ok": True}
+            
+            # Check access control
+            has_access, user_role, error_msg = await check_command_access(user_id, 'dpp', processor)
+            if not has_access:
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=error_msg,
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                return {"ok": True}
+            
             from dpp.dpp_builder import build_aggregated_dpp
             from database.models import SessionLocal, CoffeeBatch
             import json
@@ -1901,7 +1991,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /dpp <container_id>\nExample: /dpp 306141411234567892"
+                    message="❌ Usage: /dpp <container_id>\\nExample: /dpp 306141411234567892"
                 )
                 return {"ok": True}
             
@@ -2225,9 +2315,16 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             logger.info(f"Processing natural text query from user {user_id}: {text[:50]}...")
             return await process_natural_text_query(update_data)
         
-        # Unknown command
+        # Unknown command - notify user
         logger.debug(f"Unknown Telegram text command: {text}")
-        return {"ok": True, "message": "Text command not recognized"}
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=f"❓ *Unknown command:* `{text}`\n\nSend /help to see available commands.",
+            parse_mode='Markdown',
+            send_voice=True
+        )
+        return {"ok": True, "message": "Unknown command notified"}
         
     except Exception as e:
         logger.error(f"Error handling Telegram text command: {e}")
