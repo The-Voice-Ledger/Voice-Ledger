@@ -18,6 +18,12 @@ from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 import torchaudio
 import httpx
 
+from voice.cache.transcription_cache import (
+    compute_audio_hash,
+    get_cached_transcription,
+    set_cached_transcription,
+)
+
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -242,6 +248,13 @@ async def run_asr_with_user_preference_async(audio_file_path: str, user_language
     
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+
+    # Hash-based cache: same audio + language => skip API call
+    audio_hash = compute_audio_hash(str(audio_path))
+    cached = get_cached_transcription(audio_hash, user_language)
+    if cached and cached.get("text") is not None:
+        logger.info("ASR cache HIT (async) user_language=%s", user_language)
+        return {"text": cached["text"], "language": cached.get("language", user_language)}
     
     try:
         logger.info(f"Transcribing with user preference: {user_language}")
@@ -269,10 +282,9 @@ async def run_asr_with_user_preference_async(audio_file_path: str, user_language
             transcript = transcript.strip()
             language = 'en'
         
-        return {
-            'text': transcript,
-            'language': language
-        }
+        result = {"text": transcript, "language": language}
+        set_cached_transcription(audio_hash, language, result)
+        return result
         
     except Exception as e:
         logger.error(f"ASR failed: {str(e)}")
@@ -306,6 +318,13 @@ def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Di
     
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+
+    # Hash-based cache (sync path, used by Celery)
+    audio_hash = compute_audio_hash(str(audio_path))
+    cached = get_cached_transcription(audio_hash, user_language)
+    if cached and cached.get("text") is not None:
+        logger.info("ASR cache HIT (sync) user_language=%s", user_language)
+        return {"text": cached["text"], "language": cached.get("language", user_language)}
     
     try:
         logger.info(f"Transcribing with user preference: {user_language}")
@@ -328,10 +347,9 @@ def run_asr_with_user_preference(audio_file_path: str, user_language: str) -> Di
             transcript = transcript.strip()
             language = 'en'
         
-        return {
-            'text': transcript,
-            'language': language
-        }
+        result = {"text": transcript, "language": language}
+        set_cached_transcription(audio_hash, language, result)
+        return result
         
     except Exception as e:
         logger.error(f"ASR failed: {str(e)}")
@@ -369,9 +387,26 @@ def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[
     
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+
+    # Hash-based cache: try multiple language keys before transcribing
+    audio_hash = compute_audio_hash(str(audio_path))
+    
+    # Try cache with force_language if provided
+    if force_language:
+        cached = get_cached_transcription(audio_hash, force_language)
+        if cached and cached.get("text") is not None:
+            logger.info("ASR cache HIT (run_asr) force_language=%s", force_language)
+            return {"text": cached["text"], "language": cached.get("language", force_language)}
+    
+    # Try common language keys before expensive detection
+    for lang_key in ["auto", "en", "english", "am", "amharic"]:
+        cached = get_cached_transcription(audio_hash, lang_key)
+        if cached and cached.get("text") is not None:
+            logger.info("ASR cache HIT (run_asr) lang_key=%s", lang_key)
+            return {"text": cached["text"], "language": cached.get("language", "en")}
     
     try:
-        # Detect language (unless forced)
+        # Detect language (unless forced) - expensive, so only do if cache miss
         if force_language:
             language = force_language
             logger.info(f"Using forced language: {language}")
@@ -383,13 +418,16 @@ def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[
             language = 'english'
             logger.warning("Language detection returned None, defaulting to English")
         
+        # Normalize language name for consistent caching
+        if language.lower() in ['am', 'amharic']:
+            language = 'amharic'
+        else:
+            language = 'english'  # Normalize to full name
+        
         # Route to appropriate model
-        # OpenAI returns full language names like "amharic", "english"
-        # but also accepts ISO codes like "am", "en"
-        if language.lower() in ['am', 'amharic']:  # Amharic
+        if language == 'amharic':
             logger.info(f"Routing to Amharic Whisper model (detected: {language})")
             transcript = transcribe_with_amharic_model(audio_file_path)
-            language = 'amharic'  # Normalize to full name
         else:  # English or other languages
             logger.info(f"Routing to OpenAI Whisper API (detected: {language})")
             with open(audio_path, "rb") as audio_file:
@@ -400,10 +438,9 @@ def run_asr(audio_file_path: str, force_language: Optional[str] = None) -> Dict[
                 )
             transcript = transcript.strip()
         
-        return {
-            'text': transcript,
-            'language': language
-        }
+        result = {"text": transcript, "language": language}
+        set_cached_transcription(audio_hash, language, result)
+        return result
         
     except Exception as e:
         logger.error(f"ASR failed: {str(e)}")
