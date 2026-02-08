@@ -1,7 +1,7 @@
 """
 RAG query cache: Redis-backed caching for knowledge base retrieval.
 
-Goal (from architecture doc):
+Goal:
 - Cache common RAG queries to reduce ChromaDB latency and OpenAI
   embedding calls.
 
