@@ -137,6 +137,16 @@ def search_documentation(
         logger.warning("ChromaDB not available. Returning empty results.")
         return []
     
+    # Try cache first (RAG query optimization)
+    try:
+        from voice.cache.rag_cache import get_cached_rag_results, set_cached_rag_results
+        cached = get_cached_rag_results(query, query_type="documentation", top_k=top_k)
+        if cached is not None and len(cached) > 0:
+            return cached
+    except Exception as cache_error:
+        logger.debug(f"RAG cache check failed (non-fatal): {cache_error}")
+        # Continue with normal ChromaDB search
+    
     try:
         # Get ChromaDB client
         chroma_client = get_chroma_client()
@@ -169,6 +179,8 @@ def search_documentation(
                     'filename': metadata.get('filename', ''),
                 })
         
+        # Store in cache for future lookups
+        set_cached_rag_results(query, query_type="documentation", top_k=top_k, results=documents)
         return documents
         
     except Exception as e:
