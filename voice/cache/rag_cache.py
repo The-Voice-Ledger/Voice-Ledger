@@ -13,9 +13,16 @@ import hashlib
 import json
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+# Add parent directory to path for logging config
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Setup logging
+from voice.logging_config import get_logger
+logger = get_logger(__name__)
 
 _redis_client: Optional[Any] = None
 

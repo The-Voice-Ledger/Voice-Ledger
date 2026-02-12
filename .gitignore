@@ -92,3 +92,7 @@ site/
 tmp/
 temp/
 .service_pids
+
+# Application logs (keep directory structure, ignore generated files)
+logs/
+!logs/.gitkeep

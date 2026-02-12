@@ -6,10 +6,18 @@ Works for both local development and Railway deployment.
 """
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables first
+# Add parent directory to path for logging config
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Setup logging first
+from voice.logging_config import get_logger
+logger = get_logger(__name__)
+
+# Load environment variables after logging setup
 load_dotenv()
 
 # Paths - Railway compatible with local fallback

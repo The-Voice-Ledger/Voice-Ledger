@@ -24,7 +24,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Setup logging
-logger = logging.getLogger(__name__)
+from voice.logging_config import setup_logging, get_logger, log_system_info
+setup_logging()
+logger = get_logger(__name__)
+log_system_info()
 
 # Add parent directory to path for database imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
