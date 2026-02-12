@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Dict, Any
 from celery import Task
 
-logger = logging.getLogger(__name__)
-
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Setup logging
+from voice.logging_config import get_logger
+logger = get_logger(__name__)
 
 from voice.tasks.celery_app import app
 from voice.asr.asr_infer import run_asr, run_asr_with_user_preference

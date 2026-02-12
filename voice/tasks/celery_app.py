@@ -5,8 +5,19 @@ Sets up Celery task queue with Redis broker for async voice processing.
 """
 
 import os
+import sys
+from pathlib import Path
 from celery import Celery
 from dotenv import load_dotenv
+
+# Add parent directory to path for logging config
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Setup logging first
+from voice.logging_config import setup_logging, get_logger, log_system_info
+setup_logging()
+logger = get_logger(__name__)
+log_system_info()
 
 load_dotenv()
 

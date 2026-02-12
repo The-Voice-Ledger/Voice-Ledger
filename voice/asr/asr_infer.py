@@ -8,6 +8,7 @@ It supports:
 """
 
 import os
+import sys
 import logging
 from pathlib import Path
 from typing import Optional, Dict
@@ -18,17 +19,22 @@ from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 import torchaudio
 import httpx
 
+# Add parent directory to path for logging config
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Setup logging
+from voice.logging_config import get_logger
+logger = get_logger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Import cache after logging setup
 from voice.cache.transcription_cache import (
     compute_audio_hash,
     get_cached_transcription,
     set_cached_transcription,
 )
-
-# Setup logging
-logger = logging.getLogger(__name__)
-
-# Load environment variables
-load_dotenv()
 
 # Configure HuggingFace cache path (Railway compatible with local fallback)
 HF_HOME = os.getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
