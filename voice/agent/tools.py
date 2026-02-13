@@ -698,6 +698,214 @@ VERIFY_BATCH = {
 }
 
 
+# ===========================================================================
+# DPP TOOLS (Agent #5 — Digital Product Passport generation & lookup)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: get_dpp  (READ — retrieve Digital Product Passport for a batch)
+# ---------------------------------------------------------------------------
+GET_DPP = {
+    "type": "function",
+    "function": {
+        "name": "get_dpp",
+        "description": (
+            "Generate or retrieve the Digital Product Passport (DPP) for a "
+            "coffee batch. Returns EUDR compliance data, traceability, "
+            "blockchain anchoring status, and QR code. Use when user asks "
+            "'show me the passport for batch X', 'get DPP', 'product passport', "
+            "'traceability info', 'where did this coffee come from'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch ID or GTIN to look up",
+                },
+            },
+            "required": ["batch_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: get_container_dpp  (READ — aggregated DPP for a container/SSCC)
+# ---------------------------------------------------------------------------
+GET_CONTAINER_DPP = {
+    "type": "function",
+    "function": {
+        "name": "get_container_dpp",
+        "description": (
+            "Get the aggregated Digital Product Passport for a shipping "
+            "container (SSCC). Shows all contributing farmers, their "
+            "percentages, and combined traceability. Use when user asks "
+            "'container passport', 'who contributed to this container', "
+            "'show container DPP', 'aggregated passport'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_id": {
+                    "type": "string",
+                    "description": "Container SSCC or container ID",
+                },
+            },
+            "required": ["container_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: trace_lineage  (READ — recursive supply chain traceability)
+# ---------------------------------------------------------------------------
+TRACE_LINEAGE = {
+    "type": "function",
+    "function": {
+        "name": "trace_lineage",
+        "description": (
+            "Trace the complete supply chain lineage of a product from "
+            "retail back to farm. Shows the full hierarchy: Retail Bag → "
+            "Roasted Lot → Washed Lot → Farmer Batches. Use when user asks "
+            "'trace this coffee', 'where did it come from', 'full history', "
+            "'supply chain lineage', 'product journey'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "product_id": {
+                    "type": "string",
+                    "description": "Batch ID, container ID, or product ID to trace",
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum depth of tracing (default 5)",
+                    "default": 5,
+                },
+            },
+            "required": ["product_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: validate_dpp  (READ — check if a DPP is valid/complete)
+# ---------------------------------------------------------------------------
+VALIDATE_DPP = {
+    "type": "function",
+    "function": {
+        "name": "validate_dpp",
+        "description": (
+            "Validate a Digital Product Passport for completeness and "
+            "EUDR compliance. Checks all required fields are present. "
+            "Use when user asks 'is this DPP valid', 'check passport', "
+            "'validate DPP', 'is the passport complete'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch ID whose DPP to validate",
+                },
+            },
+            "required": ["batch_id"],
+        },
+    },
+}
+
+
+# ===========================================================================
+# BLOCKCHAIN TOOLS (Agent #7 — on-chain verification & token lookup)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: check_blockchain_anchor  (READ — verify batch is anchored on-chain)
+# ---------------------------------------------------------------------------
+CHECK_BLOCKCHAIN_ANCHOR = {
+    "type": "function",
+    "function": {
+        "name": "check_blockchain_anchor",
+        "description": (
+            "Check if a batch's EPCIS event has been anchored to the "
+            "blockchain (Base Sepolia). Returns event hash, event type, "
+            "IPFS CID, and timestamp. Use when user asks 'is this on "
+            "the blockchain', 'check anchor', 'verify on-chain', "
+            "'blockchain status for batch X'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch ID to check on-chain",
+                },
+            },
+            "required": ["batch_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: get_token_info  (READ — look up ERC-1155 batch token metadata)
+# ---------------------------------------------------------------------------
+GET_TOKEN_INFO = {
+    "type": "function",
+    "function": {
+        "name": "get_token_info",
+        "description": (
+            "Look up the on-chain ERC-1155 token for a coffee batch. "
+            "Returns token metadata, quantity, IPFS CID, and whether "
+            "it's an aggregated container token. Use when user asks "
+            "'token info', 'show token', 'what token is this batch', "
+            "'check token metadata'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "token_id": {
+                    "type": "integer",
+                    "description": "On-chain token ID (number)",
+                },
+            },
+            "required": ["token_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: verify_batch_hash  (READ — verify batch data hasn't been tampered)
+# ---------------------------------------------------------------------------
+VERIFY_BATCH_HASH = {
+    "type": "function",
+    "function": {
+        "name": "verify_batch_hash",
+        "description": (
+            "Verify a batch's data integrity by comparing its current hash "
+            "against what was anchored on-chain. Detects tampering — if the "
+            "batch data was modified after anchoring, the hashes won't match. "
+            "Use when user asks 'has this batch been tampered with', "
+            "'verify integrity', 'check hash', 'is the data authentic'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch ID to verify hash integrity",
+                },
+            },
+            "required": ["batch_id"],
+        },
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # All tools grouped
 # ---------------------------------------------------------------------------
@@ -721,7 +929,16 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Compliance (Agent #4)
     CHECK_EUDR_COMPLIANCE,
     CHECK_MASS_BALANCE,
+    # DPP / Traceability (Agent #5)
+    GET_DPP,
+    GET_CONTAINER_DPP,
+    TRACE_LINEAGE,
+    VALIDATE_DPP,
     # Verification (Agent #6)
     LIST_PENDING_VERIFICATIONS,
     VERIFY_BATCH,
+    # Blockchain (Agent #7)
+    CHECK_BLOCKCHAIN_ANCHOR,
+    GET_TOKEN_INFO,
+    VERIFY_BATCH_HASH,
 ]

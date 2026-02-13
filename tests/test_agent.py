@@ -40,9 +40,9 @@ class TestToolDefinitions:
             assert params["type"] == "object", f"Tool {func['name']} params not object"
     
     def test_tool_count(self):
-        """We should have 18 tools: 9 core + 5 marketplace + 2 compliance + 2 verification."""
+        """We should have 25 tools across all 7 agents."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
-        assert len(SUPPLY_CHAIN_TOOLS) == 18
+        assert len(SUPPLY_CHAIN_TOOLS) == 25
     
     def test_tool_names_are_unique(self):
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
@@ -793,6 +793,169 @@ class TestVerificationTools:
 
 
 # =========================================================================
+# Test DPP Tools (Agent #5)
+# =========================================================================
+
+class TestDPPTools:
+    """Test DPP / Traceability tool definitions and handlers."""
+
+    def test_dpp_tool_schemas(self):
+        """All DPP tools have valid OpenAI function schemas."""
+        from voice.agent.tools import GET_DPP, GET_CONTAINER_DPP, TRACE_LINEAGE, VALIDATE_DPP
+
+        for tool in [GET_DPP, GET_CONTAINER_DPP, TRACE_LINEAGE, VALIDATE_DPP]:
+            assert tool["type"] == "function"
+            fn = tool["function"]
+            assert "name" in fn
+            assert "description" in fn
+            assert "parameters" in fn
+            assert fn["parameters"]["type"] == "object"
+
+    def test_dpp_tools_registered(self):
+        """All DPP tools have handlers in the registry."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        for name in ["get_dpp", "get_container_dpp", "trace_lineage", "validate_dpp"]:
+            assert registry.has(name), f"DPP tool '{name}' not registered"
+
+    def test_get_dpp_requires_batch_id(self):
+        """get_dpp should require batch_id."""
+        from voice.agent.tools import GET_DPP
+        assert "batch_id" in GET_DPP["function"]["parameters"]["required"]
+
+    def test_get_container_dpp_requires_container_id(self):
+        """get_container_dpp should require container_id."""
+        from voice.agent.tools import GET_CONTAINER_DPP
+        assert "container_id" in GET_CONTAINER_DPP["function"]["parameters"]["required"]
+
+    def test_trace_lineage_requires_product_id(self):
+        """trace_lineage should require product_id."""
+        from voice.agent.tools import TRACE_LINEAGE
+        assert "product_id" in TRACE_LINEAGE["function"]["parameters"]["required"]
+
+    def test_validate_dpp_requires_batch_id(self):
+        """validate_dpp should require batch_id."""
+        from voice.agent.tools import VALIDATE_DPP
+        assert "batch_id" in VALIDATE_DPP["function"]["parameters"]["required"]
+
+    def test_all_dpp_tools_are_read_only(self):
+        """DPP tools should NOT trigger performed_write."""
+        dpp_tools = {"get_dpp", "get_container_dpp", "trace_lineage", "validate_dpp"}
+        # These should all be in the executor's read-only exclusion list
+        import ast
+        import inspect
+        from voice.agent import executor as ex_mod
+        source = inspect.getsource(ex_mod)
+        for tool in dpp_tools:
+            assert tool in source, f"'{tool}' not found in executor source"
+
+
+# =========================================================================
+# Test Blockchain Tools (Agent #7)
+# =========================================================================
+
+class TestBlockchainTools:
+    """Test Blockchain tool definitions and handlers."""
+
+    def test_blockchain_tool_schemas(self):
+        """All blockchain tools have valid OpenAI function schemas."""
+        from voice.agent.tools import (
+            CHECK_BLOCKCHAIN_ANCHOR, GET_TOKEN_INFO, VERIFY_BATCH_HASH,
+        )
+
+        for tool in [CHECK_BLOCKCHAIN_ANCHOR, GET_TOKEN_INFO, VERIFY_BATCH_HASH]:
+            assert tool["type"] == "function"
+            fn = tool["function"]
+            assert "name" in fn
+            assert "description" in fn
+            assert "parameters" in fn
+            assert fn["parameters"]["type"] == "object"
+
+    def test_blockchain_tools_registered(self):
+        """All blockchain tools have handlers in the registry."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        for name in ["check_blockchain_anchor", "get_token_info", "verify_batch_hash"]:
+            assert registry.has(name), f"Blockchain tool '{name}' not registered"
+
+    def test_check_anchor_requires_batch_id(self):
+        """check_blockchain_anchor should require batch_id."""
+        from voice.agent.tools import CHECK_BLOCKCHAIN_ANCHOR
+        assert "batch_id" in CHECK_BLOCKCHAIN_ANCHOR["function"]["parameters"]["required"]
+
+    def test_get_token_info_requires_token_id(self):
+        """get_token_info should require token_id."""
+        from voice.agent.tools import GET_TOKEN_INFO
+        assert "token_id" in GET_TOKEN_INFO["function"]["parameters"]["required"]
+
+    def test_verify_hash_requires_batch_id(self):
+        """verify_batch_hash should require batch_id."""
+        from voice.agent.tools import VERIFY_BATCH_HASH
+        assert "batch_id" in VERIFY_BATCH_HASH["function"]["parameters"]["required"]
+
+    def test_all_blockchain_tools_are_read_only(self):
+        """Blockchain tools should NOT trigger performed_write."""
+        bc_tools = {"check_blockchain_anchor", "get_token_info", "verify_batch_hash"}
+        import inspect
+        from voice.agent import executor as ex_mod
+        source = inspect.getsource(ex_mod)
+        for tool in bc_tools:
+            assert tool in source, f"'{tool}' not found in executor source"
+
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_check_anchor_is_read_only(self, mock_redis, mock_client):
+        """check_blockchain_anchor should NOT mark performed_write."""
+        from voice.agent.executor import AgentExecutor
+
+        mock_redis.return_value = None
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_anchor1"
+        mock_tool_call.function.name = "check_blockchain_anchor"
+        mock_tool_call.function.arguments = json.dumps({"batch_id": "B001"})
+
+        mock_msg1 = MagicMock()
+        mock_msg1.tool_calls = [mock_tool_call]
+        mock_msg1.content = ""
+        mock_choice1 = MagicMock()
+        mock_choice1.message = mock_msg1
+        mock_response1 = MagicMock()
+        mock_response1.choices = [mock_choice1]
+        mock_response1.usage.total_tokens = 100
+
+        mock_msg2 = MagicMock()
+        mock_msg2.tool_calls = None
+        mock_msg2.content = "Batch B001 is anchored on Base Sepolia."
+        mock_choice2 = MagicMock()
+        mock_choice2.message = mock_msg2
+        mock_response2 = MagicMock()
+        mock_response2.choices = [mock_choice2]
+        mock_response2.usage.total_tokens = 120
+
+        mock_client.chat.completions.create.side_effect = [
+            mock_response1, mock_response2,
+        ]
+
+        with patch.object(
+            AgentExecutor, "_execute_tool",
+            return_value={
+                "success": True,
+                "message": "Batch B001 is anchored",
+                "data": {"batch_id": "B001", "anchored": True},
+            },
+        ):
+            executor = AgentExecutor()
+            result = executor.run(
+                transcript="Is batch B001 on the blockchain?", user_id=1,
+            )
+
+        assert result.performed_write is False
+
+
+# =========================================================================
 # Test Updated Tool Count
 # =========================================================================
 
@@ -800,10 +963,10 @@ class TestAllToolsIntegration:
     """Verify all agents work together in the unified tool set."""
 
     def test_total_tool_count(self):
-        """We should have 18 tools: 9 core + 5 marketplace + 2 compliance + 2 verification."""
+        """We should have 25 tools: 9 core + 5 marketplace + 2 compliance + 4 DPP + 2 verification + 3 blockchain."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
 
-        assert len(SUPPLY_CHAIN_TOOLS) == 18
+        assert len(SUPPLY_CHAIN_TOOLS) == 25
 
     def test_all_tool_names_unique(self):
         """No duplicate tool names across all agents."""
@@ -828,7 +991,9 @@ class TestAllToolsIntegration:
             "query_batches", "search_knowledge",
             "browse_rfqs", "list_my_offers",
             "check_eudr_compliance", "check_mass_balance",
+            "get_dpp", "get_container_dpp", "trace_lineage", "validate_dpp",
             "list_pending_verifications",
+            "check_blockchain_anchor", "get_token_info", "verify_batch_hash",
         }
         write_tools = {
             "record_commission", "record_shipment", "record_receipt",

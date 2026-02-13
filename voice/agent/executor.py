@@ -146,9 +146,20 @@ COMPLIANCE:
 • Check EUDR compliance for batches (check_eudr_compliance)
 • Validate mass balance for splits/transformations (check_mass_balance)
 
+DIGITAL PRODUCT PASSPORT (DPP):
+• Get the Digital Product Passport for a batch (get_dpp)
+• Get aggregated container passport (get_container_dpp)
+• Trace full supply chain lineage (trace_lineage)
+• Validate DPP completeness (validate_dpp)
+
 VERIFICATION:
 • List batches waiting for verification (list_pending_verifications)
 • Verify a batch and issue credential (verify_batch) — cooperative managers only
+
+BLOCKCHAIN:
+• Check if a batch is anchored on-chain (check_blockchain_anchor)
+• Look up batch token metadata (get_token_info)
+• Verify batch data integrity against blockchain (verify_batch_hash)
 
 CONVERSATION RULES:
 1. Be warm, clear, and concise — users are often speaking via voice
@@ -471,7 +482,11 @@ class AgentExecutor:
                             "query_batches", "search_knowledge",
                             "browse_rfqs", "list_my_offers",
                             "check_eudr_compliance", "check_mass_balance",
+                            "get_dpp", "get_container_dpp",
+                            "trace_lineage", "validate_dpp",
                             "list_pending_verifications",
+                            "check_blockchain_anchor", "get_token_info",
+                            "verify_batch_hash",
                         ):
                             performed_write = True
                             last_intent = tool_name
