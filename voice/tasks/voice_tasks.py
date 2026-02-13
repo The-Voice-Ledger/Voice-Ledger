@@ -412,6 +412,117 @@ def process_voice_command_task(
             }
         )
         
+        # =====================================================================
+        # AI AGENT PATH (opt-in via AGENT_ENABLED=true)
+        # Replaces the rigid NLU → switch/case pipeline with a tool-calling
+        # agent that reasons about which operations to perform.
+        # =====================================================================
+        if os.getenv("AGENT_ENABLED", "false").lower() == "true" and user_db_id:
+            try:
+                from voice.agent import AgentExecutor
+                
+                logger.info(f"🤖 Agent processing for user {user_db_id} (lang={user_language})")
+                
+                # Get user DID for credential issuance
+                agent_user_did = None
+                if metadata and metadata.get("channel") == "telegram":
+                    try:
+                        from ssi.user_identity import get_or_create_user_identity
+                        identity = get_or_create_user_identity(
+                            telegram_user_id=str(metadata.get("user_id")),
+                            telegram_username=metadata.get("username"),
+                            telegram_first_name=metadata.get("first_name"),
+                            telegram_last_name=metadata.get("last_name"),
+                        )
+                        agent_user_did = identity.get("did")
+                    except Exception as e:
+                        logger.warning(f"Could not resolve DID for agent: {e}")
+                
+                executor = AgentExecutor()
+                agent_result = executor.run(
+                    transcript=transcript,
+                    user_id=user_db_id,
+                    user_did=agent_user_did,
+                    language=user_language,
+                )
+                
+                logger.info(
+                    f"🤖 Agent completed: {len(agent_result.tool_calls)} tool call(s), "
+                    f"write={agent_result.performed_write}, "
+                    f"tokens={agent_result.total_tokens}, "
+                    f"time={agent_result.duration_ms:.0f}ms"
+                )
+                
+                # Send response to user via Telegram (with TTS)
+                if metadata and metadata.get("channel") == "telegram":
+                    user_id = metadata.get("user_id")
+                    if user_id and agent_result.response:
+                        try:
+                            from voice.channels.telegram_channel import TelegramChannel
+                            channel = TelegramChannel()
+                            
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                loop.run_until_complete(
+                                    channel.send_notification(
+                                        user_id=str(user_id),
+                                        message=agent_result.response,
+                                        parse_mode='Markdown',
+                                        send_voice=True,
+                                    )
+                                )
+                                pending = asyncio.all_tasks(loop)
+                                if pending:
+                                    loop.run_until_complete(
+                                        asyncio.gather(*pending, return_exceptions=True)
+                                    )
+                            finally:
+                                try:
+                                    if hasattr(loop, 'shutdown_asyncgens'):
+                                        loop.run_until_complete(loop.shutdown_asyncgens())
+                                except:
+                                    pass
+                                loop.close()
+                        except Exception as msg_err:
+                            logger.error(f"Failed to send agent response: {msg_err}")
+                
+                # Return structured result
+                return {
+                    "status": "success" if not agent_result.error else "partial",
+                    "transcript": transcript,
+                    "intent": agent_result.intent,
+                    "entities": agent_result.entities,
+                    "result": {
+                        "tool_calls": [
+                            {
+                                "tool": tc.tool_name,
+                                "args": tc.arguments,
+                                "message": tc.result_message,
+                                "success": tc.success,
+                            }
+                            for tc in agent_result.tool_calls
+                        ],
+                        "performed_write": agent_result.performed_write,
+                    },
+                    "message": agent_result.response,
+                    "error": agent_result.error,
+                    "audio_metadata": metadata,
+                    "agent": True,
+                    "agent_tokens": agent_result.total_tokens,
+                    "agent_duration_ms": agent_result.duration_ms,
+                }
+                
+            except Exception as agent_err:
+                logger.error(f"🤖 Agent failed, falling back to legacy pipeline: {agent_err}", exc_info=True)
+                # Fall through to legacy conversational AI path
+        
+        # =====================================================================
+        # LEGACY PATH — conversational AI + single-shot NLU fallback
+        # (Kept for backward compatibility; disable with AGENT_ENABLED=true)
+        # =====================================================================
+        
         # Route to conversational AI based on user language (NEW: multi-turn conversation)
         try:
             # Ensure we have user_db_id for conversational tracking

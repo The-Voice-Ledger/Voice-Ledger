@@ -1,0 +1,548 @@
+"""
+Agent Executor
+
+The core agent loop that replaces the NLU → switch/case pipeline.
+
+Flow:
+  1. Receive transcript (from ASR)
+  2. Build messages: system prompt + conversation history + user message
+  3. Call GPT-4o with tools
+  4. If model returns tool_calls → execute tools → feed results back → loop
+  5. If model returns text → that's the user-facing response
+  6. Return AgentResult with response + any tool results
+
+The executor supports multi-turn conversation via Redis-backed history,
+and handles both English and Amharic (via translation before/after).
+"""
+
+import os
+import json
+import time
+import logging
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+# Agent model — GPT-4o for best tool-calling accuracy
+AGENT_MODEL = os.getenv("AGENT_MODEL", "gpt-4o")
+AGENT_MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
+AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.2"))
+
+# Initialize OpenAI client
+_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+# ---------------------------------------------------------------------------
+# System Prompt
+# ---------------------------------------------------------------------------
+
+AGENT_SYSTEM_PROMPT = """You are Voice Ledger — an AI assistant for Ethiopian coffee supply chain actors (farmers, cooperatives, exporters, buyers).
+
+You help users manage coffee from harvest to export through natural voice conversation.
+
+YOUR CAPABILITIES (use the tools provided):
+• Create new coffee batches (record_commission)
+• Ship batches (record_shipment) 
+• Receive batches (record_receipt)
+• Process coffee — roasting, milling, drying (record_transformation)
+• Pack batches into containers (pack_batches)
+• Unpack containers (unpack_batches)
+• Split batches into portions (split_batch)
+• Look up batches and data (query_batches)
+• Search documentation and guides (search_knowledge)
+
+CONVERSATION RULES:
+1. Be warm, clear, and concise — users are often speaking via voice
+2. When a user gives all needed info in one message, call the tool immediately
+3. When info is missing, ask for it naturally — ONE question at a time
+4. After executing a tool, summarize the result clearly
+5. You can call MULTIPLE tools in one turn if the user asks for multiple things
+6. If a tool call fails, explain the error and suggest how to fix it
+7. For quantities in "bags", convert to kg (1 bag = 60 kg) before calling tools
+8. Users may reference batches by ID, GTIN, or description — be flexible
+
+RESPONSE STYLE:
+- Use emoji sparingly for key status indicators (✅ success, ❌ error, 📦 batch)
+- Keep responses SHORT for voice — 2-3 sentences max for simple confirmations
+- For data queries, format results as clean lists
+- Never mention technical internals (EPCIS, GS1, blockchain) unless user asks
+- Never cite documentation sources — just state the information confidently
+
+LANGUAGE:
+- Respond in the same language the user speaks
+- If the user speaks Amharic, respond in Amharic
+- If the user speaks English, respond in English
+
+SAFETY:
+- For write operations (create, ship, transform, pack, split), confirm the action BEFORE executing IF the details seem ambiguous
+- For read operations (query, search), execute immediately
+- Never fabricate batch IDs or data — always query first if unsure
+"""
+
+
+# ---------------------------------------------------------------------------
+# Data Classes
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ToolCall:
+    """Record of a single tool call made by the agent."""
+    tool_name: str
+    arguments: Dict[str, Any]
+    result_message: str
+    result_data: Dict[str, Any]
+    success: bool
+    duration_ms: float = 0.0
+
+
+@dataclass
+class AgentResult:
+    """Complete result from an agent turn."""
+    # The text response to send to the user
+    response: str
+    # Spoken version (may differ — no URLs, no emoji)
+    response_spoken: Optional[str] = None
+    # Tool calls that were executed
+    tool_calls: List[ToolCall] = field(default_factory=list)
+    # Whether a write operation was performed
+    performed_write: bool = False
+    # Whether the conversation is ongoing (needs more turns)
+    needs_followup: bool = False
+    # The final intent (for backward compatibility with old pipeline)
+    intent: Optional[str] = None
+    # Collected entities (for backward compatibility)
+    entities: Dict[str, Any] = field(default_factory=dict)
+    # Token usage
+    total_tokens: int = 0
+    # Total wall-clock time
+    duration_ms: float = 0.0
+    # Error if agent loop failed entirely
+    error: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Conversation History (Redis-backed)
+# ---------------------------------------------------------------------------
+
+def _get_redis():
+    """Get Redis client for conversation history."""
+    try:
+        import redis
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        return redis.from_url(redis_url)
+    except Exception:
+        return None
+
+
+def get_conversation_history(user_id: int, max_messages: int = 20) -> List[Dict[str, str]]:
+    """
+    Retrieve conversation history from Redis.
+    
+    Stored as JSON list under key: agent:history:{user_id}
+    TTL: 10 minutes (longer than old 5-minute state machine)
+    """
+    r = _get_redis()
+    if not r:
+        return []
+    
+    try:
+        key = f"agent:history:{user_id}"
+        data = r.get(key)
+        if not data:
+            return []
+        messages = json.loads(data)
+        # Only return last N messages to stay within context window
+        return messages[-max_messages:]
+    except Exception as e:
+        logger.warning(f"Failed to load history for user {user_id}: {e}")
+        return []
+
+
+def save_conversation_history(user_id: int, messages: List[Dict[str, str]], ttl: int = 600):
+    """
+    Save conversation history to Redis with TTL.
+    
+    Args:
+        user_id: User database ID
+        messages: List of message dicts (role, content, tool_calls, etc.)
+        ttl: Time-to-live in seconds (default 10 minutes)
+    """
+    r = _get_redis()
+    if not r:
+        return
+    
+    try:
+        key = f"agent:history:{user_id}"
+        # Only keep the messages that GPT needs (system prompt excluded)
+        serializable = []
+        for msg in messages:
+            entry = {"role": msg["role"]}
+            if msg.get("content"):
+                entry["content"] = msg["content"]
+            if msg.get("tool_calls"):
+                # Serialize tool_calls for storage
+                entry["tool_calls"] = [
+                    {
+                        "id": tc.id if hasattr(tc, "id") else tc.get("id"),
+                        "type": "function",
+                        "function": {
+                            "name": (
+                                tc.function.name
+                                if hasattr(tc, "function")
+                                else tc.get("function", {}).get("name")
+                            ),
+                            "arguments": (
+                                tc.function.arguments
+                                if hasattr(tc, "function")
+                                else tc.get("function", {}).get("arguments", "{}")
+                            ),
+                        },
+                    }
+                    for tc in msg["tool_calls"]
+                ]
+            if msg.get("tool_call_id"):
+                entry["tool_call_id"] = msg["tool_call_id"]
+            if msg.get("name"):
+                entry["name"] = msg["name"]
+            serializable.append(entry)
+        
+        r.setex(key, ttl, json.dumps(serializable))
+    except Exception as e:
+        logger.warning(f"Failed to save history for user {user_id}: {e}")
+
+
+def clear_conversation_history(user_id: int):
+    """Clear conversation history after task completion or timeout."""
+    r = _get_redis()
+    if not r:
+        return
+    try:
+        r.delete(f"agent:history:{user_id}")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Agent Executor
+# ---------------------------------------------------------------------------
+
+class AgentExecutor:
+    """
+    Tool-calling agent that replaces the NLU → command_integration pipeline.
+    
+    Usage:
+        executor = AgentExecutor()
+        result = executor.run(
+            transcript="Record 50 bags of Sidama from Abebe farm",
+            user_id=42,
+            user_did="did:key:z6Mk..."
+        )
+        print(result.response)       # "✅ Batch created: ABEBE_SIDAMA_20260213..."
+        print(result.tool_calls)     # [ToolCall(name="record_commission", ...)]
+    """
+    
+    def __init__(
+        self,
+        model: str = None,
+        tools: List[Dict] = None,
+        system_prompt: str = None,
+        max_turns: int = None,
+    ):
+        from .tools import SUPPLY_CHAIN_TOOLS
+        from .registry import get_tool_registry
+        
+        self.model = model or AGENT_MODEL
+        self.tools = tools or SUPPLY_CHAIN_TOOLS
+        self.system_prompt = system_prompt or AGENT_SYSTEM_PROMPT
+        self.max_turns = max_turns or AGENT_MAX_TURNS
+        self.registry = get_tool_registry()
+    
+    def run(
+        self,
+        transcript: str,
+        user_id: int,
+        user_did: str = None,
+        language: str = "en",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> AgentResult:
+        """
+        Run the agent on a user transcript.
+        
+        Args:
+            transcript: Transcribed text from ASR
+            user_id: User database ID (for batch ownership, history)
+            user_did: User DID (for credential issuance)
+            language: User's preferred language (en/am)
+            context: Optional app context (visible batches, current view, etc.)
+            
+        Returns:
+            AgentResult with response and tool call records
+        """
+        start_time = time.time()
+        total_tokens = 0
+        all_tool_calls: List[ToolCall] = []
+        performed_write = False
+        last_intent = None
+        last_entities = {}
+        
+        # Build initial messages
+        system_msg = self._build_system_message(user_id, language, context)
+        
+        # Load conversation history
+        history = get_conversation_history(user_id)
+        
+        messages = [{"role": "system", "content": system_msg}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": transcript})
+        
+        try:
+            # Agent loop — max N turns of tool calling
+            for turn in range(self.max_turns):
+                logger.info(
+                    f"Agent turn {turn + 1}/{self.max_turns} for user {user_id} "
+                    f"(model={self.model}, messages={len(messages)})"
+                )
+                
+                # Call the model
+                response = _client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=self.tools,
+                    tool_choice="auto",
+                    temperature=AGENT_TEMPERATURE,
+                    max_tokens=1000,
+                )
+                
+                total_tokens += response.usage.total_tokens if response.usage else 0
+                choice = response.choices[0]
+                msg = choice.message
+                
+                # Case 1: Model wants to call tools
+                if msg.tool_calls:
+                    # Append assistant message with tool_calls
+                    messages.append({
+                        "role": "assistant",
+                        "content": msg.content or "",
+                        "tool_calls": msg.tool_calls,
+                    })
+                    
+                    # Execute each tool call
+                    for tc in msg.tool_calls:
+                        tool_name = tc.function.name
+                        try:
+                            tool_args = json.loads(tc.function.arguments)
+                        except json.JSONDecodeError:
+                            tool_args = {}
+                        
+                        logger.info(f"Agent calling tool: {tool_name}({tool_args})")
+                        
+                        tc_start = time.time()
+                        tool_result = self._execute_tool(
+                            tool_name, tool_args,
+                            user_id=user_id, user_did=user_did
+                        )
+                        tc_duration = (time.time() - tc_start) * 1000
+                        
+                        tool_call_record = ToolCall(
+                            tool_name=tool_name,
+                            arguments=tool_args,
+                            result_message=tool_result["message"],
+                            result_data=tool_result.get("data", {}),
+                            success=tool_result["success"],
+                            duration_ms=tc_duration,
+                        )
+                        all_tool_calls.append(tool_call_record)
+                        
+                        # Track write operations
+                        if tool_result["success"] and tool_name not in ("query_batches", "search_knowledge"):
+                            performed_write = True
+                            last_intent = tool_name
+                            last_entities = tool_args
+                        
+                        # Append tool result as message
+                        result_content = json.dumps({
+                            "success": tool_result["success"],
+                            "message": tool_result["message"],
+                            "data": tool_result.get("data", {}),
+                        }, default=str)
+                        
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tool_name,
+                            "content": result_content,
+                        })
+                    
+                    # Continue loop — model may want to call more tools or respond
+                    continue
+                
+                # Case 2: Model returns text response (no more tool calls)
+                response_text = msg.content or ""
+                
+                # Save updated history (exclude system prompt)
+                messages_to_save = messages[1:]  # Skip system prompt
+                messages_to_save.append({"role": "assistant", "content": response_text})
+                save_conversation_history(user_id, messages_to_save)
+                
+                # If a write was performed, clear history after response
+                # (fresh start for next interaction)
+                if performed_write:
+                    clear_conversation_history(user_id)
+                
+                duration = (time.time() - start_time) * 1000
+                
+                return AgentResult(
+                    response=response_text,
+                    response_spoken=self._strip_for_speech(response_text),
+                    tool_calls=all_tool_calls,
+                    performed_write=performed_write,
+                    needs_followup=not performed_write and len(all_tool_calls) == 0,
+                    intent=last_intent,
+                    entities=last_entities,
+                    total_tokens=total_tokens,
+                    duration_ms=duration,
+                )
+            
+            # Exhausted max turns
+            logger.warning(f"Agent exhausted {self.max_turns} turns for user {user_id}")
+            duration = (time.time() - start_time) * 1000
+            return AgentResult(
+                response="I'm having trouble completing this request. Could you try rephrasing?",
+                tool_calls=all_tool_calls,
+                performed_write=performed_write,
+                intent=last_intent,
+                entities=last_entities,
+                total_tokens=total_tokens,
+                duration_ms=duration,
+                error="max_turns_exhausted",
+            )
+        
+        except Exception as e:
+            logger.error(f"Agent error for user {user_id}: {e}", exc_info=True)
+            duration = (time.time() - start_time) * 1000
+            return AgentResult(
+                response="Sorry, I encountered an error. Please try again.",
+                tool_calls=all_tool_calls,
+                performed_write=performed_write,
+                total_tokens=total_tokens,
+                duration_ms=duration,
+                error=str(e),
+            )
+    
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    
+    def _build_system_message(
+        self, user_id: int, language: str, context: Optional[Dict[str, Any]]
+    ) -> str:
+        """Build the system prompt with optional context."""
+        prompt = self.system_prompt
+        
+        # Add language hint
+        if language == "am":
+            prompt += "\n\nThe user speaks Amharic. Respond in Amharic."
+        
+        # Add app context if available
+        if context:
+            prompt += "\n\nCURRENT CONTEXT:\n"
+            if context.get("app"):
+                prompt += f"App: {context['app']}\n"
+            if context.get("user_role"):
+                prompt += f"User role: {context['user_role']}\n"
+            if context.get("visible_batches"):
+                prompt += "Visible batches:\n"
+                for b in context["visible_batches"][:5]:
+                    prompt += (
+                        f"  - {b.get('batch_id', b.get('id'))}: "
+                        f"{b.get('origin', '?')} {b.get('quantity_kg', 0)}kg "
+                        f"({b.get('status', '?')})\n"
+                    )
+            prompt += (
+                "\nUse this context to resolve references like "
+                "'this batch', 'the first one', 'my latest'.\n"
+            )
+        
+        return prompt
+    
+    def _execute_tool(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+        user_id: int = None,
+        user_did: str = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a tool by name, with database session management.
+        
+        Returns:
+            {"success": bool, "message": str, "data": dict}
+        """
+        handler = self.registry.get(tool_name)
+        if not handler:
+            return {
+                "success": False,
+                "message": f"Unknown tool: {tool_name}",
+                "data": {},
+            }
+        
+        from database.connection import get_db
+        from voice.command_integration import VoiceCommandError
+        
+        try:
+            with get_db() as db:
+                message, data = handler(
+                    db, args, user_id=user_id, user_did=user_did
+                )
+                return {
+                    "success": True,
+                    "message": message,
+                    "data": data,
+                }
+        except VoiceCommandError as e:
+            logger.warning(f"Tool {tool_name} validation error: {e}")
+            return {
+                "success": False,
+                "message": str(e),
+                "data": {},
+            }
+        except Exception as e:
+            logger.error(f"Tool {tool_name} failed: {e}", exc_info=True)
+            return {
+                "success": False,
+                "message": f"Operation failed: {str(e)}",
+                "data": {},
+            }
+    
+    @staticmethod
+    def _strip_for_speech(text: str) -> str:
+        """
+        Strip URLs, emoji, and markdown from text for TTS.
+        Keeps the text natural for spoken output.
+        """
+        import re
+        
+        # Remove URLs
+        text = re.sub(r"https?://\S+", "", text)
+        # Remove markdown bold/italic
+        text = re.sub(r"\*+([^*]+)\*+", r"\1", text)
+        text = re.sub(r"_+([^_]+)_+", r"\1", text)
+        # Remove markdown headers
+        text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+        # Remove bullet points
+        text = re.sub(r"^[•\-]\s*", "", text, flags=re.MULTILINE)
+        # Remove emoji (basic range)
+        text = re.sub(
+            r"[\U0001F300-\U0001F9FF\U00002700-\U000027BF\U0000FE00-\U0000FE0F"
+            r"\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF]",
+            "",
+            text,
+        )
+        # Collapse whitespace
+        text = re.sub(r"\s+", " ", text).strip()
+        
+        return text
