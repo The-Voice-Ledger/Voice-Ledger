@@ -54,9 +54,20 @@ class ToolRegistry:
         self._tools["check_eudr_compliance"] = self._check_eudr_compliance
         self._tools["check_mass_balance"] = self._check_mass_balance
         
+        # DPP / Traceability tools (Agent #5)
+        self._tools["get_dpp"] = self._get_dpp
+        self._tools["get_container_dpp"] = self._get_container_dpp
+        self._tools["trace_lineage"] = self._trace_lineage
+        self._tools["validate_dpp"] = self._validate_dpp
+
         # Verification tools (Agent #6)
         self._tools["list_pending_verifications"] = self._list_pending_verifications
         self._tools["verify_batch"] = self._verify_batch
+
+        # Blockchain tools (Agent #7)
+        self._tools["check_blockchain_anchor"] = self._check_blockchain_anchor
+        self._tools["get_token_info"] = self._get_token_info
+        self._tools["verify_batch_hash"] = self._verify_batch_hash
     
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
@@ -678,6 +689,191 @@ class ToolRegistry:
             )
 
     # ------------------------------------------------------------------
+    # DPP / Traceability tool implementations (Agent #5)
+    # ------------------------------------------------------------------
+
+    def _get_dpp(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generate or retrieve the Digital Product Passport for a batch."""
+        batch_id = args.get("batch_id")
+        if not batch_id:
+            return ("Please specify a batch ID.", {"error": "no_batch_id"})
+
+        try:
+            from dpp.dpp_builder import build_dpp
+            dpp = build_dpp(batch_id=batch_id)
+        except ValueError as e:
+            return (f"Could not generate DPP: {e}", {"error": str(e)})
+        except Exception as e:
+            logger.warning(f"DPP generation failed for {batch_id}: {e}")
+            return (f"DPP generation failed for batch '{batch_id}'.", {"error": str(e)})
+
+        # Build a concise summary for the voice response
+        product = dpp.get("productInformation", {})
+        trace = dpp.get("traceability", {})
+        origin = trace.get("origin", {})
+        dd = dpp.get("dueDiligence", {})
+        bc = dpp.get("blockchain", {})
+
+        summary = (
+            f"📋 DPP for {dpp.get('batchId', batch_id)}:\n"
+            f"• Product: {product.get('name', 'Coffee')} "
+            f"({product.get('variety', 'Unknown variety')})\n"
+            f"• Origin: {origin.get('region', '?')}, {origin.get('country', '?')}\n"
+            f"• EUDR: {'✅ Compliant' if dd.get('eudrCompliant') else '❌ Not compliant'}\n"
+            f"• Blockchain: {'✅ Anchored' if bc.get('transactionHash') else '⏳ Pending'}"
+        )
+
+        return (
+            summary,
+            {
+                "batch_id": dpp.get("batchId"),
+                "passport_id": dpp.get("passportId"),
+                "eudr_compliant": dd.get("eudrCompliant"),
+                "deforestation_risk": dd.get("riskAssessment", {}).get("deforestationRisk"),
+                "blockchain_tx": bc.get("transactionHash"),
+                "qr_code": dpp.get("qrCode", {}).get("base64") if isinstance(dpp.get("qrCode"), dict) else None,
+            },
+        )
+
+    def _get_container_dpp(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Get aggregated DPP for a shipping container."""
+        container_id = args.get("container_id")
+        if not container_id:
+            return ("Please specify a container ID.", {"error": "no_container_id"})
+
+        try:
+            from dpp.dpp_builder import build_aggregated_dpp
+            dpp = build_aggregated_dpp(container_id=container_id)
+        except ValueError as e:
+            return (f"Container not found: {e}", {"error": str(e)})
+        except Exception as e:
+            logger.warning(f"Container DPP failed for {container_id}: {e}")
+            return (
+                f"Could not generate container DPP for '{container_id}'.",
+                {"error": str(e)},
+            )
+
+        product = dpp.get("productInformation", {})
+        contributors = dpp.get("traceability", {}).get("contributors", [])
+        num_farmers = product.get("numberOfContributors", len(contributors))
+        total_kg = product.get("totalQuantityKg", 0)
+
+        # Build top-contributor summary (max 5)
+        top = contributors[:5]
+        contrib_lines = []
+        for c in top:
+            pct = c.get("contributionPercent", 0)
+            name = c.get("farmer", "Unknown")
+            contrib_lines.append(f"  • {name}: {pct:.1f}%")
+        if len(contributors) > 5:
+            contrib_lines.append(f"  … and {len(contributors) - 5} more")
+
+        summary = (
+            f"📦 Container {container_id}:\n"
+            f"• {num_farmers} contributing farmers, {total_kg} kg total\n"
+            + "\n".join(contrib_lines)
+        )
+
+        return (
+            summary,
+            {
+                "container_id": container_id,
+                "num_farmers": num_farmers,
+                "total_quantity_kg": total_kg,
+                "contributors_count": len(contributors),
+            },
+        )
+
+    def _trace_lineage(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Trace the full supply chain lineage of a product."""
+        product_id = args.get("product_id")
+        if not product_id:
+            return ("Please specify a product or batch ID.", {"error": "no_product_id"})
+
+        max_depth = args.get("max_depth", 5)
+
+        try:
+            from dpp.dpp_builder import build_recursive_dpp
+            lineage = build_recursive_dpp(product_id=product_id, max_depth=max_depth)
+        except ValueError as e:
+            return (f"Could not trace lineage: {e}", {"error": str(e)})
+        except Exception as e:
+            logger.warning(f"Lineage trace failed for {product_id}: {e}")
+            return (
+                f"Lineage trace failed for '{product_id}'.",
+                {"error": str(e)},
+            )
+
+        # Extract chain of custody
+        chain = lineage.get("traceability", {}).get("chainOfCustody", [])
+        depth = lineage.get("traceability", {}).get("depth", 0)
+        children = lineage.get("traceability", {}).get("children", [])
+
+        steps = []
+        for event in chain[:10]:  # Cap at 10 for voice readability
+            etype = event.get("eventType", "?")
+            loc = event.get("location", "")
+            ts = event.get("timestamp", "")
+            steps.append(f"  • {etype} at {loc} ({ts[:10] if ts else '?'})")
+
+        summary = (
+            f"🔍 Lineage for {product_id} (depth {depth}):\n"
+            f"• {len(chain)} events in chain of custody\n"
+            f"• {len(children)} child batches\n"
+            + ("\n".join(steps) if steps else "  No events recorded.")
+        )
+
+        return (
+            summary,
+            {
+                "product_id": product_id,
+                "depth": depth,
+                "event_count": len(chain),
+                "children_count": len(children),
+            },
+        )
+
+    def _validate_dpp(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Validate a DPP for completeness and EUDR compliance."""
+        batch_id = args.get("batch_id")
+        if not batch_id:
+            return ("Please specify a batch ID.", {"error": "no_batch_id"})
+
+        try:
+            from dpp.dpp_builder import build_dpp, validate_dpp
+            dpp = build_dpp(batch_id=batch_id)
+            is_valid, errors = validate_dpp(dpp)
+        except ValueError as e:
+            return (f"Could not build DPP to validate: {e}", {"error": str(e)})
+        except Exception as e:
+            logger.warning(f"DPP validation failed for {batch_id}: {e}")
+            return (f"Validation failed for batch '{batch_id}'.", {"error": str(e)})
+
+        if is_valid:
+            return (
+                f"✅ DPP for {batch_id} is valid and EUDR-compliant.",
+                {"batch_id": batch_id, "valid": True, "errors": []},
+            )
+        else:
+            error_list = "\n".join(f"  • {e}" for e in errors)
+            return (
+                f"❌ DPP for {batch_id} has {len(errors)} issue(s):\n{error_list}",
+                {"batch_id": batch_id, "valid": False, "errors": errors},
+            )
+
+    # ------------------------------------------------------------------
     # Verification tool implementations (Agent #6)
     # ------------------------------------------------------------------
 
@@ -806,6 +1002,185 @@ class ToolRegistry:
                 "verified_by": user.telegram_first_name or user.did,
             },
         )
+
+
+    # ------------------------------------------------------------------
+    # Blockchain tool implementations (Agent #7)
+    # ------------------------------------------------------------------
+
+    def _check_blockchain_anchor(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Check if a batch is anchored on the blockchain."""
+        batch_id = args.get("batch_id")
+        if not batch_id:
+            return ("Please specify a batch ID.", {"error": "no_batch_id"})
+
+        try:
+            from blockchain.blockchain_anchor import BlockchainAnchor
+            anchor = BlockchainAnchor()
+            info = anchor.get_batch_info(batch_id)
+        except Exception as e:
+            logger.warning(f"Blockchain query failed for {batch_id}: {e}")
+            return (
+                f"Could not check blockchain for '{batch_id}'. "
+                "The blockchain node may be unavailable.",
+                {"error": str(e)},
+            )
+
+        if not info:
+            return (
+                f"Batch {batch_id} is not yet anchored on the blockchain.",
+                {"batch_id": batch_id, "anchored": False},
+            )
+
+        from datetime import datetime
+        ts = info.get("timestamp", 0)
+        anchor_time = (
+            datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
+            if ts else "Unknown"
+        )
+
+        return (
+            f"✅ Batch {batch_id} is anchored on Base Sepolia:\n"
+            f"• Event type: {info.get('event_type', '?')}\n"
+            f"• Location: {info.get('location', '?')}\n"
+            f"• IPFS: {info.get('ipfs_cid', 'N/A')}\n"
+            f"• Anchored: {anchor_time}",
+            {
+                "batch_id": batch_id,
+                "anchored": True,
+                "event_hash": info.get("event_hash"),
+                "event_type": info.get("event_type"),
+                "ipfs_cid": info.get("ipfs_cid"),
+                "submitter": info.get("submitter"),
+                "timestamp": ts,
+            },
+        )
+
+    def _get_token_info(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Look up ERC-1155 batch token metadata."""
+        token_id = args.get("token_id")
+        if token_id is None:
+            return ("Please specify a token ID.", {"error": "no_token_id"})
+
+        try:
+            from blockchain.token_manager import get_token_manager
+            manager = get_token_manager()
+            metadata = manager.get_batch_metadata(int(token_id))
+        except Exception as e:
+            logger.warning(f"Token lookup failed for {token_id}: {e}")
+            return (
+                f"Could not look up token {token_id}. "
+                "The blockchain node may be unavailable.",
+                {"error": str(e)},
+            )
+
+        if not metadata:
+            return (
+                f"Token {token_id} not found on-chain.",
+                {"token_id": token_id, "found": False},
+            )
+
+        quantity_kg = metadata.get("quantity", 0) / 1000  # grams → kg
+        is_agg = metadata.get("is_aggregated", False)
+        children = metadata.get("child_token_ids", [])
+
+        agg_info = ""
+        if is_agg:
+            agg_info = f"\n• Aggregated container with {len(children)} child tokens"
+
+        return (
+            f"🔗 Token {token_id}:\n"
+            f"• Batch: {metadata.get('batch_id', '?')}\n"
+            f"• Quantity: {quantity_kg:.1f} kg\n"
+            f"• IPFS: {metadata.get('ipfs_cid', 'N/A')}"
+            f"{agg_info}",
+            {
+                "token_id": token_id,
+                "found": True,
+                "batch_id": metadata.get("batch_id"),
+                "quantity_kg": quantity_kg,
+                "ipfs_cid": metadata.get("ipfs_cid"),
+                "is_aggregated": is_agg,
+                "child_token_ids": children,
+            },
+        )
+
+    def _verify_batch_hash(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Verify batch data integrity by comparing hash against blockchain."""
+        batch_id = args.get("batch_id")
+        if not batch_id:
+            return ("Please specify a batch ID.", {"error": "no_batch_id"})
+
+        try:
+            from blockchain.batch_hasher import hash_batch_model, compute_batch_hash
+            from database.crud import get_batch_by_id_or_gtin
+
+            batch = get_batch_by_id_or_gtin(db, batch_id)
+            if not batch:
+                return (f"Batch '{batch_id}' not found.", {"error": "batch_not_found"})
+
+            # Compute current hash from DB data
+            current_hash = hash_batch_model(batch)
+
+            # Get on-chain hash
+            from blockchain.blockchain_anchor import BlockchainAnchor
+            anchor = BlockchainAnchor()
+            on_chain = anchor.get_batch_info(batch.batch_id)
+        except Exception as e:
+            logger.warning(f"Hash verification failed for {batch_id}: {e}")
+            return (
+                f"Could not verify hash for '{batch_id}'. "
+                "The blockchain node may be unavailable.",
+                {"error": str(e)},
+            )
+
+        if not on_chain:
+            return (
+                f"Batch {batch.batch_id} is not anchored on-chain yet — "
+                "cannot verify hash integrity.",
+                {"batch_id": batch.batch_id, "anchored": False, "verified": None},
+            )
+
+        on_chain_hash = on_chain.get("event_hash", "")
+        current_hex = current_hash.hex() if isinstance(current_hash, bytes) else str(current_hash)
+
+        # Normalize for comparison
+        a = current_hex.lower().replace("0x", "")
+        b = on_chain_hash.lower().replace("0x", "")
+        match = a == b
+
+        if match:
+            return (
+                f"✅ Batch {batch.batch_id} data integrity verified — "
+                "hash matches blockchain record. No tampering detected.",
+                {
+                    "batch_id": batch.batch_id,
+                    "anchored": True,
+                    "verified": True,
+                    "hash": current_hex,
+                },
+            )
+        else:
+            return (
+                f"⚠️ Batch {batch.batch_id} hash MISMATCH — data may have "
+                "been modified since it was anchored on-chain.",
+                {
+                    "batch_id": batch.batch_id,
+                    "anchored": True,
+                    "verified": False,
+                    "current_hash": current_hex,
+                    "on_chain_hash": on_chain_hash,
+                },
+            )
 
 
 # Module-level singleton
