@@ -762,21 +762,21 @@ class ToolRegistry:
         product = dpp.get("productInformation", {})
         contributors = dpp.get("traceability", {}).get("contributors", [])
         num_farmers = product.get("numberOfContributors", len(contributors))
-        total_kg = product.get("totalQuantityKg", 0)
+        total_qty_str = product.get("totalQuantity", "0 kg")  # e.g. "1500 kg"
 
         # Build top-contributor summary (max 5)
         top = contributors[:5]
         contrib_lines = []
         for c in top:
-            pct = c.get("contributionPercent", 0)
+            pct = c.get("contributionPercent", "?")  # Already formatted, e.g. "33.3%"
             name = c.get("farmer", "Unknown")
-            contrib_lines.append(f"  • {name}: {pct:.1f}%")
+            contrib_lines.append(f"  • {name}: {pct}")
         if len(contributors) > 5:
             contrib_lines.append(f"  … and {len(contributors) - 5} more")
 
         summary = (
             f"📦 Container {container_id}:\n"
-            f"• {num_farmers} contributing farmers, {total_kg} kg total\n"
+            f"• {num_farmers} contributing farmers, {total_qty_str} total\n"
             + "\n".join(contrib_lines)
         )
 
@@ -785,7 +785,7 @@ class ToolRegistry:
             {
                 "container_id": container_id,
                 "num_farmers": num_farmers,
-                "total_quantity_kg": total_kg,
+                "total_quantity": total_qty_str,
                 "contributors_count": len(contributors),
             },
         )
@@ -813,32 +813,36 @@ class ToolRegistry:
                 {"error": str(e)},
             )
 
-        # Extract chain of custody
-        chain = lineage.get("traceability", {}).get("chainOfCustody", [])
-        depth = lineage.get("traceability", {}).get("depth", 0)
-        children = lineage.get("traceability", {}).get("children", [])
+        # Extract contributor data — recursive DPP has 'contributors' not 'chainOfCustody'
+        contributors = lineage.get("traceability", {}).get("contributors", [])
+        trace_method = lineage.get("traceability", {}).get("traceMethod", "")
+        product_info = lineage.get("productInformation", {})
+        num_levels = product_info.get("aggregationLevels", "Unknown")
 
-        steps = []
-        for event in chain[:10]:  # Cap at 10 for voice readability
-            etype = event.get("eventType", "?")
-            loc = event.get("location", "")
-            ts = event.get("timestamp", "")
-            steps.append(f"  • {etype} at {loc} ({ts[:10] if ts else '?'})")
+        farmer_lines = []
+        for c in contributors[:10]:  # Cap at 10 for voice readability
+            name = c.get("farmer", "?")
+            pct = c.get("contributionPercent", "?")
+            region = c.get("origin", {}).get("region", "?")
+            farmer_lines.append(f"  • {name} ({region}): {pct}")
+        if len(contributors) > 10:
+            farmer_lines.append(f"  … and {len(contributors) - 10} more")
+
+        total_qty_str = product_info.get("totalQuantity", "? kg")
 
         summary = (
-            f"🔍 Lineage for {product_id} (depth {depth}):\n"
-            f"• {len(chain)} events in chain of custody\n"
-            f"• {len(children)} child batches\n"
-            + ("\n".join(steps) if steps else "  No events recorded.")
+            f"🔍 Lineage for {product_id}:\n"
+            f"• {len(contributors)} contributing farmers, {total_qty_str}\n"
+            f"• {trace_method}\n"
+            + ("\n".join(farmer_lines) if farmer_lines else "  No farmers found.")
         )
 
         return (
             summary,
             {
                 "product_id": product_id,
-                "depth": depth,
-                "event_count": len(chain),
-                "children_count": len(children),
+                "contributors_count": len(contributors),
+                "total_quantity": total_qty_str,
             },
         )
 
@@ -1018,8 +1022,7 @@ class ToolRegistry:
             return ("Please specify a batch ID.", {"error": "no_batch_id"})
 
         try:
-            from blockchain.blockchain_anchor import BlockchainAnchor
-            anchor = BlockchainAnchor()
+            anchor = _get_blockchain_anchor()
             info = anchor.get_batch_info(batch_id)
         except Exception as e:
             logger.warning(f"Blockchain query failed for {batch_id}: {e}")
@@ -1121,7 +1124,7 @@ class ToolRegistry:
             return ("Please specify a batch ID.", {"error": "no_batch_id"})
 
         try:
-            from blockchain.batch_hasher import hash_batch_model, compute_batch_hash
+            from blockchain.batch_hasher import hash_batch_from_db_model
             from database.crud import get_batch_by_id_or_gtin
 
             batch = get_batch_by_id_or_gtin(db, batch_id)
@@ -1129,11 +1132,10 @@ class ToolRegistry:
                 return (f"Batch '{batch_id}' not found.", {"error": "batch_not_found"})
 
             # Compute current hash from DB data
-            current_hash = hash_batch_model(batch)
+            current_hash = hash_batch_from_db_model(batch)
 
             # Get on-chain hash
-            from blockchain.blockchain_anchor import BlockchainAnchor
-            anchor = BlockchainAnchor()
+            anchor = _get_blockchain_anchor()
             on_chain = anchor.get_batch_info(batch.batch_id)
         except Exception as e:
             logger.warning(f"Hash verification failed for {batch_id}: {e}")
@@ -1181,6 +1183,19 @@ class ToolRegistry:
                     "on_chain_hash": on_chain_hash,
                 },
             )
+
+
+# Blockchain singleton (avoids re-creating Web3 connection on every call)
+_blockchain_anchor = None
+
+
+def _get_blockchain_anchor():
+    """Get or create the BlockchainAnchor singleton."""
+    global _blockchain_anchor
+    if _blockchain_anchor is None:
+        from blockchain.blockchain_anchor import BlockchainAnchor
+        _blockchain_anchor = BlockchainAnchor()
+    return _blockchain_anchor
 
 
 # Module-level singleton
