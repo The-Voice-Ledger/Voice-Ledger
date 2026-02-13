@@ -1,0 +1,4 @@
+# CRE Provenance API — additional dependencies
+# (most deps are already in project root requirements.txt)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0

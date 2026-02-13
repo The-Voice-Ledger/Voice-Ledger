@@ -1,0 +1,14 @@
+{
+  "schedule": "0 */5 * * * *",
+  "apiBaseUrl": "http://localhost:8100",
+  "provenanceDataIdHex": "766f6963656c65646765722d70726f76656e616e6365",
+  "evms": [
+    {
+      "chainSelectorName": "base-testnet-sepolia",
+      "epcisEventAnchorAddress": "0xfda9e00d22eb166796449e919295e9755fd9a699",
+      "provenanceReceiverAddress": "0x0000000000000000000000000000000000000000",
+      "dataFeedsCacheAddress": "0x0000000000000000000000000000000000000000",
+      "gasLimit": "1000000"
+    }
+  ]
+}

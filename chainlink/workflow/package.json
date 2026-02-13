@@ -1,0 +1,23 @@
+{
+  "name": "voice-ledger-oracle",
+  "version": "1.0.0",
+  "description": "Chainlink CRE workflow — Voice Ledger Proof of Provenance, Event Watcher, and Deforestation Oracle",
+  "type": "module",
+  "main": "main.ts",
+  "scripts": {
+    "build": "tsc",
+    "simulate:cron": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 0",
+    "simulate:log": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 1",
+    "simulate:http": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 2 --http-payload @../test/deforestation_request.json",
+    "deploy": "cre workflow deploy --workflow-file main.ts --config-file config.json"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "0.0.8-alpha",
+    "viem": "^2.34.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
