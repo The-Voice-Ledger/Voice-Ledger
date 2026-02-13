@@ -40,9 +40,9 @@ class TestToolDefinitions:
             assert params["type"] == "object", f"Tool {func['name']} params not object"
     
     def test_tool_count(self):
-        """We should have 9 tools: 7 write + 2 read."""
+        """We should have 18 tools: 9 core + 5 marketplace + 2 compliance + 2 verification."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
-        assert len(SUPPLY_CHAIN_TOOLS) == 9
+        assert len(SUPPLY_CHAIN_TOOLS) == 18
     
     def test_tool_names_are_unique(self):
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
@@ -426,6 +426,420 @@ class TestAmharicSupport:
         assert "translated to English" in prompt
         assert "RESPOND IN ENGLISH" in prompt
         assert "translate your response back to Amharic" in prompt
+
+
+# =========================================================================
+# Test Marketplace Tools (Agent #3)
+# =========================================================================
+
+class TestMarketplaceTools:
+    """Verify marketplace tool definitions and registry."""
+
+    def test_marketplace_tool_schemas(self):
+        """All marketplace tools have valid schemas."""
+        from voice.agent.tools import (
+            CREATE_RFQ, BROWSE_RFQS, SUBMIT_OFFER, ACCEPT_OFFER, LIST_MY_OFFERS,
+        )
+        for tool in [CREATE_RFQ, BROWSE_RFQS, SUBMIT_OFFER, ACCEPT_OFFER, LIST_MY_OFFERS]:
+            assert tool["type"] == "function"
+            func = tool["function"]
+            assert "name" in func
+            assert "description" in func
+            assert "parameters" in func
+
+    def test_marketplace_tools_registered(self):
+        """All marketplace tools are in the registry."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        marketplace_tools = [
+            "create_rfq", "browse_rfqs", "submit_offer",
+            "accept_offer", "list_my_offers",
+        ]
+        for name in marketplace_tools:
+            assert registry.has(name), f"Marketplace tool '{name}' not registered"
+
+    def test_create_rfq_requires_quantity(self):
+        """create_rfq schema requires quantity_kg."""
+        from voice.agent.tools import CREATE_RFQ
+
+        required = CREATE_RFQ["function"]["parameters"]["required"]
+        assert "quantity_kg" in required
+
+    def test_submit_offer_requires_price(self):
+        """submit_offer schema requires quantity and price."""
+        from voice.agent.tools import SUBMIT_OFFER
+
+        required = SUBMIT_OFFER["function"]["parameters"]["required"]
+        assert "quantity_offered_kg" in required
+        assert "price_per_kg" in required
+
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_browse_rfqs_is_read_only(self, mock_redis, mock_client):
+        """browse_rfqs should NOT mark performed_write."""
+        from voice.agent.executor import AgentExecutor
+
+        mock_redis.return_value = None
+
+        # Model calls browse_rfqs
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_rfq1"
+        mock_tool_call.function.name = "browse_rfqs"
+        mock_tool_call.function.arguments = json.dumps({"status": "OPEN"})
+
+        mock_msg1 = MagicMock()
+        mock_msg1.tool_calls = [mock_tool_call]
+        mock_msg1.content = ""
+        mock_choice1 = MagicMock()
+        mock_choice1.message = mock_msg1
+        mock_response1 = MagicMock()
+        mock_response1.choices = [mock_choice1]
+        mock_response1.usage.total_tokens = 100
+
+        mock_msg2 = MagicMock()
+        mock_msg2.tool_calls = None
+        mock_msg2.content = "Here are the open RFQs."
+        mock_choice2 = MagicMock()
+        mock_choice2.message = mock_msg2
+        mock_response2 = MagicMock()
+        mock_response2.choices = [mock_choice2]
+        mock_response2.usage.total_tokens = 150
+
+        mock_client.chat.completions.create.side_effect = [
+            mock_response1, mock_response2,
+        ]
+
+        with patch.object(
+            AgentExecutor, "_execute_tool",
+            return_value={
+                "success": True,
+                "message": "Found 2 RFQs",
+                "data": {"rfqs": [], "count": 2},
+            },
+        ):
+            executor = AgentExecutor()
+            result = executor.run(transcript="Show me open RFQs", user_id=1)
+
+        assert result.performed_write is False
+
+
+# =========================================================================
+# Test Compliance Tools (Agent #4)
+# =========================================================================
+
+class TestComplianceTools:
+    """Verify compliance tool definitions and registry."""
+
+    def test_compliance_tool_schemas(self):
+        """All compliance tools have valid schemas."""
+        from voice.agent.tools import CHECK_EUDR_COMPLIANCE, CHECK_MASS_BALANCE
+
+        for tool in [CHECK_EUDR_COMPLIANCE, CHECK_MASS_BALANCE]:
+            assert tool["type"] == "function"
+            func = tool["function"]
+            assert "name" in func
+            assert "description" in func
+            assert "parameters" in func
+
+    def test_compliance_tools_registered(self):
+        """All compliance tools are in the registry."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        assert registry.has("check_eudr_compliance")
+        assert registry.has("check_mass_balance")
+
+    def test_eudr_requires_batch_ids(self):
+        """check_eudr_compliance requires batch_ids."""
+        from voice.agent.tools import CHECK_EUDR_COMPLIANCE
+
+        required = CHECK_EUDR_COMPLIANCE["function"]["parameters"]["required"]
+        assert "batch_ids" in required
+
+    def test_mass_balance_requires_quantities(self):
+        """check_mass_balance requires input and output quantities."""
+        from voice.agent.tools import CHECK_MASS_BALANCE
+
+        required = CHECK_MASS_BALANCE["function"]["parameters"]["required"]
+        assert "input_quantities" in required
+        assert "output_quantities" in required
+
+    def test_mass_balance_handler_valid(self):
+        """check_mass_balance returns correct result for valid balance."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        handler = registry.get("check_mass_balance")
+
+        # Mock db (not needed for mass balance — pure math)
+        mock_db = MagicMock()
+
+        message, data = handler(
+            mock_db,
+            {
+                "input_quantities": [{"quantity": 1000, "uom": "KGM"}],
+                "output_quantities": [
+                    {"quantity": 600, "uom": "KGM"},
+                    {"quantity": 400, "uom": "KGM"},
+                ],
+            },
+        )
+        assert "valid" in message.lower() or data.get("valid") is True
+        assert data["total_input_kg"] == 1000
+        assert data["total_output_kg"] == 1000
+
+    def test_mass_balance_handler_invalid(self):
+        """check_mass_balance detects violation."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        handler = registry.get("check_mass_balance")
+        mock_db = MagicMock()
+
+        message, data = handler(
+            mock_db,
+            {
+                "input_quantities": [{"quantity": 1000, "uom": "KGM"}],
+                "output_quantities": [
+                    {"quantity": 600, "uom": "KGM"},
+                    {"quantity": 500, "uom": "KGM"},
+                ],
+            },
+        )
+        assert data.get("valid") is False
+        assert "violation" in message.lower()
+
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_compliance_tools_are_read_only(self, mock_redis, mock_client):
+        """Compliance tools should NOT mark performed_write."""
+        from voice.agent.executor import AgentExecutor
+
+        mock_redis.return_value = None
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_eudr1"
+        mock_tool_call.function.name = "check_eudr_compliance"
+        mock_tool_call.function.arguments = json.dumps({"batch_ids": ["B001"]})
+
+        mock_msg1 = MagicMock()
+        mock_msg1.tool_calls = [mock_tool_call]
+        mock_msg1.content = ""
+        mock_choice1 = MagicMock()
+        mock_choice1.message = mock_msg1
+        mock_response1 = MagicMock()
+        mock_response1.choices = [mock_choice1]
+        mock_response1.usage.total_tokens = 100
+
+        mock_msg2 = MagicMock()
+        mock_msg2.tool_calls = None
+        mock_msg2.content = "All batches are EUDR compliant."
+        mock_choice2 = MagicMock()
+        mock_choice2.message = mock_msg2
+        mock_response2 = MagicMock()
+        mock_response2.choices = [mock_choice2]
+        mock_response2.usage.total_tokens = 120
+
+        mock_client.chat.completions.create.side_effect = [
+            mock_response1, mock_response2,
+        ]
+
+        with patch.object(
+            AgentExecutor, "_execute_tool",
+            return_value={
+                "success": True,
+                "message": "EUDR compliant",
+                "data": {"compliant": True},
+            },
+        ):
+            executor = AgentExecutor()
+            result = executor.run(transcript="Check EUDR compliance for B001", user_id=1)
+
+        assert result.performed_write is False
+
+
+# =========================================================================
+# Test Verification Tools (Agent #6)
+# =========================================================================
+
+class TestVerificationTools:
+    """Verify verification tool definitions and registry."""
+
+    def test_verification_tool_schemas(self):
+        """All verification tools have valid schemas."""
+        from voice.agent.tools import LIST_PENDING_VERIFICATIONS, VERIFY_BATCH
+
+        for tool in [LIST_PENDING_VERIFICATIONS, VERIFY_BATCH]:
+            assert tool["type"] == "function"
+            func = tool["function"]
+            assert "name" in func
+            assert "description" in func
+            assert "parameters" in func
+
+    def test_verification_tools_registered(self):
+        """All verification tools are in the registry."""
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        assert registry.has("list_pending_verifications")
+        assert registry.has("verify_batch")
+
+    def test_verify_batch_requires_batch_id(self):
+        """verify_batch requires batch_id."""
+        from voice.agent.tools import VERIFY_BATCH
+
+        required = VERIFY_BATCH["function"]["parameters"]["required"]
+        assert "batch_id" in required
+
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_verify_batch_is_write_operation(self, mock_redis, mock_client):
+        """verify_batch should mark performed_write."""
+        from voice.agent.executor import AgentExecutor
+
+        mock_redis.return_value = None
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_verify1"
+        mock_tool_call.function.name = "verify_batch"
+        mock_tool_call.function.arguments = json.dumps({"batch_id": "B001"})
+
+        mock_msg1 = MagicMock()
+        mock_msg1.tool_calls = [mock_tool_call]
+        mock_msg1.content = ""
+        mock_choice1 = MagicMock()
+        mock_choice1.message = mock_msg1
+        mock_response1 = MagicMock()
+        mock_response1.choices = [mock_choice1]
+        mock_response1.usage.total_tokens = 100
+
+        mock_msg2 = MagicMock()
+        mock_msg2.tool_calls = None
+        mock_msg2.content = "Batch B001 verified!"
+        mock_choice2 = MagicMock()
+        mock_choice2.message = mock_msg2
+        mock_response2 = MagicMock()
+        mock_response2.choices = [mock_choice2]
+        mock_response2.usage.total_tokens = 120
+
+        mock_client.chat.completions.create.side_effect = [
+            mock_response1, mock_response2,
+        ]
+
+        with patch.object(
+            AgentExecutor, "_execute_tool",
+            return_value={
+                "success": True,
+                "message": "Batch verified",
+                "data": {"batch_id": "B001", "verified_quantity_kg": 500},
+            },
+        ):
+            executor = AgentExecutor()
+            result = executor.run(transcript="Verify batch B001", user_id=1)
+
+        assert result.performed_write is True
+        assert result.tool_calls[0].tool_name == "verify_batch"
+
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_list_pending_is_read_only(self, mock_redis, mock_client):
+        """list_pending_verifications should NOT mark performed_write."""
+        from voice.agent.executor import AgentExecutor
+
+        mock_redis.return_value = None
+
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_pending1"
+        mock_tool_call.function.name = "list_pending_verifications"
+        mock_tool_call.function.arguments = json.dumps({})
+
+        mock_msg1 = MagicMock()
+        mock_msg1.tool_calls = [mock_tool_call]
+        mock_msg1.content = ""
+        mock_choice1 = MagicMock()
+        mock_choice1.message = mock_msg1
+        mock_response1 = MagicMock()
+        mock_response1.choices = [mock_choice1]
+        mock_response1.usage.total_tokens = 100
+
+        mock_msg2 = MagicMock()
+        mock_msg2.tool_calls = None
+        mock_msg2.content = "3 batches pending verification."
+        mock_choice2 = MagicMock()
+        mock_choice2.message = mock_msg2
+        mock_response2 = MagicMock()
+        mock_response2.choices = [mock_choice2]
+        mock_response2.usage.total_tokens = 120
+
+        mock_client.chat.completions.create.side_effect = [
+            mock_response1, mock_response2,
+        ]
+
+        with patch.object(
+            AgentExecutor, "_execute_tool",
+            return_value={
+                "success": True,
+                "message": "3 batches pending",
+                "data": {"batches": [], "count": 3},
+            },
+        ):
+            executor = AgentExecutor()
+            result = executor.run(
+                transcript="What batches need verification?", user_id=1,
+            )
+
+        assert result.performed_write is False
+
+
+# =========================================================================
+# Test Updated Tool Count
+# =========================================================================
+
+class TestAllToolsIntegration:
+    """Verify all agents work together in the unified tool set."""
+
+    def test_total_tool_count(self):
+        """We should have 18 tools: 9 core + 5 marketplace + 2 compliance + 2 verification."""
+        from voice.agent.tools import SUPPLY_CHAIN_TOOLS
+
+        assert len(SUPPLY_CHAIN_TOOLS) == 18
+
+    def test_all_tool_names_unique(self):
+        """No duplicate tool names across all agents."""
+        from voice.agent.tools import SUPPLY_CHAIN_TOOLS
+
+        names = [t["function"]["name"] for t in SUPPLY_CHAIN_TOOLS]
+        assert len(names) == len(set(names)), f"Duplicate names: {names}"
+
+    def test_all_tools_have_handlers(self):
+        """Every tool definition has a matching handler in the registry."""
+        from voice.agent.tools import SUPPLY_CHAIN_TOOLS
+        from voice.agent.registry import ToolRegistry
+
+        registry = ToolRegistry()
+        for tool in SUPPLY_CHAIN_TOOLS:
+            name = tool["function"]["name"]
+            assert registry.has(name), f"Tool '{name}' has no handler in registry"
+
+    def test_read_vs_write_classification(self):
+        """Verify read-only tools are correctly classified."""
+        read_tools = {
+            "query_batches", "search_knowledge",
+            "browse_rfqs", "list_my_offers",
+            "check_eudr_compliance", "check_mass_balance",
+            "list_pending_verifications",
+        }
+        write_tools = {
+            "record_commission", "record_shipment", "record_receipt",
+            "record_transformation", "pack_batches", "unpack_batches",
+            "split_batch", "create_rfq", "submit_offer", "accept_offer",
+            "verify_batch",
+        }
+        from voice.agent.tools import SUPPLY_CHAIN_TOOLS
+
+        all_names = {t["function"]["name"] for t in SUPPLY_CHAIN_TOOLS}
+        assert read_tools | write_tools == all_names
 
 
 if __name__ == "__main__":
