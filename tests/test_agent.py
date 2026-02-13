@@ -310,5 +310,123 @@ class TestBackwardCompatibility:
             assert intent in INTENT_HANDLERS, f"Missing handler for {intent}"
 
 
+# =========================================================================
+# Test Amharic Language Support
+# =========================================================================
+
+class TestAmharicSupport:
+    """Verify Amharic translation and language routing."""
+    
+    @patch("voice.agent.executor._client")
+    def test_translate_text_gpt_fallback(self, mock_client):
+        """translate_text falls back to GPT when Addis AI unavailable."""
+        from voice.agent.executor import translate_text
+        
+        mock_msg = MagicMock()
+        mock_msg.content = "50 kilograms of Sidama coffee"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        # With no Addis AI key, should fall back to GPT
+        with patch("voice.agent.executor.ADDIS_AI_API_KEY", None):
+            result = translate_text("50 ኪሎግራም የሲዳማ ቡና", "am", "en")
+        
+        assert result == "50 kilograms of Sidama coffee"
+        mock_client.chat.completions.create.assert_called_once()
+    
+    def test_translate_empty_text(self):
+        """Empty text returns as-is without API calls."""
+        from voice.agent.executor import translate_text
+        
+        assert translate_text("", "am", "en") == ""
+        assert translate_text("  ", "am", "en") == "  "
+    
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    @patch("voice.agent.executor.translate_text")
+    def test_amharic_agent_translates_input_and_output(self, mock_translate, mock_redis, mock_client):
+        """Agent translates am→en for input, en→am for output."""
+        from voice.agent.executor import AgentExecutor
+        
+        mock_redis.return_value = None
+        
+        # translate_text called twice: input am→en, output en→am
+        mock_translate.side_effect = [
+            "I harvested 50 kilograms of Sidama coffee",  # am→en
+            "✅ ባች ተፈጥሯል",  # en→am
+        ]
+        
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = None
+        mock_msg.content = "Batch created successfully!"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage.total_tokens = 100
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        executor = AgentExecutor()
+        result = executor.run(
+            transcript="50 ኪሎግራም የሲዳማ ቡና አጨድኩ",
+            user_id=1,
+            language="am",
+        )
+        
+        # Should have called translate twice
+        assert mock_translate.call_count == 2
+        # First call: am→en (input)
+        assert mock_translate.call_args_list[0][0][1] == "am"
+        assert mock_translate.call_args_list[0][0][2] == "en"
+        # Second call: en→am (output)
+        assert mock_translate.call_args_list[1][0][1] == "en"
+        assert mock_translate.call_args_list[1][0][2] == "am"
+        
+        # Response should be the Amharic translation
+        assert result.response == "✅ ባች ተፈጥሯል"
+    
+    @patch("voice.agent.executor._client")
+    @patch("voice.agent.executor._get_redis")
+    def test_english_agent_no_translation(self, mock_redis, mock_client):
+        """English users don't trigger any translation."""
+        from voice.agent.executor import AgentExecutor
+        
+        mock_redis.return_value = None
+        
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = None
+        mock_msg.content = "How can I help you?"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_response.usage.total_tokens = 50
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        with patch("voice.agent.executor.translate_text") as mock_translate:
+            executor = AgentExecutor()
+            result = executor.run(
+                transcript="Hello",
+                user_id=1,
+                language="en",
+            )
+            # translate_text should NOT be called for English
+            mock_translate.assert_not_called()
+    
+    def test_system_prompt_amharic_context(self):
+        """Amharic system prompt tells agent to respond in English for translation."""
+        from voice.agent.executor import AgentExecutor
+        
+        executor = AgentExecutor()
+        prompt = executor._build_system_message(user_id=1, language="am", context=None)
+        
+        assert "translated to English" in prompt
+        assert "RESPOND IN ENGLISH" in prompt
+        assert "translate your response back to Amharic" in prompt
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

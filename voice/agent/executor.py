@@ -35,6 +35,86 @@ AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.2"))
 # Initialize OpenAI client
 _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Addis AI configuration for Amharic translation
+ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
+ADDIS_TRANSLATE_URL = "https://api.addisassistant.com/api/v1/translate"
+
+
+# ---------------------------------------------------------------------------
+# Language Helpers
+# ---------------------------------------------------------------------------
+
+def translate_text(text: str, source_lang: str, target_lang: str) -> str:
+    """
+    Translate text between English and Amharic.
+
+    Strategy:
+    1. Try Addis AI Translation API (best for Amharic)
+    2. Fall back to GPT-4o translation
+    3. Return original text if both fail
+    """
+    if not text or not text.strip():
+        return text
+
+    # Try Addis AI first (preferred for Amharic quality)
+    if ADDIS_AI_API_KEY:
+        try:
+            import httpx
+            resp = httpx.post(
+                ADDIS_TRANSLATE_URL,
+                headers={
+                    "X-API-Key": ADDIS_AI_API_KEY,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": text,
+                    "source_language": source_lang,
+                    "target_language": target_lang,
+                },
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            translated = (
+                data.get("data", {}).get("translated_text")
+                or data.get("translated_text")
+                or data.get("translation")
+            )
+            if translated and translated.strip():
+                logger.info(f"Addis AI translated {source_lang}→{target_lang} ({len(text)} chars)")
+                return translated.strip()
+        except Exception as e:
+            logger.warning(f"Addis AI translation failed, trying GPT fallback: {e}")
+
+    # Fallback: GPT-4o translation
+    try:
+        lang_names = {"en": "English", "am": "Amharic"}
+        src_name = lang_names.get(source_lang, source_lang)
+        tgt_name = lang_names.get(target_lang, target_lang)
+        resp = _client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"Translate the following {src_name} text to {tgt_name}. "
+                        "Return ONLY the translation, nothing else."
+                    ),
+                },
+                {"role": "user", "content": text},
+            ],
+            temperature=0.2,
+            max_tokens=1000,
+        )
+        translated = resp.choices[0].message.content.strip()
+        if translated:
+            logger.info(f"GPT translated {source_lang}→{target_lang} ({len(text)} chars)")
+            return translated
+    except Exception as e:
+        logger.warning(f"GPT translation also failed: {e}")
+
+    return text  # Return original as last resort
+
 
 # ---------------------------------------------------------------------------
 # System Prompt
@@ -288,6 +368,20 @@ class AgentExecutor:
         performed_write = False
         last_intent = None
         last_entities = {}
+        is_amharic = language == "am"
+        original_transcript = transcript
+        
+        # -----------------------------------------------------------
+        # Amharic handling: translate user input → English for the
+        # agent's reasoning, then translate response back → Amharic.
+        # The agent always reasons & calls tools in English (where
+        # GPT-4o's tool-calling is strongest), but the user sees
+        # their preferred language.
+        # -----------------------------------------------------------
+        if is_amharic:
+            logger.info(f"Translating Amharic input for agent (user {user_id})")
+            transcript = translate_text(transcript, "am", "en")
+            logger.info(f"Translated input: {transcript[:80]}...")
         
         # Build initial messages
         system_msg = self._build_system_message(user_id, language, context)
@@ -383,6 +477,11 @@ class AgentExecutor:
                 # Case 2: Model returns text response (no more tool calls)
                 response_text = msg.content or ""
                 
+                # Translate response to Amharic if user speaks Amharic
+                if is_amharic and response_text:
+                    logger.info(f"Translating agent response → Amharic for user {user_id}")
+                    response_text = translate_text(response_text, "en", "am")
+                
                 # Save updated history (exclude system prompt)
                 messages_to_save = messages[1:]  # Skip system prompt
                 messages_to_save.append({"role": "assistant", "content": response_text})
@@ -443,9 +542,17 @@ class AgentExecutor:
         """Build the system prompt with optional context."""
         prompt = self.system_prompt
         
-        # Add language hint
+        # Add language context
         if language == "am":
-            prompt += "\n\nThe user speaks Amharic. Respond in Amharic."
+            prompt += (
+                "\n\nLANGUAGE NOTE: The user speaks Amharic. Their message has been "
+                "translated to English for you. You should RESPOND IN ENGLISH — the "
+                "system will translate your response back to Amharic automatically. "
+                "Keep your responses simple and clear so they translate well. "
+                "Avoid idioms, wordplay, or complex sentence structures. "
+                "Use short sentences. Ethiopian names, coffee varieties (Sidama, "
+                "Yirgacheffe, Guji, Gedeo, Harrar), and locations should stay as-is."
+            )
         
         # Add app context if available
         if context:
