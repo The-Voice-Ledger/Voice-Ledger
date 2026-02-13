@@ -339,10 +339,370 @@ SEARCH_KNOWLEDGE = {
 }
 
 
+# ===========================================================================
+# MARKETPLACE TOOLS (Agent #3 — RFQ system for buyers & cooperatives)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: create_rfq  (WRITE — buyer creates request for quote)
+# ---------------------------------------------------------------------------
+CREATE_RFQ = {
+    "type": "function",
+    "function": {
+        "name": "create_rfq",
+        "description": (
+            "Create a new Request for Quote (RFQ) on the marketplace. "
+            "Only BUYER role users can create RFQs. Use when a buyer says "
+            "'I need coffee', 'looking for', 'request quote', 'buy', 'purchase'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "quantity_kg": {
+                    "type": "number",
+                    "description": (
+                        "Quantity needed in kilograms. "
+                        "If user says bags, multiply by 60."
+                    ),
+                },
+                "variety": {
+                    "type": "string",
+                    "description": "Coffee variety requested, e.g. Yirgacheffe, Sidama, Guji",
+                },
+                "processing_method": {
+                    "type": "string",
+                    "description": "Processing method: Washed, Natural, Honey",
+                },
+                "grade": {
+                    "type": "string",
+                    "description": "Quality grade: Grade 1, Grade 2, Specialty",
+                },
+                "delivery_location": {
+                    "type": "string",
+                    "description": "Where the coffee should be delivered",
+                },
+            },
+            "required": ["quantity_kg"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: browse_rfqs  (READ — cooperative browses open requests)
+# ---------------------------------------------------------------------------
+BROWSE_RFQS = {
+    "type": "function",
+    "function": {
+        "name": "browse_rfqs",
+        "description": (
+            "Browse open RFQs on the marketplace. Use when a cooperative "
+            "manager asks 'what do buyers need', 'show me requests', "
+            "'any open orders', 'marketplace', 'available RFQs'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "variety": {
+                    "type": "string",
+                    "description": "Filter by coffee variety",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status: OPEN, PARTIALLY_FILLED, FULFILLED",
+                    "default": "OPEN",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 10)",
+                    "default": 10,
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: submit_offer  (WRITE — cooperative offers on an RFQ)
+# ---------------------------------------------------------------------------
+SUBMIT_OFFER = {
+    "type": "function",
+    "function": {
+        "name": "submit_offer",
+        "description": (
+            "Submit an offer for an open RFQ. Only COOPERATIVE_MANAGER role "
+            "users can submit offers. Use when user says 'I can supply', "
+            "'make offer', 'bid on', 'I have coffee for that request'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "rfq_id": {
+                    "type": "integer",
+                    "description": "RFQ ID to make an offer on",
+                },
+                "rfq_number": {
+                    "type": "string",
+                    "description": "RFQ number (e.g. RFQ-000001) — alternative to rfq_id",
+                },
+                "quantity_offered_kg": {
+                    "type": "number",
+                    "description": "Quantity offered in kilograms",
+                },
+                "price_per_kg": {
+                    "type": "number",
+                    "description": "Price per kg in USD",
+                },
+                "delivery_timeline": {
+                    "type": "string",
+                    "description": "Delivery timeline, e.g. '2 weeks', '30 days'",
+                },
+            },
+            "required": ["quantity_offered_kg", "price_per_kg"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: accept_offer  (WRITE — buyer accepts a cooperative's offer)
+# ---------------------------------------------------------------------------
+ACCEPT_OFFER = {
+    "type": "function",
+    "function": {
+        "name": "accept_offer",
+        "description": (
+            "Accept an offer from a cooperative on one of your RFQs. "
+            "Only the BUYER who created the RFQ can accept. "
+            "Use when buyer says 'accept offer', 'go with that one', 'approve'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "offer_id": {
+                    "type": "integer",
+                    "description": "The offer ID to accept",
+                },
+                "rfq_id": {
+                    "type": "integer",
+                    "description": "RFQ ID the offer belongs to",
+                },
+                "quantity_accepted_kg": {
+                    "type": "number",
+                    "description": (
+                        "Quantity to accept in kg. "
+                        "If not specified, accepts the full offered quantity."
+                    ),
+                },
+                "payment_terms": {
+                    "type": "string",
+                    "description": "Payment terms: NET_30, NET_60, CASH_ON_DELIVERY",
+                },
+            },
+            "required": ["offer_id", "rfq_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: list_my_offers  (READ — cooperative views their offers)
+# ---------------------------------------------------------------------------
+LIST_MY_OFFERS = {
+    "type": "function",
+    "function": {
+        "name": "list_my_offers",
+        "description": (
+            "List offers that the current cooperative has submitted. "
+            "Use when cooperative manager asks 'my offers', 'what did I bid on', "
+            "'offer status', 'pending offers'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Filter by offer status: PENDING, ACCEPTED, REJECTED",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+# ===========================================================================
+# COMPLIANCE TOOLS (Agent #4 — EUDR & supply chain validation)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: check_eudr_compliance  (READ — validate EUDR requirements)
+# ---------------------------------------------------------------------------
+CHECK_EUDR_COMPLIANCE = {
+    "type": "function",
+    "function": {
+        "name": "check_eudr_compliance",
+        "description": (
+            "Check EUDR (EU Deforestation Regulation 2023/1115) compliance "
+            "for one or more batches. Validates that all farmers have GPS "
+            "coordinates (Article 9 requirement). Use when user asks "
+            "'is this batch compliant', 'EUDR check', 'can I export to EU', "
+            "'compliance status', 'deforestation check'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of batch IDs to check for EUDR compliance",
+                },
+            },
+            "required": ["batch_ids"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: check_mass_balance  (READ — validate mass balance)
+# ---------------------------------------------------------------------------
+CHECK_MASS_BALANCE = {
+    "type": "function",
+    "function": {
+        "name": "check_mass_balance",
+        "description": (
+            "Validate mass balance between input and output quantities. "
+            "Ensures no coffee is created out of thin air during splits or "
+            "processing. Use when user asks 'check mass balance', "
+            "'quantities add up', 'validate transformation', 'audit split'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "input_quantities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "quantity": {"type": "number"},
+                            "uom": {"type": "string", "default": "KGM"},
+                        },
+                        "required": ["quantity"],
+                    },
+                    "description": "List of input quantities (with optional uom)",
+                },
+                "output_quantities": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "quantity": {"type": "number"},
+                            "uom": {"type": "string", "default": "KGM"},
+                        },
+                        "required": ["quantity"],
+                    },
+                    "description": "List of output quantities (with optional uom)",
+                },
+                "allow_loss": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, allow output < input (for processing like roasting "
+                        "where 10-30% mass loss is normal). Default false."
+                    ),
+                    "default": False,
+                },
+            },
+            "required": ["input_quantities", "output_quantities"],
+        },
+    },
+}
+
+
+# ===========================================================================
+# VERIFICATION TOOLS (Agent #6 — batch verification workflow)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: list_pending_verifications  (READ — show unverified batches)
+# ---------------------------------------------------------------------------
+LIST_PENDING_VERIFICATIONS = {
+    "type": "function",
+    "function": {
+        "name": "list_pending_verifications",
+        "description": (
+            "List batches that are pending verification. "
+            "Use when a cooperative manager asks 'what needs verification', "
+            "'unverified batches', 'pending verifications', "
+            "'what batches are waiting for me'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "origin": {
+                    "type": "string",
+                    "description": "Filter by origin region",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default 10)",
+                    "default": 10,
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: verify_batch  (WRITE — mark a batch as verified)
+# ---------------------------------------------------------------------------
+VERIFY_BATCH = {
+    "type": "function",
+    "function": {
+        "name": "verify_batch",
+        "description": (
+            "Verify a coffee batch. Only COOPERATIVE_MANAGER role users can "
+            "verify batches. Updates batch status to VERIFIED and issues a "
+            "verification credential. Use when manager says 'verify batch', "
+            "'approve batch', 'I checked this batch', 'confirm quality'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch ID to verify",
+                },
+                "verified_quantity_kg": {
+                    "type": "number",
+                    "description": (
+                        "Actual quantity verified in kg. "
+                        "If not provided, uses the claimed quantity."
+                    ),
+                },
+                "quality_notes": {
+                    "type": "string",
+                    "description": (
+                        "Quality assessment notes — grade, moisture content, "
+                        "defects, overall condition"
+                    ),
+                },
+            },
+            "required": ["batch_id"],
+        },
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # All tools grouped
 # ---------------------------------------------------------------------------
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
+    # Core supply chain (Agent #1)
     RECORD_COMMISSION,
     RECORD_SHIPMENT,
     RECORD_RECEIPT,
@@ -352,4 +712,16 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     SPLIT_BATCH,
     QUERY_BATCHES,
     SEARCH_KNOWLEDGE,
+    # Marketplace (Agent #3)
+    CREATE_RFQ,
+    BROWSE_RFQS,
+    SUBMIT_OFFER,
+    ACCEPT_OFFER,
+    LIST_MY_OFFERS,
+    # Compliance (Agent #4)
+    CHECK_EUDR_COMPLIANCE,
+    CHECK_MASS_BALANCE,
+    # Verification (Agent #6)
+    LIST_PENDING_VERIFICATIONS,
+    VERIFY_BATCH,
 ]

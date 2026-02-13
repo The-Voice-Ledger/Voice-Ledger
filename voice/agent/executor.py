@@ -135,6 +135,21 @@ YOUR CAPABILITIES (use the tools provided):
 • Look up batches and data (query_batches)
 • Search documentation and guides (search_knowledge)
 
+MARKETPLACE:
+• Create a Request for Quote to buy coffee (create_rfq) — buyers only
+• Browse open marketplace requests (browse_rfqs)
+• Submit an offer on an RFQ (submit_offer) — cooperative managers only
+• Accept a cooperative's offer (accept_offer) — buyers only
+• View your submitted offers (list_my_offers) — cooperative managers only
+
+COMPLIANCE:
+• Check EUDR compliance for batches (check_eudr_compliance)
+• Validate mass balance for splits/transformations (check_mass_balance)
+
+VERIFICATION:
+• List batches waiting for verification (list_pending_verifications)
+• Verify a batch and issue credential (verify_batch) — cooperative managers only
+
 CONVERSATION RULES:
 1. Be warm, clear, and concise — users are often speaking via voice
 2. When a user gives all needed info in one message, call the tool immediately
@@ -452,7 +467,12 @@ class AgentExecutor:
                         all_tool_calls.append(tool_call_record)
                         
                         # Track write operations
-                        if tool_result["success"] and tool_name not in ("query_batches", "search_knowledge"):
+                        if tool_result["success"] and tool_name not in (
+                            "query_batches", "search_knowledge",
+                            "browse_rfqs", "list_my_offers",
+                            "check_eudr_compliance", "check_mass_balance",
+                            "list_pending_verifications",
+                        ):
                             performed_write = True
                             last_intent = tool_name
                             last_entities = tool_args
