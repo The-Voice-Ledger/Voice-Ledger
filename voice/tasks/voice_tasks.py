@@ -471,6 +471,7 @@ def process_voice_command_task(
                                         message=agent_result.response,
                                         parse_mode='Markdown',
                                         send_voice=True,
+                                        language=user_language,
                                     )
                                 )
                                 pending = asyncio.all_tasks(loop)

@@ -327,8 +327,7 @@ class ToolRegistry:
             expires_at=datetime.utcnow() + timedelta(days=30),
         )
         db.add(rfq)
-        db.commit()
-        db.refresh(rfq)
+        db.flush()  # Assign rfq.id without committing (get_db context auto-commits)
 
         # Smart broadcast to cooperatives
         from database.models import Organization as Org
@@ -344,7 +343,7 @@ class ToolRegistry:
             )
             db.add(broadcast)
             broadcast_count += 1
-        db.commit()
+        db.flush()  # Ensure all broadcast records are staged
 
         variety_str = f" ({rfq.variety})" if rfq.variety else ""
         return (
@@ -467,8 +466,7 @@ class ToolRegistry:
         if broadcast:
             broadcast.responded_at = datetime.utcnow()
 
-        db.commit()
-        db.refresh(offer)
+        db.flush()  # Ensure offer gets an ID (get_db context auto-commits)
 
         coop_org = db.query(Organization).filter_by(id=user.organization_id).first()
         return (
@@ -542,8 +540,7 @@ class ToolRegistry:
         else:
             rfq.status = "PARTIALLY_FILLED"
 
-        db.commit()
-        db.refresh(acceptance)
+        db.flush()  # Ensure acceptance gets an ID (get_db context auto-commits)
 
         coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
         return (
@@ -707,13 +704,19 @@ class ToolRegistry:
 
         batch_list = []
         for b in batches:
+            farmer_name = "Unknown"
+            try:
+                if b.farmer:
+                    farmer_name = b.farmer.name or "Unknown"
+            except Exception:
+                pass  # Lazy-load may fail outside eager context
             batch_list.append({
                 "batch_id": b.batch_id,
                 "origin": b.origin,
                 "variety": b.variety,
                 "quantity_kg": b.quantity_kg,
                 "created_at": str(b.created_at) if b.created_at else None,
-                "farmer": b.farmer.name if b.farmer else "Unknown",
+                "farmer": farmer_name,
             })
 
         return (
@@ -790,7 +793,7 @@ class ToolRegistry:
             except Exception as e:
                 logger.warning(f"Credential issuance failed (non-fatal): {e}")
 
-        db.commit()
+        db.flush()  # Stage changes (get_db context auto-commits)
 
         return (
             f"Batch {batch.batch_id} verified: {verified_quantity} kg. "
