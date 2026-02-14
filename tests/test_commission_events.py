@@ -59,6 +59,14 @@ def test_commission_event_creation():
         
         print(f"\nCreating commission event...")
         
+        # Find farmer identity for EPCIS events (submitter_id must reference farmer_identities.id)
+        farmer_identity = db.query(FarmerIdentity).filter_by(farmer_id=f"FARMER-{batch.created_by_user_id}").first()
+        submitter_farmer_id = farmer_identity.id if farmer_identity else None
+        
+        if not submitter_farmer_id:
+            print(f"❌ Farmer identity not found for user {batch.created_by_user_id}. Skipping EPCIS event creation.")
+            return False
+        
         # Create commission event
         event_result = create_commission_event(
             db=db,
@@ -72,7 +80,7 @@ def test_commission_event_creation():
             processing_method=batch.processing_method or "Washed",
             quality_grade=batch.quality_grade or "A",
             batch_db_id=batch.id,
-            submitter_db_id=batch.created_by_user_id
+            submitter_db_id=submitter_farmer_id
         )
         
         if event_result:
