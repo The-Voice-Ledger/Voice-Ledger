@@ -68,6 +68,11 @@ class ToolRegistry:
         self._tools["check_blockchain_anchor"] = self._check_blockchain_anchor
         self._tools["get_token_info"] = self._get_token_info
         self._tools["verify_batch_hash"] = self._verify_batch_hash
+
+        # Chainlink CRE / DON Attestation tools (Agent #8)
+        self._tools["request_don_attestation"] = self._request_don_attestation
+        self._tools["check_don_attestation"] = self._check_don_attestation
+        self._tools["get_don_provenance_metrics"] = self._get_don_provenance_metrics
     
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
@@ -92,7 +97,7 @@ class ToolRegistry:
         self, db: Session, args: Dict[str, Any],
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
-        """Wrap handle_record_commission."""
+        """Wrap handle_record_commission with CRE auto-attestation."""
         from voice.command_integration import handle_record_commission
         
         # Map agent args → handler entities
@@ -103,7 +108,17 @@ class ToolRegistry:
             "unit": "kg",  # Agent already converts bags→kg
             "grade": args.get("grade", "A"),
         }
-        return handle_record_commission(db, entities, user_id=user_id, user_did=user_did)
+        msg, data = handle_record_commission(db, entities, user_id=user_id, user_did=user_did)
+
+        # ── Post-commission CRE hook ──
+        # If the farmer has GPS coords, automatically request a DON
+        # deforestation attestation. Best-effort — never blocks commission.
+        try:
+            self._auto_request_don_attestation(db, user_id, data)
+        except Exception as e:
+            logger.debug("CRE auto-attestation skipped: %s", e)
+
+        return msg, data
     
     def _wrap_shipment(
         self, db: Session, args: Dict[str, Any],
@@ -710,12 +725,29 @@ class ToolRegistry:
             logger.warning(f"DPP generation failed for {batch_id}: {e}")
             return (f"DPP generation failed for batch '{batch_id}'.", {"error": str(e)})
 
+        # ── Embed DON attestation if available ──
+        try:
+            from dpp.dpp_builder import build_don_attestation_section
+            don_section = build_don_attestation_section(batch_id, db)
+            if don_section and don_section.get("attestationExists"):
+                dpp["donAttestation"] = don_section
+        except Exception as e:
+            logger.debug("DON attestation section skipped: %s", e)
+
         # Build a concise summary for the voice response
         product = dpp.get("productInformation", {})
         trace = dpp.get("traceability", {})
         origin = trace.get("origin", {})
         dd = dpp.get("dueDiligence", {})
         bc = dpp.get("blockchain", {})
+        don = dpp.get("donAttestation", {})
+
+        don_line = ""
+        if don.get("attestationExists"):
+            don_line = (
+                f"\n• DON Attestation: {don.get('riskLabel', '?')} risk "
+                f"({'✅ Compliant' if don.get('eudrCompliant') else '❌ Non-compliant'})"
+            )
 
         summary = (
             f"📋 DPP for {dpp.get('batchId', batch_id)}:\n"
@@ -724,6 +756,7 @@ class ToolRegistry:
             f"• Origin: {origin.get('region', '?')}, {origin.get('country', '?')}\n"
             f"• EUDR: {'✅ Compliant' if dd.get('eudrCompliant') else '❌ Not compliant'}\n"
             f"• Blockchain: {'✅ Anchored' if bc.get('transactionHash') else '⏳ Pending'}"
+            f"{don_line}"
         )
 
         return (
@@ -734,6 +767,8 @@ class ToolRegistry:
                 "eudr_compliant": dd.get("eudrCompliant"),
                 "deforestation_risk": dd.get("riskAssessment", {}).get("deforestationRisk"),
                 "blockchain_tx": bc.get("transactionHash"),
+                "don_attested": don.get("attestationExists", False),
+                "don_risk_label": don.get("riskLabel"),
                 "qr_code": dpp.get("qrCode", {}).get("base64") if isinstance(dpp.get("qrCode"), dict) else None,
             },
         )
@@ -1184,6 +1219,185 @@ class ToolRegistry:
                 },
             )
 
+    # ------------------------------------------------------------------
+    # Chainlink CRE / DON Attestation tools (Agent #8)
+    # ------------------------------------------------------------------
+
+    def _request_don_attestation(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Request a DON-attested deforestation check for a farm."""
+        farm_id = args.get("farm_id")
+        if not farm_id:
+            return ("Please specify a farm/farmer ID.", {"error": "no_farm_id"})
+
+        try:
+            client = _get_cre_client()
+            result = client.request_deforestation_attestation(farm_id)
+        except Exception as e:
+            logger.warning("DON attestation request failed for %s: %s", farm_id, e)
+            return (
+                f"Could not request DON attestation for '{farm_id}'. "
+                "The CRE service may be unavailable.",
+                {"error": str(e)},
+            )
+
+        status = result.get("status", "unknown")
+        mode = result.get("mode", "unknown")
+
+        if status in ("attested_onchain", "requested"):
+            tx_hash = result.get("tx_hash", "")
+            tx_info = f" (tx: {tx_hash[:16]}…)" if tx_hash else ""
+            return (
+                f"✅ DON deforestation attestation {'written on-chain' if 'onchain' in status else 'requested'} "
+                f"for farm {farm_id}{tx_info}. "
+                f"Use 'check DON attestation for {farm_id}' to read the result.",
+                result,
+            )
+        elif status == "attested_offchain":
+            att = result.get("attestation", {})
+            compliant = att.get("eudrCompliant", False)
+            return (
+                f"📋 Deforestation check completed for farm {farm_id} "
+                f"({'✅ EUDR compliant' if compliant else '❌ Not compliant'}). "
+                f"Note: contract not deployed — result not written on-chain.",
+                result,
+            )
+        else:
+            error = result.get("error", "Unknown error")
+            return (
+                f"❌ DON attestation failed for farm {farm_id}: {error}",
+                result,
+            )
+
+    def _check_don_attestation(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Read a DON-attested deforestation result from the blockchain."""
+        farm_id = args.get("farm_id")
+        if not farm_id:
+            return ("Please specify a farm/farmer ID.", {"error": "no_farm_id"})
+
+        try:
+            client = _get_cre_client()
+            attestation = client.get_deforestation_attestation(farm_id)
+        except Exception as e:
+            logger.warning("DON attestation read failed for %s: %s", farm_id, e)
+            return (
+                f"Could not read DON attestation for '{farm_id}'. "
+                "The blockchain may be unavailable.",
+                {"error": str(e)},
+            )
+
+        if not attestation.exists:
+            return (
+                f"No DON attestation found for farm {farm_id}. "
+                f"Use 'request DON attestation for {farm_id}' to initiate one.",
+                {"farm_id": farm_id, "exists": False},
+            )
+
+        risk_emoji = {0: "🟢", 1: "🟡", 2: "🔴", 3: "⚪"}.get(
+            attestation.risk_level, "⚪"
+        )
+
+        return (
+            f"🔗 DON Attestation for farm {farm_id}:\n"
+            f"• Risk: {risk_emoji} {attestation.risk_label}\n"
+            f"• EUDR: {'✅ Compliant' if attestation.eudr_compliant else '❌ Non-compliant'}\n"
+            f"• Tree loss: {attestation.tree_loss_hectares:.4f} ha\n"
+            f"• Location: ({attestation.latitude:.6f}, {attestation.longitude:.6f})\n"
+            f"• Attested: {attestation.timestamp}",
+            attestation.to_dict(),
+        )
+
+    def _get_don_provenance_metrics(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Read DON-attested provenance metrics from the blockchain."""
+        try:
+            client = _get_cre_client()
+            metrics = client.get_provenance_metrics()
+        except Exception as e:
+            logger.warning("DON metrics read failed: %s", e)
+            return (
+                "Could not read DON provenance metrics. "
+                "The blockchain may be unavailable.",
+                {"error": str(e)},
+            )
+
+        if not metrics.exists:
+            return (
+                "No DON-attested provenance metrics available yet. "
+                "The CRE cron trigger writes these every 5 minutes.",
+                metrics.to_dict(),
+            )
+
+        return (
+            f"📊 DON-Attested Supply Chain Metrics:\n"
+            f"• Farmers: {metrics.total_farmers}\n"
+            f"• Batches: {metrics.total_batches} "
+            f"({metrics.verified_batches} verified)\n"
+            f"• Total quantity: {metrics.total_quantity_kg:,} kg\n"
+            f"• EUDR compliance: {metrics.eudr_compliant_percent}%\n"
+            f"• Anchored on-chain: {metrics.batches_anchored}\n"
+            f"• Last updated: {metrics.last_updated}",
+            metrics.to_dict(),
+        )
+
+    # ------------------------------------------------------------------
+    # Post-commission CRE orchestration
+    # ------------------------------------------------------------------
+
+    def _auto_request_don_attestation(
+        self, db: Session, user_id: int, commission_data: Dict[str, Any]
+    ):
+        """
+        Best-effort auto-trigger DON deforestation attestation after commission.
+
+        If the farmer who created the batch has GPS coordinates, we
+        automatically fire a CRE deforestation check. This bridges
+        Trigger 2 (LogTrigger on EventAnchored, which already fired
+        from the commission anchor) with Trigger 3 (HTTP deforestation).
+
+        Non-blocking: any failure is silently logged.
+        """
+        from database.models import FarmerIdentity, UserIdentity
+
+        # Find the farmer associated with this user
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or not user.farmer_id:
+            return
+
+        farmer = db.query(FarmerIdentity).filter_by(id=user.farmer_id).first()
+        if not farmer or not farmer.latitude or not farmer.longitude:
+            logger.debug(
+                "Skipping CRE auto-attestation — farmer %s has no GPS",
+                farmer.farmer_id if farmer else "?",
+            )
+            return
+
+        farm_id = farmer.farmer_id
+        logger.info(
+            "Auto-requesting DON attestation for farm %s (post-commission)",
+            farm_id,
+        )
+
+        try:
+            client = _get_cre_client()
+            result = client.request_deforestation_attestation(farm_id)
+            logger.info(
+                "CRE auto-attestation result for %s: %s",
+                farm_id, result.get("status"),
+            )
+        except Exception as e:
+            logger.warning(
+                "CRE auto-attestation failed for %s (non-fatal): %s",
+                farm_id, e,
+            )
+
 
 # Blockchain singleton (avoids re-creating Web3 connection on every call)
 _blockchain_anchor = None
@@ -1196,6 +1410,19 @@ def _get_blockchain_anchor():
         from blockchain.blockchain_anchor import BlockchainAnchor
         _blockchain_anchor = BlockchainAnchor()
     return _blockchain_anchor
+
+
+# CRE Client singleton
+_cre_client = None
+
+
+def _get_cre_client():
+    """Get or create the CREClient singleton."""
+    global _cre_client
+    if _cre_client is None:
+        from chainlink.cre_client import CREClient
+        _cre_client = CREClient()
+    return _cre_client
 
 
 # Module-level singleton

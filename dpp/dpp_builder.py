@@ -274,6 +274,103 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
     return eudr_section
 
 
+def build_don_attestation_section(
+    batch_id: str,
+    db: Session = None,
+) -> Dict[str, Any]:
+    """
+    Build DON attestation section for a DPP.
+
+    Reads the Chainlink DON-attested deforestation result from the
+    ProvenanceDataReceiver contract on Base Sepolia.  This provides
+    cryptographic proof that a decentralised oracle network independently
+    verified the farm's deforestation status via satellite imagery.
+
+    Args:
+        batch_id: Batch identifier (to resolve farmer → farm_id)
+        db:       Optional DB session (opened internally if None)
+
+    Returns:
+        Dict with DON attestation data, or empty dict if unavailable
+    """
+    section: Dict[str, Any] = {
+        "attestationExists": False,
+        "source": "Chainlink Decentralised Oracle Network (DON)",
+        "contract": "ProvenanceDataReceiver",
+        "network": "Base Sepolia",
+    }
+
+    try:
+        from chainlink.cre_client import get_cre_client
+
+        client = get_cre_client()
+        if not client._deployed:
+            section["note"] = "ProvenanceDataReceiver not deployed yet"
+            return section
+
+        # Resolve batch → farmer → farm_id
+        farm_id = _resolve_farm_id(batch_id, db)
+        if not farm_id:
+            section["note"] = "Could not resolve farm_id for this batch"
+            return section
+
+        attestation = client.get_deforestation_attestation(farm_id)
+        if not attestation.exists:
+            section["note"] = f"No DON attestation found for farm {farm_id}"
+            return section
+
+        section.update({
+            "attestationExists": True,
+            "farmId": farm_id,
+            "riskLevel": attestation.risk_level,
+            "riskLabel": attestation.risk_label,
+            "eudrCompliant": attestation.eudr_compliant,
+            "treeLossHectares": attestation.tree_loss_hectares,
+            "coordinates": {
+                "latitude": attestation.latitude,
+                "longitude": attestation.longitude,
+            },
+            "timestamp": attestation.timestamp,
+            "verification": {
+                "method": "Multi-node DON consensus via Chainlink CRE",
+                "dataSource": "Global Forest Watch (GFW) UMD Tree Cover Loss",
+                "nodesRequired": "2/3 DON nodes must agree (identical consensus)",
+                "writtenOnChain": True,
+            },
+        })
+
+        # Also fetch latest provenance metrics for context
+        metrics = client.get_provenance_metrics()
+        if metrics.exists:
+            section["platformMetrics"] = {
+                "totalFarmers": metrics.total_farmers,
+                "totalBatches": metrics.total_batches,
+                "eudrCompliantPercent": metrics.eudr_compliant_percent,
+                "lastUpdated": metrics.last_updated,
+            }
+
+    except Exception as e:
+        logger.debug("DON attestation section build failed: %s", e)
+        section["note"] = f"DON attestation unavailable: {e}"
+
+    return section
+
+
+def _resolve_farm_id(batch_id: str, db: Session = None) -> Optional[str]:
+    """Resolve a batch_id to the associated farmer_id."""
+    def _inner(session: Session) -> Optional[str]:
+        batch = get_batch_by_batch_id(session, batch_id)
+        if batch and batch.farmer:
+            return batch.farmer.farmer_id
+        return None
+
+    if db:
+        return _inner(db)
+
+    with get_db() as session:
+        return _inner(session)
+
+
 def load_batch_data(batch_id: str):
     """
     Load batch data from Neon database with eager-loaded relationships.
@@ -472,17 +569,21 @@ def build_dpp(
         fresh_batch = get_batch_by_batch_id(db, batch_id)
         eudr_compliance = build_eudr_compliance_section(fresh_batch, db)
     
+    # Build DON attestation section (Chainlink CRE on-chain verification)
+    don_attestation = build_don_attestation_section(batch_id)
+    
     # Assemble complete DPP
     dpp = {
         "passportId": passport_id,
         "batchId": batch_id,
-        "version": "2.0.0",  # Updated to 2.0 with EUDR GPS verification
+        "version": "3.0.0",  # v3: EUDR GPS verification + Chainlink DON attestation
         "issuedAt": issued_at,
         "productInformation": product_info,
         "traceability": traceability,
         "sustainability": sustainability,
         "dueDiligence": due_diligence,
-        "eudrCompliance": eudr_compliance,  # NEW: Comprehensive EUDR section
+        "eudrCompliance": eudr_compliance,
+        "donAttestation": don_attestation,  # Chainlink DON-attested deforestation
         "blockchain": blockchain,
         "qrCode": qr_code
     }

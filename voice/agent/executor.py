@@ -161,6 +161,11 @@ BLOCKCHAIN:
 • Look up batch token metadata (get_token_info)
 • Verify batch data integrity against blockchain (verify_batch_hash)
 
+CHAINLINK DON ATTESTATION:
+• Request Chainlink DON deforestation verification for a farm (request_don_attestation)
+• Read DON-attested compliance result from blockchain (check_don_attestation)
+• Get DON-attested supply chain metrics from blockchain (get_don_provenance_metrics)
+
 CONVERSATION RULES:
 1. Be warm, clear, and concise — users are often speaking via voice
 2. When a user gives all needed info in one message, call the tool immediately

@@ -907,6 +907,88 @@ VERIFY_BATCH_HASH = {
 
 
 # ---------------------------------------------------------------------------
+# Tool: request_don_attestation
+# ---------------------------------------------------------------------------
+REQUEST_DON_ATTESTATION = {
+    "type": "function",
+    "function": {
+        "name": "request_don_attestation",
+        "description": (
+            "Request a Chainlink DON-attested deforestation check for a farm. "
+            "This triggers the CRE workflow which verifies via satellite imagery "
+            "(Global Forest Watch) across multiple DON nodes and writes the "
+            "attestation on-chain. Use when a new batch is created and the farm "
+            "needs EUDR deforestation verification, or when the user asks "
+            "'check deforestation for farm X', 'get DON attestation', "
+            "'verify my farm with Chainlink'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "farm_id": {
+                    "type": "string",
+                    "description": "Farmer ID to request attestation for (e.g. FARMER-001)",
+                },
+            },
+            "required": ["farm_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: check_don_attestation
+# ---------------------------------------------------------------------------
+CHECK_DON_ATTESTATION = {
+    "type": "function",
+    "function": {
+        "name": "check_don_attestation",
+        "description": (
+            "Read a DON-attested deforestation result from the blockchain. "
+            "Returns the Chainlink DON's attestation including risk level, "
+            "EUDR compliance status, and tree loss data — all verified by "
+            "multiple oracle nodes and written on-chain. Use when user asks "
+            "'is my farm compliant', 'what did the DON say about my farm', "
+            "'check attestation status', 'EUDR status from blockchain'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "farm_id": {
+                    "type": "string",
+                    "description": "Farmer ID to check attestation for",
+                },
+            },
+            "required": ["farm_id"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: get_don_provenance_metrics
+# ---------------------------------------------------------------------------
+GET_DON_PROVENANCE_METRICS = {
+    "type": "function",
+    "function": {
+        "name": "get_don_provenance_metrics",
+        "description": (
+            "Read the latest DON-attested provenance metrics from the blockchain. "
+            "These are aggregated supply-chain statistics (total farmers, batches, "
+            "EUDR compliance percentage, etc.) verified by the Chainlink DON every "
+            "5 minutes and written on-chain. Use when user asks 'how many farmers', "
+            "'supply chain stats', 'platform metrics', 'overall compliance rate', "
+            "'DON provenance report'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # All tools grouped
 # ---------------------------------------------------------------------------
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
@@ -941,4 +1023,8 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_BLOCKCHAIN_ANCHOR,
     GET_TOKEN_INFO,
     VERIFY_BATCH_HASH,
+    # Chainlink CRE / DON Attestation (Agent #8)
+    REQUEST_DON_ATTESTATION,
+    CHECK_DON_ATTESTATION,
+    GET_DON_PROVENANCE_METRICS,
 ]
