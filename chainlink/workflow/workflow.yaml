@@ -1,0 +1,13 @@
+# Voice Ledger Oracle — CRE project settings
+# Used by:  cre workflow simulate <path> --target local-simulation
+
+local-simulation:
+  user-workflow:
+    workflow-name: "voice-ledger-oracle"
+  workflow-artifacts:
+    workflow-path: "."
+    config-path: "./config.json"
+    secrets-path: ""
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia-base-1
+      url: ${BASE_SEPOLIA_RPC_URL:-https://sepolia.base.org}

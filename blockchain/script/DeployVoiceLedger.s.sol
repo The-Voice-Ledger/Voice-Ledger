@@ -6,6 +6,7 @@ import {console2} from "forge-std/console2.sol";
 import {EPCISEventAnchor} from "../src/EPCISEventAnchor.sol";
 import {CoffeeBatchToken} from "../src/CoffeeBatchToken.sol";
 import {SettlementContract} from "../src/SettlementContract.sol";
+import {ProvenanceDataReceiver} from "../src/ProvenanceDataReceiver.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
 /**
@@ -19,6 +20,7 @@ contract DeployVoiceLedger is Script {
         EPCISEventAnchor epcisEventAnchor;
         CoffeeBatchToken coffeeBatchToken;
         SettlementContract settlementContract;
+        ProvenanceDataReceiver provenanceDataReceiver;
     }
 
     /**
@@ -42,15 +44,20 @@ contract DeployVoiceLedger is Script {
         // 3. Deploy SettlementContract (for automatic settlements)
         SettlementContract settlementContract = new SettlementContract();
         
+        // 4. Deploy ProvenanceDataReceiver (CRE DON report receiver)
+        //    Forwarder = deployer for hackathon; in production this would be KeystoneRouter
+        ProvenanceDataReceiver provenanceDataReceiver = new ProvenanceDataReceiver(msg.sender);
+        
         vm.stopBroadcast();
         
         // Log deployed addresses
-        _logDeployedAddresses(epcisEventAnchor, coffeeBatchToken, settlementContract);
+        _logDeployedAddresses(epcisEventAnchor, coffeeBatchToken, settlementContract, provenanceDataReceiver);
         
         return DeployedContracts({
             epcisEventAnchor: epcisEventAnchor,
             coffeeBatchToken: coffeeBatchToken,
-            settlementContract: settlementContract
+            settlementContract: settlementContract,
+            provenanceDataReceiver: provenanceDataReceiver
         });
     }
     
@@ -61,7 +68,8 @@ contract DeployVoiceLedger is Script {
     function _logDeployedAddresses(
         EPCISEventAnchor epcisEventAnchor,
         CoffeeBatchToken coffeeBatchToken,
-        SettlementContract settlementContract
+        SettlementContract settlementContract,
+        ProvenanceDataReceiver provenanceDataReceiver
     ) private view {
         console2.log("==========================================");
         console2.log("Voice Ledger Contracts Deployed");
@@ -70,6 +78,7 @@ contract DeployVoiceLedger is Script {
         console2.log("EPCISEventAnchor:", address(epcisEventAnchor));
         console2.log("CoffeeBatchToken:", address(coffeeBatchToken));
         console2.log("SettlementContract:", address(settlementContract));
+        console2.log("ProvenanceDataReceiver:", address(provenanceDataReceiver));
         console2.log("");
         console2.log("==========================================");
         console2.log("Add these to your .env file:");
@@ -78,6 +87,7 @@ contract DeployVoiceLedger is Script {
         console2.log(string.concat("EPCIS_EVENT_ANCHOR_ADDRESS=", _addressToString(address(epcisEventAnchor))));
         console2.log(string.concat("COFFEE_BATCH_TOKEN_ADDRESS=", _addressToString(address(coffeeBatchToken))));
         console2.log(string.concat("SETTLEMENT_CONTRACT_ADDRESS=", _addressToString(address(settlementContract))));
+        console2.log(string.concat("PROVENANCE_DATA_RECEIVER_ADDRESS=", _addressToString(address(provenanceDataReceiver))));
         console2.log("");
     }
     

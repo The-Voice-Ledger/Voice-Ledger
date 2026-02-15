@@ -62,17 +62,20 @@ cre workflow simulate \
 
 ### 4. Compile & Deploy the Receiver Contract
 
+The `ProvenanceDataReceiver.sol` contract lives in the main Foundry suite at `blockchain/src/` alongside all other Voice Ledger contracts.
+
 ```bash
-# From project root — compile with Foundry
-forge build \
-  --contracts chainlink/contracts \
-  --out chainlink/contracts/out
+# From project root — build all contracts with Foundry
+cd blockchain && forge build
 
 # Deploy to Base Sepolia
-forge create chainlink/contracts/ProvenanceDataReceiver.sol:ProvenanceDataReceiver \
+forge create src/ProvenanceDataReceiver.sol:ProvenanceDataReceiver \
   --rpc-url $BASE_SEPOLIA_RPC_URL \
   --private-key $PRIVATE_KEY_SEP \
   --constructor-args $DEPLOYER_ADDRESS
+
+# Or deploy all contracts at once via the deploy script
+forge script script/DeployVoiceLedger.s.sol --rpc-url $BASE_SEPOLIA_RPC_URL --broadcast
 ```
 
 After deployment, update `chainlink/workflow/config.json` with the deployed addresses:
@@ -116,13 +119,14 @@ chainlink/
 │   ├── config.json            ← Addresses, schedule, API URL
 │   ├── package.json
 │   └── tsconfig.json
-├── contracts/
-│   └── ProvenanceDataReceiver.sol  ← DON report receiver
 ├── test/
 │   ├── test_provenance_api.py      ← pytest suite
 │   ├── test_api.sh                 ← curl smoke tests
 │   └── deforestation_request.json  ← HTTP trigger test fixture
 └── README.md                       ← this file
+
+blockchain/src/
+└── ProvenanceDataReceiver.sol      ← DON report receiver (in Foundry suite)
 ```
 
 ## Configuration
