@@ -1,0 +1,9 @@
+# Voice Ledger — CRE Project Configuration (template)
+# Copy to project.yaml and fill in your RPC URL.
+#
+# See: https://docs.chain.link/cre/reference/project-configuration
+
+local-simulation:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia-base-1
+      url: https://your-base-sepolia-rpc-url-here

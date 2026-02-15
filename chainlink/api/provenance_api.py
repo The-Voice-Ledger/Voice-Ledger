@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,12 @@ from database.models import FarmerIdentity, CoffeeBatch, EPCISEvent
 from voice.verification.deforestation_checker import DeforestationChecker
 
 # ---------------------------------------------------------------------------
-# FastAPI app
+# APIRouter (mountable into any FastAPI app — e.g. the main Railway service)
+# ---------------------------------------------------------------------------
+provenance_router = APIRouter(tags=["CRE Provenance"])
+
+# ---------------------------------------------------------------------------
+# Standalone FastAPI app (for local dev: uvicorn chainlink.api.provenance_api:app --port 8100)
 # ---------------------------------------------------------------------------
 app = FastAPI(
     title="Voice Ledger — CRE Provenance API",
@@ -64,7 +69,7 @@ def _get_db():
 # Trigger 1 — Proof of Provenance aggregate metrics
 # ────────────────────────────────────────────────────────────────
 
-@app.get("/api/provenance")
+@provenance_router.get("/api/provenance")
 def get_provenance_metrics():
     """
     Aggregated supply chain metrics consumed by CRE CronTrigger.
@@ -117,7 +122,7 @@ def get_provenance_metrics():
 # Trigger 2 — Batch details (called after LogTrigger fires)
 # ────────────────────────────────────────────────────────────────
 
-@app.get("/api/batch/{batch_id}")
+@provenance_router.get("/api/batch/{batch_id}")
 def get_batch_details(batch_id: str):
     """
     Return full batch details for a given batch_id.
@@ -194,7 +199,7 @@ def get_batch_details(batch_id: str):
 # Trigger 3 — Deforestation oracle (on-demand via HTTP trigger)
 # ────────────────────────────────────────────────────────────────
 
-@app.get("/api/deforestation/{farm_id}")
+@provenance_router.get("/api/deforestation/{farm_id}")
 def get_deforestation_check(farm_id: str):
     """
     Run a GFW deforestation check for a registered farm.
@@ -250,9 +255,13 @@ def get_deforestation_check(farm_id: str):
 # Health check
 # ────────────────────────────────────────────────────────────────
 
-@app.get("/health")
+@provenance_router.get("/health")
 def health():
     return {"status": "ok", "service": "voice-ledger-cre-api", "timestamp": int(datetime.utcnow().timestamp())}
+
+
+# Mount the router into the standalone app (for local dev)
+app.include_router(provenance_router)
 
 
 # ────────────────────────────────────────────────────────────────

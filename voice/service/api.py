@@ -213,6 +213,14 @@ if MINIAPP_AVAILABLE:
     app.include_router(mini_app_router)
     print("✅ Mini app endpoints registered at /api/miniapp/* and /miniapps/*")
 
+# Include CRE Provenance API router (Lab 29 — Chainlink DON data endpoints)
+try:
+    from chainlink.api.provenance_api import provenance_router
+    app.include_router(provenance_router)
+    print("✅ CRE Provenance endpoints registered at /api/provenance, /api/batch/*, /api/deforestation/*")
+except ImportError as e:
+    print(f"ℹ️  CRE Provenance API not available: {e}")
+
 # CORS Configuration - Allow frontend origins
 # Development: localhost:3000 (local Next.js)
 # Production: Vercel deployment

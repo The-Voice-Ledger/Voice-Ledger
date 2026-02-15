@@ -1,13 +1,32 @@
-# Voice Ledger Oracle — CRE project settings
-# Used by:  cre workflow simulate <path> --target local-simulation
+# Voice Ledger Oracle — Workflow-level settings
+#
+# Targets:
+#   local-simulation  → uses config.json            (localhost for CRE simulate)
+#   local-dev         → uses config.json            (localhost for running with local API)
+#   production        → uses config.production.json (Railway public URL for live DON)
+#
+# RPC config lives in ../project.yaml (CRE project root).
 
 local-simulation:
   user-workflow:
     workflow-name: "voice-ledger-oracle"
   workflow-artifacts:
-    workflow-path: "."
+    workflow-path: "./main.ts"
     config-path: "./config.json"
     secrets-path: ""
-  rpcs:
-    - chain-name: ethereum-testnet-sepolia-base-1
-      url: ${BASE_SEPOLIA_RPC_URL:-https://sepolia.base.org}
+
+local-dev:
+  user-workflow:
+    workflow-name: "voice-ledger-oracle"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: ""
+
+production:
+  user-workflow:
+    workflow-name: "voice-ledger-oracle"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: ""

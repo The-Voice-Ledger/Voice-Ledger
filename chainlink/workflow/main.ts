@@ -17,9 +17,14 @@ import {
   bytesToHex,
   ConsensusAggregationByFields,
   consensusIdenticalAggregation,
-  cre,
+  CronCapability,
+  decodeJson,
+  EVMClient,
   getNetwork,
+  handler,
   hexToBase64,
+  HTTPCapability,
+  HTTPClient,
   identical,
   median,
   Runner,
@@ -48,8 +53,10 @@ const configSchema = z.object({
   /** Cron schedule for Trigger 1 (e.g. "0 *\/5 * * * *" = every 5 min) */
   schedule: z.string(),
 
-  /** Base URL of the Voice Ledger provenance API */
-  apiBaseUrl: z.string().url(),
+  /** Base URL of the Voice Ledger provenance API
+   *  Note: z.string().url() uses `new URL()` which is unavailable in QuickJS/WASM.
+   *  We use a regex instead so validation works in both Node and CRE simulation. */
+  apiBaseUrl: z.string().regex(/^https?:\/\/.+/, "Must be an http(s) URL"),
 
   /** Hex-encoded data-feed ID for the provenance feed */
   provenanceDataIdHex: z.string(),
@@ -128,7 +135,7 @@ const fetchProvenanceMetrics = (
   const resp = sendRequester
     .sendRequest({ method: "GET", url: `${config.apiBaseUrl}/api/provenance` })
     .result();
-  return JSON.parse(Buffer.from(resp.body).toString("utf-8"));
+  return JSON.parse(new TextDecoder().decode(resp.body));
 };
 
 /** Fetch batch details by batch_id */
@@ -143,7 +150,7 @@ const fetchBatchDetails = (
       url: `${config.apiBaseUrl}/api/batch/${batchId}`,
     })
     .result();
-  return JSON.parse(Buffer.from(resp.body).toString("utf-8"));
+  return JSON.parse(new TextDecoder().decode(resp.body));
 };
 
 /** Fetch deforestation check result for a farm */
@@ -158,7 +165,7 @@ const fetchDeforestationResult = (
       url: `${config.apiBaseUrl}/api/deforestation/${farmId}`,
     })
     .result();
-  return JSON.parse(Buffer.from(resp.body).toString("utf-8"));
+  return JSON.parse(new TextDecoder().decode(resp.body));
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -172,7 +179,7 @@ const onProvenanceCron = (
   runtime.log("[Trigger 1] Proof of Provenance — cron fired");
 
   // ── 1. Fetch metrics with median consensus across DON nodes ──
-  const httpClient = new cre.capabilities.HTTPClient();
+  const httpClient = new HTTPClient();
   const metrics = httpClient
     .sendRequest(
       runtime,
@@ -219,9 +226,9 @@ const onProvenanceCron = (
   const report = runtime
     .report({
       encodedPayload: hexToBase64(encodedPayload),
-      encoderName: "EVM",
-      signingAlgo: "ECDSA_SECP256K1",
-      hashingAlgo: "KECCAK256",
+      encoderName: "evm",
+      signingAlgo: "ecdsa",
+      hashingAlgo: "keccak256",
     })
     .result();
 
@@ -232,7 +239,7 @@ const onProvenanceCron = (
       isTestnet: true,
     });
     if (!network) throw new Error(`Unknown chain: ${evm.chainSelectorName}`);
-    const evmClient = new cre.capabilities.EVMClient(
+    const evmClient = new EVMClient(
       network.chainSelector.selector,
     );
     const tx = evmClient
@@ -280,7 +287,7 @@ const onEventAnchored = (
   runtime.log(`[Trigger 2] Batch: ${batchId} | Event: ${eventType}`);
 
   // ── 2. Fetch full batch details with median consensus on numeric fields ──
-  const httpClient = new cre.capabilities.HTTPClient();
+  const httpClient = new HTTPClient();
   const batchDetails = httpClient
     .sendRequest(
       runtime,
@@ -341,7 +348,7 @@ const onDeforestationRequest = (
   runtime.log("[Trigger 3] Deforestation attestation requested");
 
   // ── 1. Parse incoming HTTP request body ──
-  const body = JSON.parse(Buffer.from(payload.input).toString("utf-8")) as {
+  const body = decodeJson(payload.input) as {
     farm_id: string;
   };
   const farmId = body.farm_id;
@@ -349,7 +356,7 @@ const onDeforestationRequest = (
 
   // ── 2. Each DON node independently calls GFW via our API ──
   //        Identical consensus: all nodes must get the same result
-  const httpClient = new cre.capabilities.HTTPClient();
+  const httpClient = new HTTPClient();
   const result = httpClient
     .sendRequest(
       runtime,
@@ -384,9 +391,9 @@ const onDeforestationRequest = (
   const report = runtime
     .report({
       encodedPayload: hexToBase64(encodedPayload),
-      encoderName: "EVM",
-      signingAlgo: "ECDSA_SECP256K1",
-      hashingAlgo: "KECCAK256",
+      encoderName: "evm",
+      signingAlgo: "ecdsa",
+      hashingAlgo: "keccak256",
     })
     .result();
 
@@ -397,7 +404,7 @@ const onDeforestationRequest = (
       isTestnet: true,
     });
     if (!network) throw new Error(`Unknown chain: ${evm.chainSelectorName}`);
-    const evmClient = new cre.capabilities.EVMClient(
+    const evmClient = new EVMClient(
       network.chainSelector.selector,
     );
     const tx = evmClient
@@ -437,29 +444,27 @@ const initWorkflow = (config: Config) => {
   if (!network) throw new Error(`Unknown chain: ${primaryEvm.chainSelectorName}`);
 
   // Trigger capabilities
-  const cronCapability = new cre.capabilities.CronCapability();
-  const evmClient = new cre.capabilities.EVMClient(
-    network.chainSelector.selector,
-  );
-  const httpCapability = new cre.capabilities.HTTPCapability();
+  const cronCap = new CronCapability();
+  const evmClient = new EVMClient(network.chainSelector.selector);
+  const httpCap = new HTTPCapability();
 
   return [
     // Trigger 1 — Proof of Provenance (cron)
-    cre.handler(
-      cronCapability.trigger({ schedule: config.schedule }),
+    handler(
+      cronCap.trigger({ schedule: config.schedule }),
       onProvenanceCron,
     ),
 
     // Trigger 2 — Event Watcher (log trigger on EPCISEventAnchor)
-    cre.handler(
+    handler(
       evmClient.logTrigger({
-        addresses: [primaryEvm.epcisEventAnchorAddress],
+        addresses: [hexToBase64(primaryEvm.epcisEventAnchorAddress)],
       }),
       onEventAnchored,
     ),
 
     // Trigger 3 — Deforestation Oracle (HTTP trigger)
-    cre.handler(httpCapability.trigger({}), onDeforestationRequest),
+    handler(httpCap.trigger({}), onDeforestationRequest),
   ];
 };
 
@@ -471,5 +476,3 @@ export async function main() {
   const runner = await Runner.newRunner<Config>({ configSchema });
   await runner.run(initWorkflow);
 }
-
-main();

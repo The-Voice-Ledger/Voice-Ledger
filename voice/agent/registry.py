@@ -1366,12 +1366,12 @@ class ToolRegistry:
         """
         from database.models import FarmerIdentity, UserIdentity
 
-        # Find the farmer associated with this user
+        # Find the farmer associated with this user via shared DID
         user = db.query(UserIdentity).filter_by(id=user_id).first()
-        if not user or not user.farmer_id:
+        if not user or not user.did:
             return
 
-        farmer = db.query(FarmerIdentity).filter_by(id=user.farmer_id).first()
+        farmer = db.query(FarmerIdentity).filter_by(did=user.did).first()
         if not farmer or not farmer.latitude or not farmer.longitude:
             logger.debug(
                 "Skipping CRE auto-attestation — farmer %s has no GPS",

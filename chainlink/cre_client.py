@@ -457,9 +457,9 @@ class CREClient:
                     risk_code = risk_map.get(
                         farmer.deforestation_risk.lower(), 3
                     )
-                    eudr_compliant = farmer.eudr_compliant or False
+                    eudr_compliant = farmer.deforestation_compliant or False
                     tree_loss = int(
-                        (farmer.deforestation_tree_loss_ha or 0) * 10000
+                        (farmer.tree_cover_loss_hectares or 0) * 10000
                     )
 
                 return {

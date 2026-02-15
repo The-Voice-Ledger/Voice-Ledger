@@ -6,18 +6,18 @@
   "main": "main.ts",
   "scripts": {
     "build": "tsc",
-    "simulate:cron": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 0",
-    "simulate:log": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 1",
-    "simulate:http": "cre workflow simulate --workflow-file main.ts --config-file config.json --trigger-index 2 --http-payload @../test/deforestation_request.json",
-    "deploy": "cre workflow deploy --workflow-file main.ts --config-file config.json"
+    "postinstall": "bunx cre-setup",
+    "simulate:cron": "cd .. && cre workflow simulate workflow --non-interactive --trigger-index 0 --target local-simulation",
+    "simulate:log": "cd .. && cre workflow simulate workflow --non-interactive --trigger-index 1 --target local-simulation",
+    "simulate:http": "cd .. && cre workflow simulate workflow --non-interactive --trigger-index 2 --http-payload '{\"farm_id\":\"FARM-001\"}' --target local-simulation"
   },
   "dependencies": {
-    "@chainlink/cre-sdk": "0.0.8-alpha",
+    "@chainlink/cre-sdk": "^1.0.7",
     "viem": "^2.34.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
-    "@types/node": "^22.0.0"
+    "@types/bun": "^1.2.0"
   }
 }

@@ -96,3 +96,24 @@ temp/
 # Application logs (keep directory structure, ignore generated files)
 logs/
 !logs/.gitkeep
+
+# CRE project config contains RPC API keys
+chainlink/project.yaml
+
+# CRE build artifacts & runtime
+chainlink/workflow/dist/
+chainlink/workflow/tmp.*
+chainlink/workflow/bun.lock
+chainlink/workflow/node_modules/
+*.wasm
+
+# Chainlink .env (contains private keys / RPC URLs)
+chainlink/.env
+
+# ChromaDB local data (runtime-generated, large binary)
+voice/rag/chroma_db/
+
+# SQLite databases
+*.sqlite3
+*.sqlite
+*.db

@@ -492,6 +492,7 @@ class AgentExecutor:
                             "list_pending_verifications",
                             "check_blockchain_anchor", "get_token_info",
                             "verify_batch_hash",
+                            "check_don_attestation", "get_don_provenance_metrics",
                         ):
                             performed_write = True
                             last_intent = tool_name

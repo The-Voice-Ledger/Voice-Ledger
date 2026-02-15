@@ -1,6 +1,6 @@
 {
   "schedule": "0 */5 * * * *",
-  "apiBaseUrl": "http://localhost:8100",
+  "apiBaseUrl": "https://voice-ledger-api.up.railway.app",
   "provenanceDataIdHex": "766f6963656c65646765722d70726f76656e616e6365",
   "evms": [
     {
