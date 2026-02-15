@@ -22,16 +22,23 @@ logger = logging.getLogger(__name__)
 
 # Redis connection (reuse existing connection from session_manager)
 try:
-    from voice.integrations.session_manager import redis_client
+    from voice.telegram.session_manager import redis_client
     _redis = redis_client
     logger.info("Using existing Redis connection from session_manager")
 except ImportError:
-    # Fallback: create new connection
+    # Fallback: create new connection using REDIS_URL
     import os
-    redis_host = os.getenv('REDIS_HOST', 'localhost')
-    redis_port = int(os.getenv('REDIS_PORT', 6379))
-    _redis = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
-    logger.info(f"Created new Redis connection to {redis_host}:{redis_port}")
+    from urllib.parse import urlparse
+    _redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    _parsed = urlparse(_redis_url)
+    _redis = redis.Redis(
+        host=_parsed.hostname or 'localhost',
+        port=_parsed.port or 6379,
+        db=int((_parsed.path or '/0').lstrip('/') or '0'),
+        password=_parsed.password,
+        decode_responses=True
+    )
+    logger.info(f"Created new Redis connection to {_parsed.hostname}:{_parsed.port}")
 
 
 class ConversationState(Enum):

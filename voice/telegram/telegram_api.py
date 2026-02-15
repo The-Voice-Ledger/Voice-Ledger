@@ -993,7 +993,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /ship <gtin\_or\_batch\_id> <destination>\nExample: /ship 00614141852251 Addis\_Warehouse"
+                    message="❌ Usage: /ship <gtin\\_or\\_batch\\_id> <destination>\nExample: /ship 00614141852251 Addis\\_Warehouse"
                 )
                 return {"ok": True}
             
@@ -1044,7 +1044,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /receive <gtin\_or\_batch\_id> [condition]\nExample: /receive 00614141852251 good"
+                    message="❌ Usage: /receive <gtin\\_or\\_batch\\_id> [condition]\nExample: /receive 00614141852251 good"
                 )
                 return {"ok": True}
             

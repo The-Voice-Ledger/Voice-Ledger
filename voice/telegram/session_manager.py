@@ -9,18 +9,24 @@ Date: December 22, 2025
 import redis
 import json
 import logging
+import os
 from typing import Dict, Any, Optional
 from datetime import timedelta
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Redis connection
+# Redis connection - use REDIS_URL env var (Railway sets this automatically)
+_redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+_parsed = urlparse(_redis_url)
 redis_client = redis.Redis(
-    host='localhost',
-    port=6379,
-    db=0,  # Use DB 0 for registration sessions
+    host=_parsed.hostname or 'localhost',
+    port=_parsed.port or 6379,
+    db=int((_parsed.path or '/0').lstrip('/') or '0'),
+    password=_parsed.password,
     decode_responses=True  # Automatically decode bytes to strings
 )
+logger.info(f"Session manager Redis: {_parsed.hostname}:{_parsed.port}")
 
 # Session TTL: 1 hour (3600 seconds)
 SESSION_TTL = 3600
