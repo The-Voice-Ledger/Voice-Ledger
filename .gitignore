@@ -96,3 +96,19 @@ temp/
 # Application logs (keep directory structure, ignore generated files)
 logs/
 !logs/.gitkeep
+
+# ChromaDB local data (runtime-generated, large binary)
+voice/rag/chroma_db/
+
+# SQLite databases
+*.sqlite3
+*.sqlite
+
+# Chainlink CRE (if branch merged later)
+chainlink/project.yaml
+chainlink/.env
+chainlink/workflow/dist/
+chainlink/workflow/tmp.*
+chainlink/workflow/bun.lock
+chainlink/workflow/node_modules/
+*.wasm
