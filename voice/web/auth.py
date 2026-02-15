@@ -158,12 +158,15 @@ def get_user_from_telegram(
         return None
     
     with get_db() as db:
-        user = db.query(UserIdentity).filter(
+        from sqlalchemy.orm import joinedload
+        user = db.query(UserIdentity).options(
+            joinedload(UserIdentity.organization)
+        ).filter(
             UserIdentity.telegram_user_id == str(x_telegram_user_id)
         ).first()
         
         if user:
-            # Expunge to make accessible outside session
+            # Expunge user + loaded relationships so they're accessible outside session
             db.expunge(user)
         return user
 

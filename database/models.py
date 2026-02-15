@@ -525,13 +525,78 @@ class RFQOffer(Base):
     cooperative = relationship("Organization", foreign_keys=[cooperative_id])
     acceptances = relationship("RFQAcceptance", back_populates="offer")
 
+class ContainerOffering(Base):
+    """Container offerings for fractional sale (Phase 4.5 - Fractional Ownership)"""
+    __tablename__ = "container_offerings"
+    
+    id = Column(Integer, primary_key=True)
+    container_sscc = Column(String(18), nullable=False, index=True)
+    aggregation_id = Column(Integer, ForeignKey("aggregation_relationships.id"), nullable=True)
+    cooperative_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    # Quantity tracking
+    total_quantity_kg = Column(Float, nullable=False)
+    available_quantity_kg = Column(Float, nullable=False)
+    reserved_quantity_kg = Column(Float, default=0)
+    
+    # Pricing
+    price_per_kg = Column(Float, nullable=False)
+    currency = Column(String(3), default='USD')
+    
+    # Status: AVAILABLE, PARTIALLY_SOLD, FULLY_RESERVED, SOLD_OUT, EXPIRED
+    status = Column(String(20), default='AVAILABLE', index=True)
+    
+    # Product details
+    variety = Column(String(100))
+    processing_method = Column(String(50))
+    grade = Column(String(20))
+    certifications = Column(JSON)
+    
+    # Delivery info
+    delivery_location = Column(String(200))
+    earliest_delivery_date = Column(DateTime)
+    latest_delivery_date = Column(DateTime)
+    
+    # Marketing
+    description = Column(Text)
+    sample_photos = Column(JSON)  # List of photo URLs
+    dpp_url = Column(String(500))
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = Column(DateTime)
+    
+    # Relationships
+    cooperative = relationship("Organization", foreign_keys=[cooperative_id])
+    purchases = relationship("RFQAcceptance", back_populates="container_offering")
+    
+    @property
+    def sold_quantity_kg(self) -> float:
+        """Quantity that has been sold (total - available - reserved)."""
+        return max(0, self.total_quantity_kg - self.available_quantity_kg - self.reserved_quantity_kg)
+    
+    @property
+    def fill_percentage(self) -> float:
+        """Percentage of container that has been sold or reserved."""
+        if self.total_quantity_kg == 0:
+            return 0.0
+        return round((1 - self.available_quantity_kg / self.total_quantity_kg) * 100, 1)
+    
+    @property
+    def total_value_usd(self) -> float:
+        """Total value of the container."""
+        return round(self.total_quantity_kg * self.price_per_kg, 2)
+
+
 class RFQAcceptance(Base):
     """Buyer acceptances of cooperative offers (Lab 14 - RFQ Marketplace)"""
     __tablename__ = "rfq_acceptances"
     
     id = Column(Integer, primary_key=True)
-    rfq_id = Column(Integer, ForeignKey("rfqs.id"), nullable=False, index=True)
-    offer_id = Column(Integer, ForeignKey("rfq_offers.id"), nullable=False, index=True)
+    rfq_id = Column(Integer, ForeignKey("rfqs.id"), nullable=True, index=True)
+    offer_id = Column(Integer, ForeignKey("rfq_offers.id"), nullable=True, index=True)
+    container_offering_id = Column(Integer, ForeignKey("container_offerings.id"), nullable=True, index=True)
     acceptance_number = Column(String(20), unique=True, nullable=False)
     
     # Acceptance details
@@ -550,6 +615,7 @@ class RFQAcceptance(Base):
     # Relationships
     rfq = relationship("RFQ", back_populates="acceptances")
     offer = relationship("RFQOffer", back_populates="acceptances")
+    container_offering = relationship("ContainerOffering", back_populates="purchases")
 
 class RFQBroadcast(Base):
     """Tracks which cooperatives were notified about each RFQ (Lab 14 - RFQ Marketplace)"""
