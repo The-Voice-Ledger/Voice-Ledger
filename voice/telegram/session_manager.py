@@ -16,15 +16,14 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Redis connection - use REDIS_URL env var (Railway sets this automatically)
-_redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-_parsed = urlparse(_redis_url)
+
+# Redis connection
 redis_client = redis.Redis(
-    host=_parsed.hostname or 'localhost',
-    port=_parsed.port or 6379,
-    db=int((_parsed.path or '/0').lstrip('/') or '0'),
-    password=_parsed.password,
-    decode_responses=True  # Automatically decode bytes to strings
+    host='redis-13364.c9.us-east-1-4.ec2.cloud.redislabs.com',
+    port=13364,
+    decode_responses=True,
+    username="default",
+    password="TDmnqBLbSuDKVY2jzOc3FpSQe1yHSaZi",
 )
 logger.info(f"Session manager Redis: {_parsed.hostname}:{_parsed.port}")
 
