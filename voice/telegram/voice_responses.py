@@ -11,19 +11,7 @@ import logging
 import re
 import os
 from typing import Optional
-from telegram import Bot
-from openai import AsyncOpenAI
-from dotenv import load_dotenv
-
-from voice.providers.addis_ai import AddisAIProvider
-from database.models import SessionLocal, UserIdentity
-
-load_dotenv()
-logger = logging.getLogger(__name__)
-
-# Initialize TTS providers
-addisai_provider = AddisAIProvider()
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from voice.tts.tts_provider import TTSProvider
 
 
 def detect_language(text: str) -> str:
@@ -276,25 +264,23 @@ async def _generate_and_send_voice(
         if language == "am":
             # Use AddisAI for Amharic
             try:
-                audio_bytes = await addisai_provider.text_to_speech(
+                audio_bytes = await TTSProvider.text_to_speech(
                     text=voice_friendly_text,
                     language="am"
                 )
-                logger.info(f"✅ AddisAI TTS generated: {len(audio_bytes)} bytes")
+                logger.info(f"✅ Amharic TTS generated: {len(audio_bytes)} bytes")
             except Exception as e:
-                logger.error(f"AddisAI TTS failed: {e}")
+                logger.error(f"Amharic TTS failed: {e}")
         else:
             # Use OpenAI for English (and other languages)
             try:
-                response = await openai_client.audio.speech.create(
-                    model="tts-1",
-                    voice="nova",
-                    input=voice_friendly_text
+                audio_bytes = await TTSProvider.text_to_speech(
+                    text=voice_friendly_text,
+                    language="en"
                 )
-                audio_bytes = response.content
-                logger.info(f"✅ OpenAI TTS generated: {len(audio_bytes)} bytes")
+                logger.info(f"✅ English TTS generated: {len(audio_bytes)} bytes")
             except Exception as e:
-                logger.error(f"OpenAI TTS failed: {e}")
+                logger.error(f"English TTS failed: {e}")
         
         if audio_bytes:
             # Save to temporary file for Telegram upload
