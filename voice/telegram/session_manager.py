@@ -15,11 +15,13 @@ from datetime import timedelta
 logger = logging.getLogger(__name__)
 
 # Redis connection
+
 redis_client = redis.Redis(
-    host='localhost',
-    port=6379,
-    db=0,  # Use DB 0 for registration sessions
-    decode_responses=True  # Automatically decode bytes to strings
+    host='redis-13364.c9.us-east-1-4.ec2.cloud.redislabs.com',
+    port=13364,
+    decode_responses=True,
+    username="default",
+    password="TDmnqBLbSuDKVY2jzOc3FpSQe1yHSaZi",
 )
 
 # Session TTL: 1 hour (3600 seconds)
