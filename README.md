@@ -2,20 +2,18 @@
 
 **A Voice-first blockchain traceability System for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
-**Current:** v2.0 (Production) - Telegram Mini Apps, RAG-enhanced AI, conversational UI  
-**Status:** Deployed, tested, ready for scale
+**Current:** v2.1 (Production) — Agentic AI with 25 tools, Telegram Mini Apps, RAG-enhanced conversations  
+**Status:** Deployed on Railway, Telegram bot live, Chainlink CRE integration in development
 
 ---
 
 ## What It Does
 
-The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. The system transcribes, understands intent using RAG-enhanced conversational AI, generates standardized EPCIS 2.0 events, stores full data on IPFS, and anchors cryptographic hashes on-chain.
+The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. An **AI agent powered by GPT-4o tool-calling** transcribes speech, reasons about intent, and autonomously selects from 25 tools across 7 domains — recording batches, managing marketplace offers, checking compliance, tracing provenance, and anchoring data on-chain. Full event data is stored on IPFS with cryptographic hashes anchored to Base Sepolia.
 
-**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. Minutes later, that batch has a tokenized identity (ERC-1155), blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that buyers can scan for full supply chain history. All accessible through Telegram Mini Apps with voice-first interaction.
+**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. The AI agent selects the right tool, validates the data, creates a tokenized batch (ERC-1155) with blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that buyers can scan for full supply chain history. All accessible through Telegram Mini Apps with voice-first interaction.
 
 ---
-
-## Core Components
 
 ## Core Components
 
@@ -29,14 +27,24 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
 - **Bilingual ASR**: Automatic English/Amharic routing
   - English: OpenAI Whisper API ($0.006/minute)
   - Amharic: Local fine-tuned model ($0, 9% WER)
-- **RAG-Enhanced Conversational AI**: ChromaDB Cloud + GPT-4
-  - 3,539 documents indexed (system documentation + research papers)
-  - Hybrid search (documentation + operational data)
-  - Query classification (TRANSACTIONAL, DOCUMENTATION, OPERATIONAL, HYBRID)
-  - Context-aware responses using specific technical details
-  - Bilingual support (English & Amharic with AddisAI)
-- **Latency**: 5-15 seconds end-to-end (async pipeline)
+- **Dual Delivery**: Every response sent as text + TTS voice note
+- **Latency**: 5-15 seconds end-to-end (async Celery pipeline)
 - **IVR Ready**: Twilio integration for feature phones (planned)
+
+### Agentic AI (v2.1)
+- **GPT-4o Tool-Calling Agent**: Replaces rigid NLU intent classification with autonomous reasoning
+- **25 Tools across 7 Domains**:
+  - **Supply Chain** (7): record commission/shipment/receipt/transformation, pack/unpack/split batches
+  - **Query** (2): search batches, search knowledge base
+  - **Marketplace** (5): create RFQ, browse RFQs, submit/accept/list offers
+  - **Compliance** (2): EUDR deforestation check, mass balance validation
+  - **DPP** (4): get batch/container DPP, trace lineage, validate passport
+  - **Verification** (2): list pending verifications, verify batch
+  - **Blockchain** (3): check anchor, get token info, verify hash
+- **Multi-Turn Conversations**: Redis-backed history (10-min TTL)
+- **Safety Rails**: Write-tool confirmation, bounded turn limits (max 6), 4-min timeout
+- **RAG Fallback**: ChromaDB Cloud + GPT-4 for documentation queries (3,539 docs indexed)
+- **Bilingual**: English (GPT-4o) + Amharic (AddisAI) with automatic routing
 
 ### Identity & Credentials (SSI)
 - **Decentralized Identifiers**: W3C DID (did:key method, Ed25519)
@@ -57,6 +65,12 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
   - `SettlementContract.sol`: Multi-currency tracking (USD, ETH, BIRR, USDC)
 - **IPFS Storage**: Full event data on Pinata (40% gas savings vs on-chain)
 - **Merkle Proofs**: Batch aggregation (75% gas reduction)
+
+### Chainlink CRE Integration (In Development)
+- **Chainlink Runtime Environment**: Decentralized oracle computation for supply chain verification
+- **Off-Chain Verification Workflows**: EPCIS event hash validation, batch integrity checks, and compliance scoring executed on Chainlink's Decentralized Oracle Network (DON)
+- **Bridge Architecture**: AI agent tool results feed into CRE workflows for trustless verification
+- **Status**: Workflow definitions and simulation mode complete on `chainlink-cre` branch; DON deployment pending Chainlink CRE mainnet availability
 
 ### EU Deforestation Regulation (EUDR) Compliance
 - **GPS Photo Verification**: Extract geolocation from farmer photo EXIF
@@ -138,11 +152,12 @@ Five voice-first web applications accessible via Telegram:
 **Voice Processing & AI**
 - OpenAI Whisper API (English ASR)
 - `b1n1yam/shook-medium-amharic-2k` (local Amharic ASR, HuggingFace)
-- OpenAI GPT-4 (conversational AI with RAG)
+- OpenAI GPT-4o (agentic AI with 25-tool function-calling)
 - AddisAI API (Amharic conversational AI)
 - ChromaDB Cloud (vector database, 3,539 docs)
   - OpenAI text-embedding-3-small (1536 dimensions)
   - Hybrid search (vector similarity + metadata filtering)
+- Celery + Redis (async agent execution pipeline)
 
 **Frontend (Telegram Mini Apps)**
 - Vanilla JavaScript (no frameworks)
@@ -370,17 +385,23 @@ Voice Input (Telegram/IVR/Mini Apps)
     ↓
 Language Detection → [Amharic Model] or [Whisper API]
     ↓
-Transcript → RAG-Enhanced Conversational AI
-    ├─→ ChromaDB Vector Search (documentation)
-    ├─→ PostgreSQL Query (operational data)
-    └─→ GPT-4 / AddisAI (response generation)
+Transcript → AI Agent (GPT-4o Tool-Calling)
     ↓
-Intent + Entities + Action
+┌─── Agent Reasoning Loop (max 6 turns) ───┐
+│  Reason → Select Tool → Execute → Observe │
+│  ├─→ Supply Chain tools (7)               │
+│  ├─→ Marketplace tools (5)                │
+│  ├─→ Query tools (2)                      │
+│  ├─→ Compliance tools (2)                 │
+│  ├─→ DPP / Traceability tools (4)         │
+│  ├─→ Verification tools (2)               │
+│  └─→ Blockchain tools (3)                 │
+└──────────────────────────────────────────┘
     ↓
-Command Execution (async Celery)
-    ├─→ EPCIS Event Builder
-    ├─→ Database Updates
-    └─→ Blockchain Anchor
+Tool Execution Results
+    ├─→ EPCIS Event Builder → IPFS + Blockchain Anchor
+    ├─→ Database Updates (PostgreSQL)
+    └─→ Blockchain Queries (Base Sepolia)
     ↓
 ┌─────────────┴──────────────┐
 ↓                            ↓
@@ -388,34 +409,41 @@ IPFS Storage            Blockchain Anchor
 (Full Event)            (Hash + CID + Timestamp)
     ↓                            ↓
 QR Code ← Digital Product Passport (DPP)
+    ↓
+Dual Response (Text + TTS Voice Note)
 ```
 
 **Data Flow:**
 1. Farmer speaks (Amharic/English) via Telegram or Mini App
 2. ASR transcribes based on user language preference
-3. RAG system enhances query with relevant documentation/data context
-4. Conversational AI (GPT-4/AddisAI) generates response + optional action
-5. If action present: System executes (create EPCIS event, update DB, etc.)
-6. EPCIS event → JSON-LD canonicalization → SHA-256 hash
-7. Full event → IPFS (get CID)
-8. Hash + CID → Blockchain (immutable anchor)
-9. Token minted (ERC-1155) + QR code generated
-10. User receives confirmation + TTS audio response
+3. AI agent receives transcript + conversation history (Redis-backed)
+4. Agent reasons about intent and selects from 25 tools (GPT-4o function-calling)
+5. Tool executes: create EPCIS event, query data, check compliance, etc.
+6. Agent may chain multiple tool calls in one turn (multi-step reasoning)
+7. EPCIS event → JSON-LD canonicalization → SHA-256 hash
+8. Full event → IPFS (get CID)
+9. Hash + CID → Blockchain (immutable anchor)
+10. Token minted (ERC-1155) + QR code generated
+11. User receives text + TTS voice note (dual delivery)
 
-**RAG Architecture (Lab 18):**
+**Agent Architecture (v2.1):**
 ```
-User Query
+User Voice/Text
     ↓
-Query Classifier → [TRANSACTIONAL | DOCUMENTATION | OPERATIONAL | HYBRID]
+ASR → Transcript
     ↓
-Hybrid Router
-    ├─→ ChromaDB (vector search: 3,539 docs)
-    ├─→ PostgreSQL (structured data: batches, users, RFQs)
-    └─→ Combine contexts
+Agent Executor (GPT-4o)
+    ├─→ Tool Registry (25 tools, 7 domains)
+    │     ├─→ Supply Chain handlers
+    │     ├─→ Marketplace handlers
+    │     ├─→ Compliance handlers
+    │     ├─→ DPP / Traceability handlers
+    │     ├─→ Verification handlers
+    │     └─→ Blockchain handlers
+    ├─→ RAG Fallback (ChromaDB, 3,539 docs)
+    └─→ Redis History (multi-turn context)
     ↓
-Enhanced Prompt (with specific technical details)
-    ↓
-GPT-4 / AddisAI (knowledge-grounded response)
+Natural language response → TTS → Dual Delivery
 ```
 
 ---
@@ -499,8 +527,12 @@ with get_session() as db:
 ```
 Voice-Ledger/
 ├── voice/                    # Voice processing pipeline
+│   ├── agent/                # AI agent (GPT-4o tool-calling, 25 tools)
+│   │   ├── executor.py       # Agent loop with bounded turns
+│   │   ├── registry.py       # Tool registry (7 domains)
+│   │   └── schemas.py        # OpenAI function definitions
 │   ├── asr/                  # Automatic speech recognition
-│   ├── nlu/                  # Natural language understanding
+│   ├── nlu/                  # Natural language understanding (legacy)
 │   ├── integrations/         # Conversational AI (English + Amharic)
 │   ├── rag/                  # RAG system (ChromaDB, hybrid search)
 │   ├── telegram/             # Telegram bot + Mini Apps API
@@ -566,6 +598,12 @@ PINATA_JWT=...
 ADDIS_AI_API_KEY=...
 ADDIS_AI_API_URL=https://addisai.net/api/v1
 
+# AI Agent
+AGENT_ENABLED=true           # Enable agentic tool-calling (false = legacy NLU)
+AGENT_MODEL=gpt-4o           # OpenAI model for agent reasoning
+AGENT_MAX_TURNS=6            # Max reasoning turns per request
+AGENT_TEMPERATURE=0.2        # Low temperature for deterministic tool selection
+
 # Optional: EUDR compliance
 GFW_API_KEY=...  # Global Forest Watch API
 ```
@@ -589,14 +627,20 @@ GFW_API_KEY=...  # Global Forest Watch API
 - Latency: 5-15s (async pipeline)
 - Cost: $0.008-0.010 per command
 - ASR Accuracy: 95% (English), 88% (Amharic)
-- Conversational AI: GPT-4 (English), AddisAI (Amharic)
 
-**RAG System (Lab 18):**
+**AI Agent (v2.1):**
+- Model: GPT-4o with function-calling
+- Tools: 25 across 7 domains
+- Max Turns: 6 (bounded reasoning loop)
+- Timeout: 4 minutes (soft), 5 minutes (hard)
+- Fallback: RAG pipeline for documentation queries
+- History: Redis-backed, 10-minute TTL
+
+**RAG System:**
 - Knowledge Base: 3,539 documents (documentation + research)
 - Embedding Model: OpenAI text-embedding-3-small (1536D)
 - Vector Search: ChromaDB Cloud (no OOM, scalable)
 - Retrieval Time: 200-500ms (hybrid search)
-- Query Classification: TRANSACTIONAL, DOCUMENTATION, OPERATIONAL, HYBRID
 
 **Blockchain:**
 - Gas cost: 75% reduction (Merkle proofs)
@@ -618,7 +662,7 @@ GFW_API_KEY=...  # Global Forest Watch API
 
 ## Roadmap
 
-**v2.0 (Current - January 2026)** ✅
+**v2.0 (January 2026)** ✅
 - ✅ Telegram Mini Apps (5 voice-first web apps)
 - ✅ RAG-enhanced conversational AI (ChromaDB Cloud)
 - ✅ Hybrid search (documentation + operational data)
@@ -628,14 +672,22 @@ GFW_API_KEY=...  # Global Forest Watch API
 - ✅ EUDR GPS + deforestation detection
 - ✅ 90+ passing tests
 
-**v2.1 (Planned - Q2 2026)**
+**v2.1 (Current - February 2026)** ✅
+- ✅ Agentic AI: GPT-4o tool-calling agent with 25 tools across 7 domains
+- ✅ Multi-turn conversation with Redis-backed history
+- ✅ Safety rails: write-tool gating, bounded turns, timeout handling
+- ✅ Dual delivery: text + TTS voice note on every response
+- ✅ Production deployment on Railway (web + Celery worker + Redis)
+- ✅ Chainlink CRE workflow simulation (`chainlink-cre` branch)
+
+**v2.2 (Planned - Q2 2026)**
+- [ ] Chainlink CRE DON deployment (pending CRE mainnet)
 - [ ] Realtime voice UI (<1s latency, WebSocket)
 - [ ] Payment integration (Stripe, M-PESA, TeleBirr)
-- [ ] Mobile app (offline-capable, React Native)
 - [ ] Advanced analytics dashboard
-- [ ] Batch recommendations (ML-based)
+- [ ] Mobile app (offline-capable, React Native)
 
-**v2.2 (Planned - Q3 2026)**
+**v3.0 (Planned - Q3 2026)**
 - [ ] 5 languages (add Afan Oromo, Tigrinya, Spanish)
 - [ ] Edge inference (quantized models, on-device ASR)
 - [ ] Mainnet deployment (Base L2)
@@ -647,14 +699,16 @@ GFW_API_KEY=...  # Global Forest Watch API
 ## Documentation
 
 Comprehensive guides in `/documentation`:
-- **Labs** (18 educational tutorials, gitignored)
-  - Lab 18: RAG-Enhanced Conversational AI (latest)
+- **Labs** (29 educational tutorials, gitignored)
+  - Lab 28: Agentic AI — Tool-Calling Agent Architecture
+  - Lab 29: Chainlink CRE — Agent-to-Oracle Bridge
 - **Guides** (EUDR, ASR, marketplace, RAG, architecture)
-- **Deployment** (Neon setup, Docker, production, ChromaDB Cloud)
+- **Deployment** (Railway, Neon, Docker, production, ChromaDB Cloud)
 - **Business** (pitch deck, grant proposals)
 - **Mini Apps** (COMPLETION_SUMMARY.md, IMPLEMENTATION_PLAN.md)
 
 **Key Resources:**
+- `voice/agent/` - AI agent implementation (executor, registry, schemas)
 - `miniapps/COMPLETION_SUMMARY.md` - Complete Mini Apps implementation guide
 - `documentation/guides/CHROMADB_CLOUD_SETUP.md` - RAG vector database setup
 - `documentation/guides/CONVERSATIONAL_AI.md` - Conversational AI architecture
@@ -670,6 +724,6 @@ MIT
 
 ---
 
-**Version:** 2.0 (Production)  
-**Last Updated:** January 20, 2026  
-**Major Features:** Telegram Mini Apps, RAG-Enhanced AI, ChromaDB Cloud Integration
+**Version:** 2.1 (Production)  
+**Last Updated:** February 15, 2026  
+**Major Features:** Agentic AI (25-tool GPT-4o agent), Telegram Mini Apps, Chainlink CRE (in development)

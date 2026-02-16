@@ -114,6 +114,8 @@ class TelegramChannel(VoiceChannel):
                     'file_id': file_id,
                     'date': date,
                     'username': username,
+                    'first_name': first_name,
+                    'last_name': last_name,
                     'full_name': full_name,
                 }
             )

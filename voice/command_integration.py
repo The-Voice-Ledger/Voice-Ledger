@@ -303,6 +303,14 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         # Create commission EPCIS event (IPFS + blockchain anchored)
         from voice.epcis.commission_events import create_commission_event
         
+        # Find farmer identity for EPCIS events (submitter_id must reference farmer_identities.id)
+        from database.models import FarmerIdentity
+        farmer_identity = db.query(FarmerIdentity).filter_by(farmer_id=f"FARMER-{user_id}").first()
+        submitter_farmer_id = farmer_identity.id if farmer_identity else None
+        
+        if not submitter_farmer_id:
+            raise VoiceCommandError(f"Farmer identity not found for user {user_id}. Cannot create EPCIS event.")
+        
         event_result = create_commission_event(
             db=db,
             batch_id=batch.batch_id,
@@ -315,7 +323,7 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
             processing_method=batch.processing_method,
             quality_grade=batch.quality_grade,
             batch_db_id=batch.id,
-            submitter_db_id=user_id
+            submitter_db_id=submitter_farmer_id
         )
         
         # NOTE: Token minting happens AFTER cooperative verification

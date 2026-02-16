@@ -563,15 +563,9 @@ class AgentExecutor:
         
         except Exception as e:
             logger.error(f"Agent error for user {user_id}: {e}", exc_info=True)
-            duration = (time.time() - start_time) * 1000
-            return AgentResult(
-                response="Sorry, I encountered an error. Please try again.",
-                tool_calls=all_tool_calls,
-                performed_write=performed_write,
-                total_tokens=total_tokens,
-                duration_ms=duration,
-                error=str(e),
-            )
+            # Re-raise so callers can detect failure and trigger their
+            # fallback path with proper observability (banner / response_source).
+            raise
     
     # ------------------------------------------------------------------
     # Internal helpers

@@ -282,6 +282,10 @@ class VoiceUploadResponse(BaseModel):
     workflow: Optional[Dict[str, Any]] = None  # Workflow state info
     session_id: Optional[str] = None  # Workflow session ID
     workflow_completed: bool = False  # True when workflow finishes
+    # Observability — fallback visibility
+    response_source: Optional[str] = None  # "agent" | "fallback_nlu" | "fallback_failed"
+    agent_error: Optional[str] = None  # Error string when agent fails
+    fallback_error: Optional[str] = None  # Error string when fallback also fails
 
 
 class VoiceStatusResponse(BaseModel):
@@ -411,30 +415,101 @@ async def upload_voice(
                 detail=f"Speech recognition failed: {str(asr_error)}"
             )
         
-        # Step 2: Process conversation with context
+        # Step 2: Process with AI Agent or legacy conversation
         try:
-            if user_language == 'am':
-                conv_result = await process_amharic_conversation(
-                    user_id, 
-                    transcript,
-                    context=context_data
-                )
-            else:
-                # process_english_conversation is sync, need to handle
-                import asyncio
-                from functools import partial
-                loop = asyncio.get_event_loop()
-                # Bind all parameters in partial for correct execution
-                conv_result = await loop.run_in_executor(
-                    None,
-                    partial(
-                        process_english_conversation, 
-                        user_id, 
-                        transcript, 
-                        use_rag=True,
-                        context=context_data
+            import os as _os
+            agent_handled = False
+            conv_result = None
+            agent_error_detail = None  # Observability: track agent errors
+
+            # =================================================================
+            # AI AGENT PATH for Mini App voice (mirrors voice_tasks.py)
+            # Requires authenticated user (user_id != 0) and AGENT_ENABLED
+            # =================================================================
+            if _os.getenv("AGENT_ENABLED", "false").lower() == "true" and user_id:
+                try:
+                    from voice.agent import AgentExecutor
+
+                    agent_user_did = user.did if user else None
+
+                    logger.info(f"🤖 Agent processing Mini App voice from user {user_id}: {transcript[:50]}")
+
+                    executor = AgentExecutor()
+                    agent_result = executor.run(
+                        transcript=transcript,
+                        user_id=user_id,
+                        user_did=agent_user_did,
+                        language=user_language,
                     )
-                )
+
+                    logger.info(
+                        f"🤖 Agent Mini App completed: {len(agent_result.tool_calls)} tool call(s), "
+                        f"write={agent_result.performed_write}, "
+                        f"tokens={agent_result.total_tokens}, "
+                        f"time={agent_result.duration_ms:.0f}ms"
+                    )
+
+                    if agent_result.response:
+                        conv_result = {
+                            'message': agent_result.response,
+                            'message_text': agent_result.response,
+                            'message_spoken': agent_result.response_spoken or agent_result.response,
+                            'ready_to_execute': agent_result.performed_write,
+                            'intent': agent_result.intent,
+                            'entities': agent_result.entities,
+                            'response_source': 'agent',
+                        }
+                        agent_handled = True
+
+                except Exception as agent_err:
+                    agent_error_detail = f"{type(agent_err).__name__}: {agent_err}"
+                    logger.error(f"🤖 Agent failed for Mini App, falling back: {agent_err}", exc_info=True)
+                    logger.warning(f"⚠️ FALLBACK ACTIVE for voice from user {user_id}: {type(agent_err).__name__}")
+
+            # =================================================================
+            # LEGACY PATH — conversational AI (fallback for anonymous or
+            # when AGENT_ENABLED=false or agent fails/returns no response)
+            # =================================================================
+            if not agent_handled:
+                fallback_error_detail = None
+                try:
+                    if user_language == 'am':
+                        conv_result = await process_amharic_conversation(
+                            user_id, 
+                            transcript,
+                            context=context_data
+                        )
+                    else:
+                        # process_english_conversation is sync, need to handle
+                        import asyncio
+                        from functools import partial
+                        loop = asyncio.get_event_loop()
+                        # Bind all parameters in partial for correct execution
+                        conv_result = await loop.run_in_executor(
+                            None,
+                            partial(
+                                process_english_conversation, 
+                                user_id, 
+                                transcript, 
+                                use_rag=True,
+                                context=context_data
+                            )
+                        )
+                    # Tag with observability fields
+                    if isinstance(conv_result, dict):
+                        conv_result['response_source'] = 'fallback_nlu' if agent_error_detail else 'legacy'
+                        if agent_error_detail:
+                            conv_result['agent_error'] = agent_error_detail
+                except Exception as fallback_err:
+                    fallback_error_detail = f"{type(fallback_err).__name__}: {fallback_err}"
+                    logger.error(f"Fallback also failed: {fallback_err}", exc_info=True)
+                    conv_result = {
+                        'message': 'Sorry, I encountered an error processing your message.',
+                        'ready_to_execute': False,
+                        'response_source': 'fallback_failed',
+                        'agent_error': agent_error_detail,
+                        'fallback_error': fallback_error_detail,
+                    }
             
             # Debug: Check if conv_result is a dict or string
             if isinstance(conv_result, str):
@@ -508,7 +583,11 @@ async def upload_voice(
             "audio_url": audio_url,
             "needs_clarification": not ready_to_execute,
             "needs_auth": conv_result.get('needs_auth', False),
-            "telegram_bot_url": conv_result.get('telegram_bot_url')
+            "telegram_bot_url": conv_result.get('telegram_bot_url'),
+            # Observability — fallback visibility
+            "response_source": conv_result.get('response_source'),
+            "agent_error": conv_result.get('agent_error'),
+            "fallback_error": conv_result.get('fallback_error'),
         }
         
         # Add action if available

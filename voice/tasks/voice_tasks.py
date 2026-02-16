@@ -7,6 +7,7 @@ Background tasks for async voice command processing.
 import os
 import sys
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 from celery import Task
@@ -171,8 +172,8 @@ def process_voice_command_task(
                             if not user_identity.is_approved:
                                 logger.warning(f"User {user_telegram_id} not approved yet")
                                 # Send notification to user
-                                from voice.service.notification_processor import NotificationProcessor
-                                processor = NotificationProcessor()
+                                from voice.channels.processor import get_processor
+                                processor = get_processor()
                                 import asyncio
                                 loop = asyncio.new_event_loop()
                                 asyncio.set_event_loop(loop)
@@ -205,8 +206,8 @@ def process_voice_command_task(
         if not user_db_id:
             logger.error(f"User {user_telegram_id} not registered")
             # Send notification to user
-            from voice.service.notification_processor import NotificationProcessor
-            processor = NotificationProcessor()
+            from voice.channels.processor import get_processor
+            processor = get_processor()
             import asyncio
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -417,6 +418,7 @@ def process_voice_command_task(
         # Replaces the rigid NLU → switch/case pipeline with a tool-calling
         # agent that reasons about which operations to perform.
         # =====================================================================
+        agent_error_detail = None  # Observability: track agent errors for fallback banner
         if os.getenv("AGENT_ENABLED", "false").lower() == "true" and user_db_id:
             try:
                 from voice.agent import AgentExecutor
@@ -516,13 +518,21 @@ def process_voice_command_task(
                 }
                 
             except Exception as agent_err:
+                agent_error_detail = f"{type(agent_err).__name__}: {agent_err}"
                 logger.error(f"🤖 Agent failed, falling back to legacy pipeline: {agent_err}", exc_info=True)
+                logger.warning(f"⚠️ FALLBACK ACTIVE for voice from user {metadata.get('user_id', '?')}: {type(agent_err).__name__}")
                 # Fall through to legacy conversational AI path
         
         # =====================================================================
         # LEGACY PATH — conversational AI + single-shot NLU fallback
         # (Kept for backward compatibility; disable with AGENT_ENABLED=true)
         # =====================================================================
+        
+        # Determine if we're in fallback mode (agent was enabled but failed)
+        _agent_was_enabled = os.getenv("AGENT_ENABLED", "false").lower() == "true"
+        _fallback_banner = ""
+        if _agent_was_enabled and agent_error_detail:
+            _fallback_banner = "⚠️ [Fallback mode — AI agent unavailable]\n\n"
         
         # Route to conversational AI based on user language (NEW: multi-turn conversation)
         try:
@@ -564,6 +574,8 @@ def process_voice_command_task(
             if not conversation_result.get('ready_to_execute'):
                 # Conversation needs more information - send follow-up question
                 follow_up_message = conversation_result.get('message', 'Please provide more information.')
+                if _fallback_banner:
+                    follow_up_message = _fallback_banner + follow_up_message
                 logger.info(f"Conversation not ready, sending follow-up: {follow_up_message}")
                 
                 # Send follow-up via Telegram with TTS if available

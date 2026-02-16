@@ -993,7 +993,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /ship <gtin\_or\_batch\_id> <destination>\nExample: /ship 00614141852251 Addis\_Warehouse"
+                    message="❌ Usage: /ship <gtin\\_or\\_batch\\_id> <destination>\nExample: /ship 00614141852251 Addis\\_Warehouse"
                 )
                 return {"ok": True}
             
@@ -1044,7 +1044,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message="❌ Usage: /receive <gtin\_or\_batch\_id> [condition]\nExample: /receive 00614141852251 good"
+                    message="❌ Usage: /receive <gtin\\_or\\_batch\\_id> [condition]\nExample: /receive 00614141852251 good"
                 )
                 return {"ok": True}
             
@@ -2402,143 +2402,194 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                 # Unknown workflow, clear state
                 StateManager.clear_user_state(int(user_id))
                 response_message = "Session expired. Please start again."
-        
-        # Check for workflow trigger keywords
-        elif any(kw in text.lower() for kw in ['record batch', 'new batch', 'record harvest', 'create batch', 'log batch', 'record coffee']):
-            logger.info(f"Starting batch recording workflow for user {user_id}")
-            workflow = BatchRecordingWorkflow()
-            result = await workflow.start(int(user_id), initial_message=text)
-            response_message = result.get('message', 'Error starting batch recording.')
-        
-        elif any(kw in text.lower() for kw in ['track shipment', 'my shipments', 'where is my coffee', 'check shipment', 'track my']):
-            logger.info(f"Starting shipment tracking workflow for user {user_id}")
-            workflow = ShipmentTrackingWorkflow()
-            result = await workflow.start(int(user_id), initial_message=text)
-            response_message = result.get('message', 'Error starting shipment tracking.')
-        
-        # RFQ creation detection (buyer wants to purchase)
-        elif any(kw in text.lower() for kw in [
-            'want to buy', 'need to buy', 'looking for', 'i want to purchase', 'need to purchase', 'want to order',
-            'create rfq', 'create an rfq', 'make rfq', 'make an rfq', 'new rfq', 'rfq for', 'post rfq',
-            'request quote', 'request for quote', 'looking to buy', 'interested in buying'
-        ]):
-            logger.info(f"RFQ intent detected for user {user_id}: {text[:50]}")
-            from voice.marketplace.voice_rfq_extractor import extract_rfq_from_voice
-            from voice.telegram.rfq_handler import handle_voice_rfq_creation
-            
-            # Extract RFQ details from text
-            extraction = extract_rfq_from_voice(text, language='en')
-            
-            # Route to voice RFQ handler (works for both voice and text)
-            result = await handle_voice_rfq_creation(int(user_id), text, extraction, {
-                'channel': 'telegram',
-                'user_id': user_id,
-                'language': language
-            })
-            
-            # Handler sends its own message, so we just need to acknowledge
-            response_message = None  # Message already sent by handler
-        
-        # Check if this is a documentation/help query vs operational query
-        # Documentation queries use MultiTurnRAG, operational queries use conversation handlers
-        elif True:  # Wrap in elif to continue the if-elif chain
-            query_lower = text.lower()
-            
-            # Operational command keywords (BYPASS RAG, go to conversation handlers)
-            operational_keywords = [
-                'ship', 'record', 'register', 'create', 'pack', 'unpack', 
-                'split', 'my batch', 'show batch', 'list batch', 'find batch',
-                'transform', 'aggregate', 'disaggregate',
-                'gtin:', 'batch id:', 'container', 'sscc'
-            ]
-            
-            # Check if this is operational (bypass RAG)
-            is_operational = any(keyword in query_lower for keyword in operational_keywords)
-            
-            # Documentation query keywords (route to RAG)
-            doc_keywords = [
-                'what is', 'what are', 'how to', 'how do', 'why', 'explain', 
-                'tell me about', 'help', 'describe', 'documentation', 'guide',
-                'epcis', 'blockchain', 'dpp', 'gs1',
-                # Amharic equivalents
-                'ምን', 'እንዴት', 'ለምን', 'ምንድን', 'ማብራሪያ'
-            ]
-            
-            is_doc_query = any(keyword in query_lower for keyword in doc_keywords) and not is_operational
-            
-            if is_doc_query:
-                # Use Multi-Turn RAG for documentation queries
-                logger.info(f"Routing to MultiTurnRAG for doc query: {text[:50]}...")
-                from voice.rag.multi_turn_rag import MultiTurnRAG
-                from database.models import SessionLocal
-                from ssi.user_identity import get_user_by_telegram_id
-                
-                # Get database user_id (not Telegram ID)
-                db = SessionLocal()
-                try:
-                    user = get_user_by_telegram_id(user_id, db_session=db)
-                    db_user_id = user.id if user else int(user_id)
-                    db.close()
-                except Exception as e:
-                    logger.warning(f"Could not get DB user ID: {e}")
-                    db_user_id = int(user_id)
-                    db.close()
-                
-                # Process with MultiTurnRAG
-                rag_result = await MultiTurnRAG.process_rag_query(
-                    user_id=db_user_id,
-                    query=text,
-                    language=language
+
+            # Send workflow response (dual delivery via channel default)
+            if response_message:
+                processor = get_processor()
+                await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=response_message,
+                    parse_mode=None,
+                    language=language,
                 )
-                
-                response_message = rag_result.get('message', 'Sorry, I could not find relevant information.')
-                
-                # Add sources if available
-                sources = rag_result.get('sources', [])
-                if sources and len(sources) > 0:
-                    sources_text = "\n\n📚 *Sources:*\n" + "\n".join([
-                        f"• {src.get('file', 'Unknown')}"
-                        for src in sources[:3]
-                    ])
-                    response_message += sources_text
-                
-                # Indicate if this was a follow-up
-                if rag_result.get('is_follow_up'):
-                    logger.info(f"MultiTurnRAG detected follow-up for user {db_user_id}")
-            
-            else:
-                # Route to appropriate conversational AI based on language
-                if language == 'am':
-                    # Amharic conversation
-                    from voice.integrations.amharic_conversation import process_amharic_conversation
-                    
-                    # Convert user_id to int for amharic function
-                    result = await process_amharic_conversation(int(user_id), text)
-                    response_message = result.get('message', 'ይቅርታ፣ ስህተት ተከስቷል።')
-                    
+        
+        else:
+            # No active workflow — try AI agent first, then legacy keyword routing
+            import os as _os
+            response_message = None
+            agent_handled = False
+
+            # =================================================================
+            # AI AGENT PATH for text input (mirrors voice_tasks.py agent path)
+            # The agent has 25 tools and can handle batch recording, shipments,
+            # RFQs, compliance checks, DPP queries, etc. autonomously.
+            # =================================================================
+            if _os.getenv("AGENT_ENABLED", "false").lower() == "true":
+                try:
+                    from voice.agent import AgentExecutor
+                    from database.models import SessionLocal
+                    from ssi.user_identity import get_user_by_telegram_id
+
+                    db = SessionLocal()
+                    try:
+                        _user = get_user_by_telegram_id(user_id, db_session=db)
+                        _db_user_id = _user.id if _user else None
+                        _user_did = _user.did if _user else None
+                    finally:
+                        db.close()
+
+                    if _db_user_id:
+                        logger.info(f"🤖 Agent processing text from user {_db_user_id}: {text[:50]}")
+
+                        executor = AgentExecutor()
+                        agent_result = executor.run(
+                            transcript=text,
+                            user_id=_db_user_id,
+                            user_did=_user_did,
+                            language=language,
+                        )
+
+                        logger.info(
+                            f"🤖 Agent text completed: {len(agent_result.tool_calls)} tool call(s), "
+                            f"write={agent_result.performed_write}, "
+                            f"tokens={agent_result.total_tokens}, "
+                            f"time={agent_result.duration_ms:.0f}ms"
+                        )
+
+                        if agent_result.response:
+                            processor = get_processor()
+                            await processor.send_notification(
+                                channel_name='telegram',
+                                user_id=user_id,
+                                message=agent_result.response,
+                                parse_mode='Markdown',
+                                send_voice=True,
+                                language=language,
+                            )
+                            agent_handled = True
+
+                except Exception as agent_err:
+                    logger.error(f"🤖 Agent failed for text, falling back to legacy: {agent_err}", exc_info=True)
+                    logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {type(agent_err).__name__}")
+
+            # =================================================================
+            # LEGACY PATH — keyword routing + RAG + conversational AI
+            # Used when AGENT_ENABLED=false or agent fails/returns no response
+            # =================================================================
+            _fallback_banner = ""
+            if not agent_handled and _os.getenv("AGENT_ENABLED", "false").lower() == "true":
+                # Agent was enabled but didn't handle — show fallback banner
+                _fallback_banner = "⚠️ <i>[Fallback mode — AI agent unavailable]</i>\n\n"
+
+            if not agent_handled:
+                if any(kw in text.lower() for kw in ['record batch', 'new batch', 'record harvest', 'create batch', 'log batch', 'record coffee']):
+                    logger.info(f"Starting batch recording workflow for user {user_id}")
+                    workflow = BatchRecordingWorkflow()
+                    result = await workflow.start(int(user_id), initial_message=text)
+                    response_message = result.get('message', 'Error starting batch recording.')
+
+                elif any(kw in text.lower() for kw in ['track shipment', 'my shipments', 'where is my coffee', 'check shipment', 'track my']):
+                    logger.info(f"Starting shipment tracking workflow for user {user_id}")
+                    workflow = ShipmentTrackingWorkflow()
+                    result = await workflow.start(int(user_id), initial_message=text)
+                    response_message = result.get('message', 'Error starting shipment tracking.')
+
+                # RFQ creation detection (buyer wants to purchase)
+                elif any(kw in text.lower() for kw in [
+                    'want to buy', 'need to buy', 'looking for', 'i want to purchase', 'need to purchase', 'want to order',
+                    'create rfq', 'create an rfq', 'make rfq', 'make an rfq', 'new rfq', 'rfq for', 'post rfq',
+                    'request quote', 'request for quote', 'looking to buy', 'interested in buying'
+                ]):
+                    logger.info(f"RFQ intent detected for user {user_id}: {text[:50]}")
+                    from voice.marketplace.voice_rfq_extractor import extract_rfq_from_voice
+                    from voice.telegram.rfq_handler import handle_voice_rfq_creation
+
+                    extraction = extract_rfq_from_voice(text, language='en')
+                    result = await handle_voice_rfq_creation(int(user_id), text, extraction, {
+                        'channel': 'telegram',
+                        'user_id': user_id,
+                        'language': language
+                    })
+                    response_message = None  # Handler sends its own message
+
                 else:
-                    # English conversation (default)
-                    from voice.integrations.english_conversation import process_english_conversation
-                    
-                    # process_english_conversation is sync, not async
-                    result = process_english_conversation(int(user_id), text, use_rag=True)
-                    response_message = result.get('message_text') or result.get('message_spoken') or result.get('message', 'Sorry, I encountered an error.')
-        
-        # Send response to user (only if message is not None)
-        if response_message:
-            processor = get_processor()
-            await processor.send_notification(
-                channel_name='telegram',
-                user_id=user_id,
-                message=response_message,
-                parse_mode=None
-            )
-        
-        # Optional: Generate and send voice response too (dual delivery)
-        # This would make it truly like Trust Voice - both text and voice
-        # For now, we'll just send text to keep it simple
-        # Future enhancement: Add voice synthesis here
-        
+                    # Documentation vs operational query routing
+                    query_lower = text.lower()
+
+                    operational_keywords = [
+                        'ship', 'record', 'register', 'create', 'pack', 'unpack',
+                        'split', 'my batch', 'show batch', 'list batch', 'find batch',
+                        'transform', 'aggregate', 'disaggregate',
+                        'gtin:', 'batch id:', 'container', 'sscc'
+                    ]
+                    is_operational = any(keyword in query_lower for keyword in operational_keywords)
+
+                    doc_keywords = [
+                        'what is', 'what are', 'how to', 'how do', 'why', 'explain',
+                        'tell me about', 'help', 'describe', 'documentation', 'guide',
+                        'epcis', 'blockchain', 'dpp', 'gs1',
+                        'ምን', 'እንዴት', 'ለምን', 'ምንድን', 'ማብራሪያ'
+                    ]
+                    is_doc_query = any(keyword in query_lower for keyword in doc_keywords) and not is_operational
+
+                    if is_doc_query:
+                        logger.info(f"Routing to MultiTurnRAG for doc query: {text[:50]}...")
+                        from voice.rag.multi_turn_rag import MultiTurnRAG
+                        from database.models import SessionLocal
+                        from ssi.user_identity import get_user_by_telegram_id
+
+                        db = SessionLocal()
+                        try:
+                            user = get_user_by_telegram_id(user_id, db_session=db)
+                            db_user_id = user.id if user else int(user_id)
+                            db.close()
+                        except Exception as e:
+                            logger.warning(f"Could not get DB user ID: {e}")
+                            db_user_id = int(user_id)
+                            db.close()
+
+                        rag_result = await MultiTurnRAG.process_rag_query(
+                            user_id=db_user_id,
+                            query=text,
+                            language=language
+                        )
+                        response_message = rag_result.get('message', 'Sorry, I could not find relevant information.')
+
+                        sources = rag_result.get('sources', [])
+                        if sources and len(sources) > 0:
+                            sources_text = "\n\n📚 *Sources:*\n" + "\n".join([
+                                f"• {src.get('file', 'Unknown')}"
+                                for src in sources[:3]
+                            ])
+                            response_message += sources_text
+
+                        if rag_result.get('is_follow_up'):
+                            logger.info(f"MultiTurnRAG detected follow-up for user {db_user_id}")
+
+                    else:
+                        if language == 'am':
+                            from voice.integrations.amharic_conversation import process_amharic_conversation
+                            result = await process_amharic_conversation(int(user_id), text)
+                            response_message = result.get('message', 'ይቅርታ፣ ስህተት ተከስቷል።')
+                        else:
+                            from voice.integrations.english_conversation import process_english_conversation
+                            result = process_english_conversation(int(user_id), text, use_rag=True)
+                            response_message = result.get('message_text') or result.get('message_spoken') or result.get('message', 'Sorry, I encountered an error.')
+
+                # Send legacy response (dual delivery via channel default)
+                if response_message:
+                    if _fallback_banner:
+                        response_message = _fallback_banner + response_message
+                    processor = get_processor()
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=response_message,
+                        parse_mode='HTML' if _fallback_banner else None,
+                        language=language,
+                    )
+
         logger.info(f"Natural text query processed successfully for user {user_id}")
         return {"ok": True, "message": "Natural text query processed"}
         
