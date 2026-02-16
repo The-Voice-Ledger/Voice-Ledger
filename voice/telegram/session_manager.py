@@ -25,7 +25,7 @@ redis_client = redis.Redis(
     username="default",
     password="TDmnqBLbSuDKVY2jzOc3FpSQe1yHSaZi",
 )
-logger.info(f"Session manager Redis: {_parsed.hostname}:{_parsed.port}")
+logger.info("Session manager Redis connected")
 
 # Session TTL: 1 hour (3600 seconds)
 SESSION_TTL = 3600
