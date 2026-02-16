@@ -441,10 +441,17 @@ When user wants to create (batch, RFQ, offer), start appropriate workflow.
                     "ready_to_execute": False
                 }
         
-        # Handle backward compatibility - if only 'message' is present, use it for both
+        # Handle backward compatibility — normalise all three keys so every
+        # caller can use whichever key it prefers.
         if 'message' in result and 'message_text' not in result:
+            # Old-format response: only 'message' present
             result['message_text'] = result['message']
             result['message_spoken'] = result['message']
+        elif 'message_text' in result and 'message' not in result:
+            # New-format response: 'message_text'/'message_spoken' but no 'message'
+            result['message'] = result['message_text']
+        if 'message_spoken' not in result:
+            result['message_spoken'] = result.get('message_text') or result.get('message', '')
         
         # Add assistant's response to history (use text version)
         message_to_save = result.get('message_text') or result.get('message', assistant_response)

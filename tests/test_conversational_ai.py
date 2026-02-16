@@ -52,27 +52,32 @@ def test_english_conversation():
     # First message - incomplete
     print("\n1. User: 'I want to register coffee'")
     result = process_english_conversation(user_id, "I want to register coffee")
-    print(f"   Ready: {result['ready_to_execute']}")
-    print(f"   Response: {result['message']}")
+    print(f"   Ready: {result.get('ready_to_execute')}")
+    msg = result.get('message') or result.get('message_text', '')
+    print(f"   Response: {msg}")
+    assert 'ready_to_execute' in result, "Result must contain ready_to_execute"
+    assert msg, "Result must contain a response message"
     
-    if not result['ready_to_execute']:
+    if not result.get('ready_to_execute'):
         # Second message - provide quantity
         print("\n2. User: '50 kg'")
         result = process_english_conversation(user_id, "50 kg")
-        print(f"   Ready: {result['ready_to_execute']}")
-        print(f"   Response: {result['message']}")
+        msg = result.get('message') or result.get('message_text', '')
+        print(f"   Ready: {result.get('ready_to_execute')}")
+        print(f"   Response: {msg}")
     
-    if not result['ready_to_execute']:
+    if not result.get('ready_to_execute'):
         # Third message - provide origin
         print("\n3. User: 'From Gedeo'")
         result = process_english_conversation(user_id, "From Gedeo")
-        print(f"   Ready: {result['ready_to_execute']}")
-        print(f"   Response: {result['message']}")
+        msg = result.get('message') or result.get('message_text', '')
+        print(f"   Ready: {result.get('ready_to_execute')}")
+        print(f"   Response: {msg}")
     
-    if result['ready_to_execute']:
+    if result.get('ready_to_execute'):
         print(f"\n✅ Conversation complete!")
-        print(f"   Intent: {result['intent']}")
-        print(f"   Entities: {result['entities']}")
+        print(f"   Intent: {result.get('intent')}")
+        print(f"   Entities: {result.get('entities')}")
     else:
         print(f"\n⚠️  Still need more information")
     
