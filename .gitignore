@@ -113,4 +113,8 @@ chainlink/workflow/dist/
 chainlink/workflow/tmp.*
 chainlink/workflow/bun.lock
 chainlink/workflow/node_modules/
-*.wasm
+.*wasm
+
+# TTS Audio Cache (keep directory structure, ignore generated files)
+voice/cache/tts/
+!voice/cache/tts/.gitkeep
