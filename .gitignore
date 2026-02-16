@@ -27,6 +27,8 @@ htmlcov/
 .env.local
 .env.team
 *.env
+.env.*
+.env*
 
 # API Keys (if stored in files)
 *api_key*
