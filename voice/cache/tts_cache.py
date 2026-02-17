@@ -47,19 +47,11 @@ class TTSCache:
         
         Structure: {base_dir}/{language}/{voice}/{text_hash}.{format}
         """
-        # Normalize text for consistent hashing
-        # We trim whitespace but keep case/punctuation as they affect speech
         normalized_text = text.strip()
-        
-        # Create SHA-256 hash
         text_hash = hashlib.sha256(normalized_text.encode('utf-8')).hexdigest()
-        
-        # Create subdirectories: language/voice
-        # Use 'default' if voice is None/empty to avoid path issues
         safe_voice = str(voice) if voice else "default"
         safe_lang = str(language) if language else "unknown"
         
-        # Clean directory names
         safe_voice = "".join(c for c in safe_voice if c.isalnum() or c in ('-', '_'))
         safe_lang = "".join(c for c in safe_lang if c.isalnum() or c in ('-', '_'))
         
@@ -127,7 +119,6 @@ class TTSCache:
             logger.error(f"Error writing to TTS cache: {e}")
             return None
 
-# Singleton instance
 _tts_cache = None
 
 def get_tts_cache() -> TTSCache:
