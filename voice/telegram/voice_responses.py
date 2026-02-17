@@ -11,7 +11,11 @@ import logging
 import re
 import os
 from typing import Optional
+from telegram import Bot
+from database.models import SessionLocal, UserIdentity
 from voice.tts.tts_provider import TTSProvider
+
+logger = logging.getLogger(__name__)
 
 
 def detect_language(text: str) -> str:
