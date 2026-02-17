@@ -19,7 +19,6 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from voice.cache.tts_cache import get_tts_cache
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -63,23 +62,11 @@ class TTSProvider:
         Raises:
             Exception: If TTS fails
         """
-        # Check cache first
-        cache = get_tts_cache()
-        cached_audio = cache.get_cached_audio(text, language, voice, output_format)
-        
-        if cached_audio:
-            logger.info("Serving audio from TTS cache")
-            return cached_audio
-            
         # Generate new audio
         if language == 'am':
             audio = await TTSProvider._addis_ai_tts(text, voice)
         else:
             audio = await TTSProvider._openai_tts(text, voice, output_format)
-            
-        # Save to cache
-        if audio:
-            cache.save_audio(text, language, audio, voice, output_format)
             
         return audio
     
