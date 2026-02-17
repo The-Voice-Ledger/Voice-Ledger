@@ -2354,6 +2354,9 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
         
         logger.info(f"Processing natural text query from {user_id}: '{text[:50]}...'")
         
+        import os as _os
+        agent_handled = False
+        _agent_error_detail = None        
         # Get user's language preference
         from database.models import SessionLocal
         from ssi.user_identity import get_user_by_telegram_id
@@ -2417,9 +2420,7 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
         
         else:
             # No active workflow — try AI agent first, then legacy keyword routing
-            import os as _os
             response_message = None
-            agent_handled = False
 
             # =================================================================
             # AI AGENT PATH for text input (mirrors voice_tasks.py agent path)
@@ -2444,11 +2445,20 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         logger.info(f"🤖 Agent processing text from user {_db_user_id}: {text[:50]}")
 
                         executor = AgentExecutor()
-                        agent_result = executor.run(
-                            transcript=text,
-                            user_id=_db_user_id,
-                            user_did=_user_did,
-                            language=language,
+                        # Run synchronous executor in thread pool to avoid
+                        # blocking the async event loop (OpenAI SDK is sync).
+                        import asyncio
+                        from functools import partial
+                        _loop = asyncio.get_event_loop()
+                        agent_result = await _loop.run_in_executor(
+                            None,
+                            partial(
+                                executor.run,
+                                transcript=text,
+                                user_id=_db_user_id,
+                                user_did=_user_did,
+                                language=language,
+                            ),
                         )
 
                         logger.info(
@@ -2471,8 +2481,9 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                             agent_handled = True
 
                 except Exception as agent_err:
+                    _agent_error_detail = f"{type(agent_err).__name__}: {agent_err}"
                     logger.error(f"🤖 Agent failed for text, falling back to legacy: {agent_err}", exc_info=True)
-                    logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {type(agent_err).__name__}")
+                    logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {_agent_error_detail}")
 
             # =================================================================
             # LEGACY PATH — keyword routing + RAG + conversational AI
@@ -2591,8 +2602,14 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         language=language,
                     )
 
-        logger.info(f"Natural text query processed successfully for user {user_id}")
-        return {"ok": True, "message": "Natural text query processed"}
+        _response_source = "agent" if agent_handled else ("fallback_nlu" if _os.getenv("AGENT_ENABLED", "false").lower() == "true" else "legacy")
+        logger.info(f"Natural text query processed for user {user_id} via {_response_source}")
+        return {
+            "ok": True,
+            "message": "Natural text query processed",
+            "response_source": _response_source,
+            "agent_error": _agent_error_detail if not agent_handled else None,
+        }
         
     except Exception as e:
         logger.error(f"Error processing natural text query: {e}", exc_info=True)

@@ -435,11 +435,20 @@ async def upload_voice(
                     logger.info(f"🤖 Agent processing Mini App voice from user {user_id}: {transcript[:50]}")
 
                     executor = AgentExecutor()
-                    agent_result = executor.run(
-                        transcript=transcript,
-                        user_id=user_id,
-                        user_did=agent_user_did,
-                        language=user_language,
+                    # Run sync executor in thread pool to avoid blocking
+                    # the async event loop (OpenAI SDK calls are blocking).
+                    import asyncio
+                    from functools import partial as _partial
+                    _loop = asyncio.get_event_loop()
+                    agent_result = await _loop.run_in_executor(
+                        None,
+                        _partial(
+                            executor.run,
+                            transcript=transcript,
+                            user_id=user_id,
+                            user_did=agent_user_did,
+                            language=user_language,
+                        ),
                     )
 
                     logger.info(
