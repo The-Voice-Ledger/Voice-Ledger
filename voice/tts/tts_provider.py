@@ -28,7 +28,7 @@ openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Addis AI configuration
 ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
-ADDIS_AI_TTS_URL = "https://api.addisassistant.com/api/v1/audio/speech"
+ADDIS_AI_TTS_URL = "https://api.addisassistant.com/api/v1/audio"
 
 
 class TTSProvider:
