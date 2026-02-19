@@ -6,11 +6,23 @@ Events are saved to the epcis/events/ directory for later canonicalization and h
 """
 
 import json
+import hashlib
 from pathlib import Path
 from gs1.identifiers import gln, gtin, sscc
 
 EVENT_DIR = Path("epcis/events")
 EVENT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _batch_id_to_numeric_serial(batch_id: str) -> str:
+    """Convert a batch ID (possibly non-numeric) to a 9-digit numeric serial for GS1 SSCC."""
+    # If already numeric, use directly
+    digits_only = ''.join(c for c in batch_id if c.isdigit())
+    if digits_only:
+        return digits_only[:9]
+    # Otherwise hash to get deterministic numeric serial
+    h = hashlib.sha256(batch_id.encode()).hexdigest()
+    return str(int(h[:12], 16) % 10**9)
 
 
 def create_commission_event(batch_id: str) -> Path:
@@ -34,7 +46,7 @@ def create_commission_event(batch_id: str) -> Path:
         "type": "ObjectEvent",
         "eventTime": "2025-01-01T00:00:00Z",
         "eventTimeZoneOffset": "+00:00",
-        "epcList": [f"urn:epc:id:sscc:{sscc(batch_id)}"],
+        "epcList": [f"urn:epc:id:sscc:{sscc(_batch_id_to_numeric_serial(batch_id))}"],
         "action": "ADD",
         "bizStep": "commissioning",
         "readPoint": {"id": f"urn:epc:id:gln:{gln('100001')}"},

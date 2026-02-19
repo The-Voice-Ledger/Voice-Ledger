@@ -76,8 +76,10 @@ def detect_voice_command(transcript: str, metadata: Dict[str, Any]) -> Optional[
         (r'\bsign\s*up\b', 'register'),
         (r'\bsignup\b', 'register'),
         
-        # Simple "my X" patterns (without verb)
-        (r'\bmy\s+(batch(es)?|coffee)\b', 'mybatches'),
+        # Simple "my X" patterns (without verb) — only match when NOT preceded
+        # by a verb that indicates conversational use (e.g. "transform my batch")
+        (r'(?<!\w)(my)\s+(batch(es)?|coffee)\s*$', 'mybatches'),
+        (r'^my\s+(batch(es)?|coffee)\b', 'mybatches'),
         (r'\bmy\s+(credential|credentials)\b', 'mycredentials'),
         (r'\bmy\s+(identity|did)\b', 'myidentity'),
         

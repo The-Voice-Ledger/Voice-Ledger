@@ -834,7 +834,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 
                 base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-                message += f"\n🌐 Review & approve: {base_url}/admin/registrations"
+                message += f"\n🌐 Review & approve: {base_url}/review/registrations"
                 
                 await processor.send_notification(
                     channel_name='telegram',

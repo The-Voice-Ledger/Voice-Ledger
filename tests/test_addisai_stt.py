@@ -59,7 +59,7 @@ async def test_provider_initialization():
         return None
 
 
-async def test_cloud_transcription(provider: AddisAIProvider, audio_path: str):
+async def run_cloud_transcription(provider: AddisAIProvider, audio_path: str):
     """Test 2: Cloud STT transcription"""
     logger.info("\n" + "=" * 60)
     logger.info("TEST 2: Cloud STT Transcription")
@@ -121,7 +121,7 @@ async def test_hybrid_fallback():
     return True
 
 
-async def test_tts_generation(provider: AddisAIProvider):
+async def run_tts_generation(provider: AddisAIProvider):
     """Test 4: TTS generation (bonus)"""
     logger.info("\n" + "=" * 60)
     logger.info("TEST 4: TTS Generation (Bonus)")
@@ -154,7 +154,7 @@ async def test_tts_generation(provider: AddisAIProvider):
         return False
 
 
-async def test_asr_integration(audio_path: str):
+async def run_asr_integration(audio_path: str):
     """Test 5: Full ASR integration"""
     logger.info("\n" + "=" * 60)
     logger.info("TEST 5: Full ASR Integration")
@@ -223,7 +223,7 @@ async def main():
     
     # Test 2: Cloud transcription
     if Path(audio_path).exists():
-        results['transcription'] = await test_cloud_transcription(provider, audio_path)
+        results['transcription'] = await run_cloud_transcription(provider, audio_path)
     else:
         logger.warning(f"⚠️  Skipping transcription test (audio file not found)")
         results['transcription'] = None
@@ -232,11 +232,11 @@ async def main():
     results['hybrid_config'] = await test_hybrid_fallback()
     
     # Test 4: TTS (optional)
-    results['tts'] = await test_tts_generation(provider)
+    results['tts'] = await run_tts_generation(provider)
     
     # Test 5: ASR integration
     if Path(audio_path).exists():
-        results['asr_integration'] = await test_asr_integration(audio_path)
+        results['asr_integration'] = await run_asr_integration(audio_path)
     else:
         logger.warning(f"⚠️  Skipping ASR integration test (audio file not found)")
         results['asr_integration'] = None

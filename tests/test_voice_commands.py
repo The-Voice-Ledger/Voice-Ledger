@@ -74,7 +74,7 @@ def test_pack_batches():
         db.close()
 
 
-def test_unpack_batches(container_id):
+def run_unpack_batches(container_id):
     """Test unpacking container via voice command."""
     print("\n" + "="*60)
     print("TEST 2: Unpack Container (Disaggregation)")
@@ -204,7 +204,7 @@ def main():
     
     # Test 2: Unpack batches (if pack succeeded)
     if container_id:
-        test_unpack_batches(container_id)
+        run_unpack_batches(container_id)
     
     # Test 3: Split batch
     test_split_batch()

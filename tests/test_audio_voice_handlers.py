@@ -186,7 +186,7 @@ def test_commission_audio():
         db.close()
 
 
-def test_shipment_audio(batch_id: str):
+def run_shipment_audio(batch_id: str):
     """Test 2: Record shipment via voice command."""
     print("\n" + "="*70)
     print("TEST 2: RECORD SHIPMENT (Audio Input)")
@@ -236,7 +236,7 @@ def test_shipment_audio(batch_id: str):
         db.close()
 
 
-def test_receipt_audio(batch_id: str):
+def run_receipt_audio(batch_id: str):
     """Test 3: Record receipt via voice command."""
     print("\n" + "="*70)
     print("TEST 3: RECORD RECEIPT (Audio Input)")
@@ -405,7 +405,7 @@ def test_pack_audio():
         db.close()
 
 
-def test_unpack_audio(container_id: str):
+def run_unpack_audio(container_id: str):
     """Test 6: Unpack container via voice command."""
     print("\n" + "="*70)
     print("TEST 6: UNPACK CONTAINER (Audio Input)")
@@ -565,10 +565,10 @@ def main():
     
     if batch_id:
         # Test 2: Shipment
-        results['shipment'] = test_shipment_audio(batch_id)
+        results['shipment'] = run_shipment_audio(batch_id)
         
         # Test 3: Receipt
-        results['receipt'] = test_receipt_audio(batch_id)
+        results['receipt'] = run_receipt_audio(batch_id)
     else:
         print("⚠️  Skipping shipment and receipt tests (commission failed)")
     
@@ -580,7 +580,7 @@ def main():
     results['pack'] = container_id is not None
     
     if container_id:
-        results['unpack'] = test_unpack_audio(container_id)
+        results['unpack'] = run_unpack_audio(container_id)
     else:
         print("⚠️  Skipping unpack test (pack failed)")
     

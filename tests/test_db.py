@@ -19,6 +19,17 @@ def test_database():
     print("Testing Neon database integration...")
     
     with get_db() as db:
+        # Clean up any leftover test data from previous runs
+        from database.models import FarmerIdentity, CoffeeBatch, EPCISEvent
+        old_farmer = db.query(FarmerIdentity).filter_by(farmer_id="F001").first()
+        if old_farmer:
+            old_batches = db.query(CoffeeBatch).filter_by(farmer_id=old_farmer.id).all()
+            for b in old_batches:
+                db.query(EPCISEvent).filter_by(batch_id=b.id).delete()
+                db.delete(b)
+            db.delete(old_farmer)
+            db.commit()
+
         # 1. Create a test farmer
         print("\n1. Creating test farmer...")
         farmer = create_farmer(db, {

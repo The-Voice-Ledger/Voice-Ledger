@@ -1,91 +1,93 @@
 {
   "passportId": "DPP-BATCH-DPP-TEST-004",
   "batchId": "BATCH-DPP-TEST-004",
-  "version": "1.0.0",
-  "issuedAt": "2025-12-12T20:04:09.787739+00:00",
+  "version": "2.0.0",
+  "issuedAt": "2026-02-19T07:19:14.312347+00:00",
   "productInformation": {
     "productName": "Persistence Test Coffee",
-    "quantity": 60,
-    "unit": "bags",
-    "variety": "Arabica",
-    "processMethod": "Washed"
+    "quantity": 100.0,
+    "unit": "kg",
+    "variety": "Heirloom",
+    "processMethod": "Washed",
+    "gtin": "00614141000043"
   },
   "traceability": {
     "origin": {
       "country": "ET",
       "region": "Test Region",
-      "cooperative": "Test Coop"
+      "farmName": "Test Co-op",
+      "farmer": {
+        "name": "DPP Test Farmer",
+        "did": "did:key:dpp-test-FARMER-DPP-TEST",
+        "gln": null
+      }
     },
     "supplyChainActors": [],
-    "events": [
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventType": "commissioning",
-        "timestamp": "2025-12-12T20:04:09.787739+00:00",
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      }
-    ]
+    "events": []
   },
-  "sustainability": {},
+  "sustainability": {
+    "certifications": [],
+    "carbonFootprint": {
+      "value": 0.85,
+      "unit": "kg CO2e/kg",
+      "scope": "cradle-to-gate"
+    }
+  },
   "dueDiligence": {
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2025-12-12",
+      "assessmentDate": "2026-02-19",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
+    }
+  },
+  "eudrCompliance": {
+    "regulation": {
+      "name": "EU Deforestation Regulation (EUDR)",
+      "reference": "Regulation (EU) 2023/1115",
+      "article": "Article 9 - Geolocation Requirements",
+      "applicableFrom": "2024-12-30"
+    },
+    "complianceStatus": "NO_GPS",
+    "complianceLevel": "Non-Compliant",
+    "geolocation": {
+      "farmLocation": {
+        "status": "MISSING",
+        "warning": "Geolocation data required for EUDR compliance. Register with GPS photo."
+      }
+    },
+    "riskAssessment": {
+      "deforestationRisk": "UNKNOWN",
+      "riskFactors": [
+        {
+          "factor": "Missing geolocation data",
+          "severity": "HIGH",
+          "mitigation": "Upload farm photo with GPS for verification"
+        }
+      ],
+      "assessmentDate": "2026-02-19",
+      "assessor": "Voice Ledger GPS Verification System",
+      "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
+      "deforestationCheck": {
+        "status": "NO_GPS_COORDINATES",
+        "note": "Cannot perform deforestation check without geolocation data"
+      }
+    },
+    "dueDiligenceStatement": {
+      "operator": "Voice Ledger Supply Chain Platform",
+      "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
+      "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
+      "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
+      "nextReviewDate": "2027-02-19"
     }
   },
   "blockchain": {
     "network": "local",
     "eventAnchorContract": "0x0000000000000000000000000000000000000000",
-    "anchors": [
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
-      {
-        "eventHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      }
-    ],
+    "anchors": [],
     "tokenContract": "0x0000000000000000000000000000000000000000",
-    "tokenId": 203,
-    "settlementContract": "0x0000000000000000000000000000000000000000"
+    "tokenId": 203
   },
   "qrCode": {
     "url": "https://dpp.voiceledger.io/dpp/BATCH-DPP-TEST-004"

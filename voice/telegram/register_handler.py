@@ -27,28 +27,65 @@ logger = logging.getLogger(__name__)
 
 # Redis-backed dict-like wrapper for conversation states
 class ConversationStates:
-    """Dict-like wrapper around Redis session storage for backward compatibility"""
-    
+    """Dict-like wrapper around Redis session storage for backward compatibility.
+
+    Uses an in-memory write-through cache so that dict-style mutations like
+        conversation_states[uid]['state'] = X
+    work correctly.  The first __getitem__ call for a user loads from Redis
+    into the cache; subsequent calls return the *same* dict reference so
+    in-place mutations are visible.  Call save(uid) (typically in a finally
+    block) to persist the cached state back to Redis and clear the cache
+    entry, ensuring the next request loads fresh data.
+    """
+
+    def __init__(self):
+        self._cache: Dict[int, Dict[str, Any]] = {}
+
     def __contains__(self, user_id: int) -> bool:
         """Check if user has active session"""
-        return session_exists(user_id)
-    
+        if user_id in self._cache:
+            return True
+        if session_exists(user_id):
+            # Pre-load into cache so the next __getitem__ is consistent
+            session = get_session(user_id)
+            if session is not None:
+                self._cache[user_id] = session
+            return True
+        return False
+
     def __getitem__(self, user_id: int) -> Dict[str, Any]:
-        """Get session data"""
+        """Get session data — returns cached reference so mutations persist"""
+        if user_id in self._cache:
+            return self._cache[user_id]
         session = get_session(user_id)
         if session is None:
             raise KeyError(f"No session for user {user_id}")
+        self._cache[user_id] = session
         return session
-    
+
     def __setitem__(self, user_id: int, value: Dict[str, Any]):
-        """Set session data"""
+        """Set session data (writes to both cache and Redis)"""
+        self._cache[user_id] = value
         set_session(user_id, value)
-    
+
     def pop(self, user_id: int, default=None):
         """Remove and return session data"""
-        session = get_session(user_id)
+        session = self._cache.pop(user_id, None)
+        if session is None:
+            session = get_session(user_id)
         delete_session(user_id)
         return session if session else default
+
+    def save(self, user_id: int):
+        """Persist cached mutations to Redis and clear the cache entry.
+
+        Call this in a finally block after any handler that mutates state
+        via  conversation_states[uid]['state'] = X  or  data['key'] = val.
+        Clearing the cache ensures the next request loads fresh from Redis.
+        """
+        if user_id in self._cache:
+            set_session(user_id, self._cache[user_id])
+            del self._cache[user_id]
 
 
 # Use Redis-backed conversation states instead of in-memory dict
@@ -327,11 +364,11 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     
     # Retry photo upload
     if callback_data == 'reg_retry_photo':
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
         # Reset to photo upload state
-        session = conversation_states[user_id]
         session['state'] = STATE_UPLOAD_FARM_PHOTO
         session['data'].pop('farm_photo', None)
         set_session(user_id, session)  # Persist to Redis
@@ -352,10 +389,10 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     if callback_data.startswith('reg_business_'):
         business_type = callback_data.replace('reg_business_', '')
         
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
-        session = conversation_states[user_id]
         session['data']['business_type'] = business_type
         session['state'] = STATE_COUNTRY
         set_session(user_id, session)  # Persist to Redis
@@ -373,10 +410,10 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     if callback_data.startswith('reg_port_'):
         port = callback_data.replace('reg_port_', '')
         
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
-        session = conversation_states[user_id]
         if port == 'OTHER':
             session['state'] = STATE_PORT_ACCESS
             set_session(user_id, session)  # Persist to Redis
@@ -410,6 +447,15 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
             'message': "No active registration. Use /register to start."
         }
     
+    try:
+        return await _handle_registration_text_impl(user_id, text)
+    finally:
+        # Persist any in-memory mutations back to Redis
+        conversation_states.save(user_id)
+
+
+async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, Any]:
+    """Inner implementation of handle_registration_text (called inside save-wrapper)."""
     state = conversation_states[user_id]['state']
     data = conversation_states[user_id]['data']
     
@@ -874,7 +920,7 @@ Target Volume: {registration_data.get('target_volume', 'N/A')} tons/year"""
         message += f"""
 
 Review and approve at:
-{base_url}/admin/registrations"""
+{base_url}/review/registrations"""
         
         response = requests.post(
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
@@ -1077,6 +1123,8 @@ async def handle_farm_photo_upload(user_id: int, photo_file_id: str, photo_file_
         }
     finally:
         db.close()
+        # Persist any in-memory mutations back to Redis
+        conversation_states.save(user_id)
 
 
 async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -> Dict[str, Any]:

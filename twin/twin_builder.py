@@ -28,6 +28,15 @@ def load_twin() -> dict:
         
         twin = {"batches": {}}
         for batch in batches:
+            farmer_data = None
+            if batch.farmer:
+                farmer_data = {
+                    "farmerId": batch.farmer.farmer_id,
+                    "name": batch.farmer.name,
+                    "did": batch.farmer.did,
+                    "region": batch.farmer.region
+                }
+            
             twin["batches"][batch.batch_id] = {
                 "batchId": batch.batch_id,
                 "gtin": batch.gtin,
@@ -38,15 +47,10 @@ def load_twin() -> dict:
                     "cooperative": batch.farm_name,
                     "variety": batch.variety,
                     "processing": batch.process_method,
-                    "grade": batch.grade,
-                    "cuppingScore": batch.cupping_score
+                    "grade": batch.quality_grade,
+                    "cuppingScore": getattr(batch, 'cupping_score', None)
                 },
-                "farmer": {
-                    "farmerId": batch.farmer.farmer_id,
-                    "name": batch.farmer.name,
-                    "did": batch.farmer.did,
-                    "region": batch.farmer.region
-                },
+                "farmer": farmer_data,
                 "anchors": [
                     {
                         "eventHash": event.event_hash,
