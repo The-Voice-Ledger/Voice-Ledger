@@ -16,9 +16,6 @@ from voice.tasks.voice_tasks import process_voice_command_task
 
 logger = logging.getLogger(__name__)
 
-from dotenv import load_dotenv
-load_dotenv()
-
 router = APIRouter(prefix="/voice/telegram", tags=["telegram"])
 
 

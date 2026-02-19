@@ -28,7 +28,7 @@ class DPPCache:
         Args:
             redis_url: Redis connection URL (defaults to env var REDIS_URL)
         """
-        self.redis_url = redis_url or os.getenv('REDIS_URL')
+        self.redis_url = redis_url or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
         self.redis_client = redis.from_url(self.redis_url, decode_responses=True)
         self.default_ttl = 3600  # 1 hour cache for DPPs
         self.version = "v1"  # Cache version for invalidation
