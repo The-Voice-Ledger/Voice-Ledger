@@ -71,8 +71,10 @@ class VoiceProcessingTask(Task):
 )
 def process_voice_command_task(
     self, 
-    audio_path: str, 
+    audio_path: str = None,  # Make optional for Railway
     original_filename: str = None,
+    audio_data_b64: str = None,  # Base64 audio data for Railway
+    audio_format: str = None,  # Audio format for Railway
     metadata: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
@@ -122,28 +124,38 @@ def process_voice_command_task(
             # Debug: Log the actual audio path received
             logger.info(f"Processing audio file: {audio_path}")
             
+            # Handle Railway base64 audio data
+            if audio_data_b64 and audio_format:
+                logger.info("Processing embedded audio data (Railway mode)")
+                import base64
+                import tempfile
+                
+                # Decode base64 audio data
+                audio_bytes = base64.b64decode(audio_data_b64)
+                
+                # Create temp file from embedded data
+                with tempfile.NamedTemporaryFile(
+                    suffix=f'.{audio_format}',
+                    delete=False
+                ) as temp_file:
+                    temp_file.write(audio_bytes)
+                    audio_path = temp_file.name
+                
+                logger.info(f"Created temp file from embedded data: {audio_path}")
+            
             # Check if file exists before validation
             from pathlib import Path
             if not Path(audio_path).exists():
                 logger.error(f"Audio file does not exist at path: {audio_path}")
-                # Try to find it in persistent directory
-                if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
-                    filename = Path(audio_path).name
-                    persistent_path = Path("/tmp/voice_files") / filename
-                    if persistent_path.exists():
-                        logger.info(f"Found file in persistent directory: {persistent_path}")
-                        audio_path = str(persistent_path)
-                    else:
-                        logger.error(f"File not found in persistent directory either: {persistent_path}")
-                        return {
-                            "status": "error",
-                            "error": f"Audio file not found in both locations: {audio_path} and {persistent_path}",
-                            "transcript": None,
-                            "intent": None,
-                            "entities": None,
-                            "result": None,
-                            "audio_metadata": None
-                        }
+                return {
+                    "status": "error",
+                    "error": f"Audio file not found: {audio_path}",
+                    "transcript": None,
+                    "intent": None,
+                    "entities": None,
+                    "result": None,
+                    "audio_metadata": None
+                }
             
             wav_path, audio_metadata = validate_and_convert_audio(audio_path)
             # Merge audio metadata with passed metadata

@@ -486,17 +486,29 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Use persistent temp directory on Railway
         if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
-            # Railway: Use persistent temp directory
-            temp_dir = Path("/tmp/voice_files")
-            temp_dir.mkdir(exist_ok=True)
+            # Railway: Write file directly to Celery task to avoid race condition
+            import base64
+            import json
             
-            # Create persistent temp file
-            import uuid
-            temp_filename = f"voice_{uuid.uuid4().hex}.{voice_message.audio_format}"
-            audio_path = str(temp_dir / temp_filename)
+            # Encode audio data as base64 to pass in task
+            audio_b64 = base64.b64encode(voice_message.audio_data).decode('utf-8')
             
-            with open(audio_path, 'wb') as f:
-                f.write(voice_message.audio_data)
+            # Queue async processing task with audio data embedded
+            task = process_voice_command_task.apply_async(
+                args=[],  # No file path
+                kwargs={
+                    'original_filename': f"telegram_voice.{voice_message.audio_format}",
+                    'audio_data_b64': audio_b64,  # Pass audio data directly
+                    'audio_format': voice_message.audio_format,
+                    'metadata': {
+                        'user_id': voice_message.user_id,
+                        'username': voice_message.username,
+                        'channel': 'telegram',
+                        'audio_path': 'embedded_in_task',  # Debug marker
+                        **voice_message.metadata
+                    }
+                }
+            )
         else:
             # Local: Use regular temp file
             with tempfile.NamedTemporaryFile(
@@ -505,21 +517,21 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
             ) as temp_file:
                 temp_file.write(voice_message.audio_data)
                 audio_path = temp_file.name
-        
-        # Queue async processing task with metadata
-        task = process_voice_command_task.apply_async(
-            args=[audio_path],
-            kwargs={
-                'original_filename': f"telegram_voice.{voice_message.audio_format}",
-                'metadata': {
-                    'user_id': voice_message.user_id,
-                    'username': voice_message.username,
-                    'channel': 'telegram',
-                    'audio_path': audio_path,  # Add actual path for debugging
-                    **voice_message.metadata
+            
+            # Queue async processing task with metadata
+            task = process_voice_command_task.apply_async(
+                args=[audio_path],
+                kwargs={
+                    'original_filename': f"telegram_voice.{voice_message.audio_format}",
+                    'metadata': {
+                        'user_id': voice_message.user_id,
+                        'username': voice_message.username,
+                        'channel': 'telegram',
+                        'audio_path': audio_path,  # Add actual path for debugging
+                        **voice_message.metadata
+                    }
                 }
-            }
-        )
+            )
         
         logger.info(f"Queued Telegram voice processing: task_id={task.id}")
         
