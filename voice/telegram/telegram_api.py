@@ -1576,6 +1576,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from ssi.user_identity import get_user_by_telegram_id
             from database.models import SessionLocal
             from voice.integrations import ConversationManager
+            from datetime import datetime
             
             db = SessionLocal()
             try:
