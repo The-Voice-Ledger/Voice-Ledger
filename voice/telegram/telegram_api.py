@@ -482,12 +482,29 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Save audio to temp file for processing
         import tempfile
-        with tempfile.NamedTemporaryFile(
-            suffix=f'.{voice_message.audio_format}',
-            delete=False
-        ) as temp_file:
-            temp_file.write(voice_message.audio_data)
-            audio_path = temp_file.name
+        import os
+        
+        # Use persistent temp directory on Railway
+        if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
+            # Railway: Use persistent temp directory
+            temp_dir = Path("/tmp/voice_files")
+            temp_dir.mkdir(exist_ok=True)
+            
+            # Create persistent temp file
+            import uuid
+            temp_filename = f"voice_{uuid.uuid4().hex}.{voice_message.audio_format}"
+            audio_path = str(temp_dir / temp_filename)
+            
+            with open(audio_path, 'wb') as f:
+                f.write(voice_message.audio_data)
+        else:
+            # Local: Use regular temp file
+            with tempfile.NamedTemporaryFile(
+                suffix=f'.{voice_message.audio_format}',
+                delete=False
+            ) as temp_file:
+                temp_file.write(voice_message.audio_data)
+                audio_path = temp_file.name
         
         # Queue async processing task with metadata
         task = process_voice_command_task.apply_async(
