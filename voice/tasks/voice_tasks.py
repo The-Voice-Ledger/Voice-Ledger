@@ -119,6 +119,32 @@ def process_voice_command_task(
         
         # Validate and convert audio to WAV
         try:
+            # Debug: Log the actual audio path received
+            logger.info(f"Processing audio file: {audio_path}")
+            
+            # Check if file exists before validation
+            from pathlib import Path
+            if not Path(audio_path).exists():
+                logger.error(f"Audio file does not exist at path: {audio_path}")
+                # Try to find it in persistent directory
+                if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
+                    filename = Path(audio_path).name
+                    persistent_path = Path("/tmp/voice_files") / filename
+                    if persistent_path.exists():
+                        logger.info(f"Found file in persistent directory: {persistent_path}")
+                        audio_path = str(persistent_path)
+                    else:
+                        logger.error(f"File not found in persistent directory either: {persistent_path}")
+                        return {
+                            "status": "error",
+                            "error": f"Audio file not found in both locations: {audio_path} and {persistent_path}",
+                            "transcript": None,
+                            "intent": None,
+                            "entities": None,
+                            "result": None,
+                            "audio_metadata": None
+                        }
+            
             wav_path, audio_metadata = validate_and_convert_audio(audio_path)
             # Merge audio metadata with passed metadata
             metadata.update(audio_metadata)

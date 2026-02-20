@@ -515,6 +515,7 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     'user_id': voice_message.user_id,
                     'username': voice_message.username,
                     'channel': 'telegram',
+                    'audio_path': audio_path,  # Add actual path for debugging
                     **voice_message.metadata
                 }
             }
