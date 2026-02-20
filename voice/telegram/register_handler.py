@@ -519,15 +519,19 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
             logger.error(f"Error checking existing phone: {e}")
             db.close()
         
-        # No phone yet - ask for it
+        # No phone yet - ask for it with a share button
         session['state'] = STATE_PHONE
         set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
-                "What is your phone number?\n"
-                "(Include country code, e.g., +251912345678)\n\n"
-                "💡 Tip: You can also share your contact via /start"
-            )
+                "📱 *Share your phone number*\n\n"
+                "Tap the button below to share your number automatically, "
+                "or type it manually (e.g., +251912345678):"
+            ),
+            'parse_mode': 'Markdown',
+            'reply_keyboard': [
+                [{'text': '📱 Share My Phone Number', 'request_contact': True}]
+            ]
         }
     
     # State: PHONE (only reached if user didn't share phone in /start)

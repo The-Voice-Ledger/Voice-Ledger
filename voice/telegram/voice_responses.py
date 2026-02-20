@@ -405,7 +405,10 @@ async def send_voice_reply(
                     keyboard_row = []
                     for button in row:
                         keyboard_row.append(
-                            KeyboardButton(text=button.get('text', ''))
+                            KeyboardButton(
+                                text=button.get('text', ''),
+                                request_contact=button.get('request_contact', False)
+                            )
                         )
                     keyboard.append(keyboard_row)
                 telegram_reply_markup = ReplyKeyboardMarkup(

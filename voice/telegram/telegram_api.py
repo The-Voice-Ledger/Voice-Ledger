@@ -189,6 +189,7 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Check if user is in registration flow
         from voice.telegram.register_handler import conversation_states, STATE_PHONE
+        from telegram import ReplyKeyboardRemove
         
         if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_PHONE:
             # User is in registration flow - store phone in conversation state
@@ -198,14 +199,14 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from voice.telegram.register_handler import handle_registration_text
             response = await handle_registration_text(user_id, phone_number)
             
-            # Send response
+            # Send response and dismiss the share-phone keyboard
             processor = get_processor()
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
                 message=response.get('message', '✅ Phone number received'),
                 parse_mode=response.get('parse_mode'),
-                inline_keyboard=response.get('inline_keyboard')
+                reply_markup=ReplyKeyboardRemove()
             )
             
             return {"ok": True, "message": "Phone processed in registration"}
@@ -1375,7 +1376,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 last_name=last_name
             )
             
-            # Send response with optional inline keyboard
+            # Send response with optional keyboard (inline or reply/contact-share)
             if 'inline_keyboard' in response:
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -1386,6 +1387,32 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         'text': response['message'],
                         'parse_mode': response.get('parse_mode', 'Markdown'),
                         'reply_markup': {'inline_keyboard': response['inline_keyboard']}
+                    },
+                    timeout=30
+                )
+            elif 'reply_keyboard' in response:
+                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                keyboard_rows = [
+                    [
+                        {k: v for k, v in btn.items() if k != 'text'}
+                        | {'text': btn['text']}
+                        for btn in row
+                    ]
+                    for row in response['reply_keyboard']
+                ]
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': keyboard_rows,
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
                     },
                     timeout=30
                 )
@@ -2305,7 +2332,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             logger.info(f"User {user_id} in registration conversation, routing to registration handler")
             response = await handle_registration_text(int(user_id), text)
             
-            # Send response with optional inline keyboard
+            # Send response with optional keyboard (inline or reply/contact-share)
             if 'inline_keyboard' in response:
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -2316,6 +2343,32 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         'text': response['message'],
                         'parse_mode': response.get('parse_mode', 'Markdown'),
                         'reply_markup': {'inline_keyboard': response['inline_keyboard']}
+                    },
+                    timeout=30
+                )
+            elif 'reply_keyboard' in response:
+                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                keyboard_rows = [
+                    [
+                        {k: v for k, v in btn.items() if k != 'text'}
+                        | {'text': btn['text']}
+                        for btn in row
+                    ]
+                    for row in response['reply_keyboard']
+                ]
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': keyboard_rows,
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
                     },
                     timeout=30
                 )
