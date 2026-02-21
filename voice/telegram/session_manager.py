@@ -19,11 +19,8 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-redis_client = redis.Redis(
-    host=os.getenv('REDIS_URL'),
-    port=os.getenv('REDISPORT'),
-    username=os.getenv('REDISUSER'),
-    password=os.getenv('REDISPASSWORD'),
+redis_client = redis.Redis.from_url(
+    os.getenv('REDIS_URL', 'redis://localhost:6379/0'),
     decode_responses=True
 )
 
