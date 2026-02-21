@@ -89,7 +89,7 @@ def test_dpp_builder():
 
         assert dpp["passportId"] == f"DPP-{batch_id}"
         assert dpp["batchId"] == batch_id
-        assert dpp["version"] == "2.0.0"  # Updated to 2.0 with EUDR GPS verification
+        assert dpp["version"] == "3.0.0"  # v3: EUDR GPS verification + Chainlink DON attestation
         assert "productInformation" in dpp
         assert "traceability" in dpp
         assert "dueDiligence" in dpp
