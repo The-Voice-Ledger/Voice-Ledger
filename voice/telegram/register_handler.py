@@ -27,28 +27,65 @@ logger = logging.getLogger(__name__)
 
 # Redis-backed dict-like wrapper for conversation states
 class ConversationStates:
-    """Dict-like wrapper around Redis session storage for backward compatibility"""
-    
+    """Dict-like wrapper around Redis session storage for backward compatibility.
+
+    Uses an in-memory write-through cache so that dict-style mutations like
+        conversation_states[uid]['state'] = X
+    work correctly.  The first __getitem__ call for a user loads from Redis
+    into the cache; subsequent calls return the *same* dict reference so
+    in-place mutations are visible.  Call save(uid) (typically in a finally
+    block) to persist the cached state back to Redis and clear the cache
+    entry, ensuring the next request loads fresh data.
+    """
+
+    def __init__(self):
+        self._cache: Dict[int, Dict[str, Any]] = {}
+
     def __contains__(self, user_id: int) -> bool:
         """Check if user has active session"""
-        return session_exists(user_id)
-    
+        if user_id in self._cache:
+            return True
+        if session_exists(user_id):
+            # Pre-load into cache so the next __getitem__ is consistent
+            session = get_session(user_id)
+            if session is not None:
+                self._cache[user_id] = session
+            return True
+        return False
+
     def __getitem__(self, user_id: int) -> Dict[str, Any]:
-        """Get session data"""
+        """Get session data — returns cached reference so mutations persist"""
+        if user_id in self._cache:
+            return self._cache[user_id]
         session = get_session(user_id)
         if session is None:
             raise KeyError(f"No session for user {user_id}")
+        self._cache[user_id] = session
         return session
-    
+
     def __setitem__(self, user_id: int, value: Dict[str, Any]):
-        """Set session data"""
+        """Set session data (writes to both cache and Redis)"""
+        self._cache[user_id] = value
         set_session(user_id, value)
-    
+
     def pop(self, user_id: int, default=None):
         """Remove and return session data"""
-        session = get_session(user_id)
+        session = self._cache.pop(user_id, None)
+        if session is None:
+            session = get_session(user_id)
         delete_session(user_id)
         return session if session else default
+
+    def save(self, user_id: int):
+        """Persist cached mutations to Redis and clear the cache entry.
+
+        Call this in a finally block after any handler that mutates state
+        via  conversation_states[uid]['state'] = X  or  data['key'] = val.
+        Clearing the cache ensures the next request loads fresh from Redis.
+        """
+        if user_id in self._cache:
+            set_session(user_id, self._cache[user_id])
+            del self._cache[user_id]
 
 
 # Use Redis-backed conversation states instead of in-memory dict
@@ -327,14 +364,16 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     
     # Retry photo upload
     if callback_data == 'reg_retry_photo':
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
         # Reset to photo upload state
-        conversation_states[user_id]['state'] = STATE_UPLOAD_FARM_PHOTO
-        conversation_states[user_id]['data'].pop('farm_photo', None)
+        session['state'] = STATE_UPLOAD_FARM_PHOTO
+        session['data'].pop('farm_photo', None)
+        set_session(user_id, session)  # Persist to Redis
         
-        lang = conversation_states[user_id]['data'].get('preferred_language', 'en')
+        lang = session['data'].get('preferred_language', 'en')
         if lang == 'am':
             return {
                 'message': "📸 እባክዎ አዲስ የእርሻ ፎቶ ይስቀሉ።",
@@ -350,11 +389,13 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     if callback_data.startswith('reg_business_'):
         business_type = callback_data.replace('reg_business_', '')
         
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
-        conversation_states[user_id]['data']['business_type'] = business_type
-        conversation_states[user_id]['state'] = STATE_COUNTRY
+        session['data']['business_type'] = business_type
+        session['state'] = STATE_COUNTRY
+        set_session(user_id, session)  # Persist to Redis
         
         return {
             'message': (
@@ -369,17 +410,20 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
     if callback_data.startswith('reg_port_'):
         port = callback_data.replace('reg_port_', '')
         
-        if user_id not in conversation_states:
+        session = get_session(user_id)
+        if not session:
             return {'message': "❌ Session expired. Please /register again."}
         
         if port == 'OTHER':
-            conversation_states[user_id]['state'] = STATE_PORT_ACCESS
+            session['state'] = STATE_PORT_ACCESS
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': "Please type the name of your primary export port:"
             }
         else:
-            conversation_states[user_id]['data']['port_access'] = port
-            conversation_states[user_id]['state'] = STATE_SHIPPING_CAPACITY
+            session['data']['port_access'] = port
+            session['state'] = STATE_SHIPPING_CAPACITY
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
                     f"Selected: *{port}*\n\n"
@@ -403,13 +447,24 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
             'message': "No active registration. Use /register to start."
         }
     
+    try:
+        return await _handle_registration_text_impl(user_id, text)
+    finally:
+        # Persist any in-memory mutations back to Redis
+        conversation_states.save(user_id)
+
+
+async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, Any]:
+    """Inner implementation of handle_registration_text (called inside save-wrapper)."""
     state = conversation_states[user_id]['state']
     data = conversation_states[user_id]['data']
     
     # State: FULL_NAME
     if state == STATE_FULL_NAME:
         data['full_name'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_ORG_NAME
+        session = conversation_states[user_id]
+        session['state'] = STATE_ORG_NAME
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "What is your organization name?\n"
@@ -420,7 +475,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: ORG_NAME
     if state == STATE_ORG_NAME:
         data['organization_name'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_LOCATION
+        session = conversation_states[user_id]
+        session['state'] = STATE_LOCATION
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "Where are you located?\n"
@@ -431,6 +488,7 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: LOCATION
     if state == STATE_LOCATION:
         data['location'] = text.strip()
+        session = conversation_states[user_id]
         
         # Check if user already shared phone during /start
         db = SessionLocal()
@@ -446,7 +504,8 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
                 db.close()
                 
                 # Go to PIN setup (v1.7 - Phase 3)
-                conversation_states[user_id]['state'] = STATE_SET_PIN
+                session['state'] = STATE_SET_PIN
+                set_session(user_id, session)  # Persist to Redis
                 return {
                     'message': (
                         "🔒 Set up a 4-digit PIN for web access\n\n"
@@ -461,7 +520,8 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
             db.close()
         
         # No phone yet - ask for it
-        conversation_states[user_id]['state'] = STATE_PHONE
+        session['state'] = STATE_PHONE
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "What is your phone number?\n"
@@ -473,9 +533,11 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: PHONE (only reached if user didn't share phone in /start)
     if state == STATE_PHONE:
         data['phone_number'] = text.strip()
+        session = conversation_states[user_id]
         
         # Ask for PIN (v1.7 - Phase 3: PIN Setup Integration)
-        conversation_states[user_id]['state'] = STATE_SET_PIN
+        session['state'] = STATE_SET_PIN
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "🔒 Set up a 4-digit PIN for web access\n\n"
@@ -507,7 +569,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
         
         # Store PIN temporarily for confirmation
         data['temp_pin'] = pin
-        conversation_states[user_id]['state'] = STATE_CONFIRM_PIN
+        session = conversation_states[user_id]
+        session['state'] = STATE_CONFIRM_PIN
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "🔒 Confirm your PIN\n\n"
@@ -519,10 +583,12 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     if state == STATE_CONFIRM_PIN:
         pin_confirmation = text.strip()
         original_pin = data.get('temp_pin')
+        session = conversation_states[user_id]
         
         if pin_confirmation != original_pin:
-            conversation_states[user_id]['state'] = STATE_SET_PIN
+            session['state'] = STATE_SET_PIN
             del data['temp_pin']  # Clear the temp PIN
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
                     "❌ PINs don't match!\n\n"
@@ -541,7 +607,8 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
         role = data.get('role')
         
         if role == 'EXPORTER':
-            conversation_states[user_id]['state'] = STATE_EXPORT_LICENSE
+            session['state'] = STATE_EXPORT_LICENSE
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
                     "✅ PIN set successfully!\n\n"
@@ -550,7 +617,8 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
                 )
             }
         elif role == 'BUYER':
-            conversation_states[user_id]['state'] = STATE_BUSINESS_TYPE
+            session['state'] = STATE_BUSINESS_TYPE
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': "✅ PIN set successfully!\n\nWhat type of business are you?",
                 'inline_keyboard': [
@@ -562,7 +630,8 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
                 ]
             }
         else:  # COOPERATIVE_MANAGER
-            conversation_states[user_id]['state'] = STATE_REG_NUMBER
+            session['state'] = STATE_REG_NUMBER
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
                     "✅ PIN set successfully!\n\n"
@@ -575,7 +644,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # State: REG_NUMBER
     if state == STATE_REG_NUMBER:
         data['registration_number'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_REASON
+        session = conversation_states[user_id]
+        session['state'] = STATE_REASON
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "Why are you registering with Voice Ledger?\n"
@@ -592,7 +663,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # Exporter-specific states
     if state == STATE_EXPORT_LICENSE:
         data['export_license'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_PORT_ACCESS
+        session = conversation_states[user_id]
+        session['state'] = STATE_PORT_ACCESS
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': "Which port do you primarily use for exports?",
             'inline_keyboard': [
@@ -606,7 +679,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     if state == STATE_PORT_ACCESS:
         # User typed custom port name (after selecting "Other")
         data['port_access'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_SHIPPING_CAPACITY
+        session = conversation_states[user_id]
+        session['state'] = STATE_SHIPPING_CAPACITY
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "What is your annual shipping capacity? (in tons)\n"
@@ -618,7 +693,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
         try:
             capacity = float(text.strip())
             data['shipping_capacity_tons'] = capacity
-            conversation_states[user_id]['state'] = STATE_REASON
+            session = conversation_states[user_id]
+            session['state'] = STATE_REASON
+            set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
                     "Why are you registering with Voice Ledger?\n"
@@ -632,7 +709,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
     # Buyer-specific states
     if state == STATE_COUNTRY:
         data['country'] = text.strip()
-        conversation_states[user_id]['state'] = STATE_TARGET_VOLUME
+        session = conversation_states[user_id]
+        session['state'] = STATE_TARGET_VOLUME
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "What is your annual target volume? (in tons)\n"
@@ -650,7 +729,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
             except ValueError:
                 return {'message': "Please enter a valid number (e.g., 50) or type 'Skip'"}
         
-        conversation_states[user_id]['state'] = STATE_QUALITY_PREFS
+        session = conversation_states[user_id]
+        session['state'] = STATE_QUALITY_PREFS
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "What quality/certifications do you typically look for?\n"
@@ -664,7 +745,9 @@ async def handle_registration_text(user_id: int, text: str) -> Dict[str, Any]:
         else:
             data['quality_preferences'] = {'description': text.strip()}
         
-        conversation_states[user_id]['state'] = STATE_REASON
+        session = conversation_states[user_id]
+        session['state'] = STATE_REASON
+        set_session(user_id, session)  # Persist to Redis
         return {
             'message': (
                 "Why are you registering with Voice Ledger?\n"
@@ -837,7 +920,7 @@ Target Volume: {registration_data.get('target_volume', 'N/A')} tons/year"""
         message += f"""
 
 Review and approve at:
-{base_url}/admin/registrations"""
+{base_url}/review/registrations"""
         
         response = requests.post(
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
@@ -1040,6 +1123,8 @@ async def handle_farm_photo_upload(user_id: int, photo_file_id: str, photo_file_
         }
     finally:
         db.close()
+        # Persist any in-memory mutations back to Redis
+        conversation_states.save(user_id)
 
 
 async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -> Dict[str, Any]:

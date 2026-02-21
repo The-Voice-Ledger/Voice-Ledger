@@ -166,11 +166,11 @@ if VERIFICATION_AVAILABLE:
     app.include_router(verification_router)
     print("✅ Verification endpoints registered at /voice/verify/*")
 
-# Include Admin router if available (Phase 5)
-# DISABLED: Replaced by Web Admin Dashboard (Lab 17)
-# if ADMIN_AVAILABLE:
-#     app.include_router(admin_router, prefix="/admin")
-#     print("✅ Admin endpoints registered at /admin/*")
+# Include Admin HTML registration approval router (Phase 5)
+# Mounted at /review to avoid conflict with JSON API at /admin/*
+if ADMIN_AVAILABLE:
+    app.include_router(admin_router, prefix="/review")
+    print("✅ Admin HTML registration approval at /review/registrations")
 
 # Include Batch Verification router (Lab 10)
 if BATCH_VERIFY_AVAILABLE:

@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database.models import (
     CoffeeBatch, UserIdentity, Organization, PendingRegistration,
-    FarmerCooperative, FarmerIdentity, SessionLocal
+    FarmerCooperative, FarmerIdentity, EPCISEvent, SessionLocal
 )
 from ssi.org_identity import generate_organization_did
 from voice.telegram.verification_handler import (
@@ -74,19 +74,38 @@ class TestRegistrationVerificationE2E:
         test_unapproved_tg_id = 666666666
         test_org_name = "Test E2E Cooperative"
         
-        # Delete in correct order (foreign keys)
-        # First delete batches that reference farmers
-        self.db.query(CoffeeBatch).filter(
-            CoffeeBatch.batch_id.like('TEST_%')
-        ).delete(synchronize_session=False)
+        # Collect IDs of test batches (for cascading FK deletes)
+        test_batch_ids = [
+            b.id for b in self.db.query(CoffeeBatch).filter(
+                CoffeeBatch.batch_id.like('TEST_%')
+            ).all()
+        ]
         
-        # Also delete any batches referencing test farmers (by farmer_id FK)
+        # Also find batches owned by test farmers
         test_farmer_ids = [f.id for f in self.db.query(FarmerIdentity).filter(
             FarmerIdentity.farmer_id.like('TEST_FARMER%')
         ).all()]
         if test_farmer_ids:
+            test_batch_ids += [
+                b.id for b in self.db.query(CoffeeBatch).filter(
+                    CoffeeBatch.farmer_id.in_(test_farmer_ids)
+                ).all()
+            ]
+        test_batch_ids = list(set(test_batch_ids))
+        
+        # Delete child rows FIRST (EPCIS events + verification evidence reference coffee_batches.id)
+        if test_batch_ids:
+            self.db.query(EPCISEvent).filter(
+                EPCISEvent.batch_id.in_(test_batch_ids)
+            ).delete(synchronize_session=False)
+            
+            from database.models import VerificationEvidence
+            self.db.query(VerificationEvidence).filter(
+                VerificationEvidence.batch_id.in_(test_batch_ids)
+            ).delete(synchronize_session=False)
+            
             self.db.query(CoffeeBatch).filter(
-                CoffeeBatch.farmer_id.in_(test_farmer_ids)
+                CoffeeBatch.id.in_(test_batch_ids)
             ).delete(synchronize_session=False)
         
         # Now safe to delete farmers
@@ -428,10 +447,10 @@ class TestRegistrationVerificationE2E:
         print(f"📦 Batch created: {batch.batch_id}")
         print(f"\n🔍 Farmer attempts to scan QR code...")
         
-        # Farmer tries to verify
+        # Farmer tries to verify (using the farmer's actual telegram_user_id)
         response = asyncio.run(
             handle_verify_deeplink(
-                user_id=888888888,
+                user_id=777777777,
                 username="test_farmer",
                 token=token
             )

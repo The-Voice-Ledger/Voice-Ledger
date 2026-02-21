@@ -26,7 +26,7 @@ redis_client = redis.Redis(
     password=_parsed.password,
     decode_responses=True  # Automatically decode bytes to strings
 )
-logger.info(f"Session manager Redis: {_parsed.hostname}:{_parsed.port}")
+logger.info("Session manager Redis connected")
 
 # Session TTL: 1 hour (3600 seconds)
 SESSION_TTL = 3600

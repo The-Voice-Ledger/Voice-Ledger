@@ -10,6 +10,7 @@ Tests the complete Digital Product Passport workflow:
 """
 
 import json
+import hashlib
 from pathlib import Path
 
 # Import modules from the project
@@ -19,6 +20,58 @@ from epcis.hash_event import hash_event
 from twin.twin_builder import record_anchor, record_token, record_settlement, get_batch_twin
 from dpp.dpp_builder import build_dpp, validate_dpp, save_dpp
 from dpp.qrcode_gen import generate_qr_code, create_labeled_qr_code
+
+
+def _ensure_test_batch(batch_id):
+    """Create farmer + batch in DB if missing. Returns cleanup function."""
+    from database import get_db
+    from database.models import FarmerIdentity, CoffeeBatch, EPCISEvent
+    from gs1.identifiers import gtin as gs1_gtin
+
+    def _num(s):
+        d = "".join(c for c in s if c.isdigit())
+        return d[:9] if d else str(int(hashlib.md5(s.encode()).hexdigest(), 16))[:9]
+
+    farmer_id_str = "FARMER-DPP-FLOW-TEST"
+    with get_db() as db:
+        farmer = db.query(FarmerIdentity).filter_by(farmer_id=farmer_id_str).first()
+        if not farmer:
+            farmer = FarmerIdentity(
+                farmer_id=farmer_id_str, did=f"did:key:dpp-flow-{farmer_id_str}",
+                encrypted_private_key="k", public_key="pk",
+                name="DPP Flow Test Farmer", region="Yirgacheffe",
+            )
+            db.add(farmer)
+            db.flush()
+        batch = db.query(CoffeeBatch).filter_by(batch_id=batch_id).first()
+        if not batch:
+            batch = CoffeeBatch(
+                batch_id=batch_id, gtin=gs1_gtin(_num(batch_id)),
+                batch_number=batch_id, quantity_kg=100,
+                origin_region="Yirgacheffe", origin_country="ET",
+                farm_name="Test Cooperative", variety="Arabica",
+                process_method="Washed", quality_grade="Q1",
+                farmer_id=farmer.id,
+            )
+            db.add(batch)
+        db.commit()
+
+    def cleanup():
+        with get_db() as db:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            b = db.query(CoffeeBatch).filter_by(batch_id=batch_id).first()
+            if b:
+                db.query(EPCISEvent).filter_by(batch_id=b.id).delete()
+                db.delete(b)
+            f = db.query(FarmerIdentity).filter_by(farmer_id=farmer_id_str).first()
+            if f:
+                db.query(CoffeeBatch).filter_by(farmer_id=f.id).delete()
+                db.delete(f)
+            db.commit()
+    return cleanup
 
 
 def test_complete_dpp_flow():
@@ -32,6 +85,15 @@ def test_complete_dpp_flow():
     # Step 1: Create EPCIS event
     print("📝 Step 1: Creating EPCIS commissioning event...")
     batch_id = "BATCH-2025-TEST"
+    cleanup = _ensure_test_batch(batch_id)
+
+    try:
+        _run_dpp_flow(batch_id)
+    finally:
+        cleanup()
+
+
+def _run_dpp_flow(batch_id):
     event_file = create_commission_event(batch_id)
     print(f"   ✅ Event created: {event_file}")
     print()
@@ -81,16 +143,17 @@ def test_complete_dpp_flow():
     # Verify digital twin
     print("🔍 Step 4: Verifying digital twin...")
     twin = get_batch_twin(batch_id)
-    if twin:
-        print(f"   ✅ Digital twin found")
-        print(f"      - Batch ID: {twin['batchId']}")
-        print(f"      - Token ID: {twin['tokenId']}")
-        print(f"      - Quantity: {twin['quantity']} bags")
-        print(f"      - Anchors: {len(twin['anchors'])} events")
+    assert twin is not None, "Digital twin not found — batch missing from DB"
+    print(f"   ✅ Digital twin found")
+    print(f"      - Batch ID: {twin['batchId']}")
+    print(f"      - Token ID: {twin['tokenId']}")
+    print(f"      - Quantity: {twin['quantity']} bags")
+    print(f"      - Anchors: {len(twin['anchors'])} events")
+    # NOTE: settlement tracking not yet in DB schema
+    if twin.get('settlement'):
         print(f"      - Settlement: ${twin['settlement']['amount']/100:.2f}")
     else:
-        print("   ❌ Digital twin not found")
-        return False
+        print(f"      - Settlement: not yet tracked (schema TODO)")
     print()
     
     # Step 5: Build DPP
@@ -113,8 +176,7 @@ def test_complete_dpp_flow():
         print(f"      - EUDR Compliant: {dpp['dueDiligence']['eudrCompliant']}")
         print(f"      - Events: {len(dpp['traceability']['events'])}")
     except Exception as e:
-        print(f"   ❌ DPP build failed: {e}")
-        return False
+        raise AssertionError(f"DPP build failed: {e}") from e
     print()
     
     # Step 6: Validate DPP
@@ -123,10 +185,7 @@ def test_complete_dpp_flow():
     if is_valid:
         print("   ✅ DPP validation passed")
     else:
-        print("   ❌ DPP validation failed:")
-        for error in errors:
-            print(f"      - {error}")
-        return False
+        raise AssertionError(f"DPP validation failed: {errors}")
     print()
     
     # Step 7: Save DPP
@@ -179,9 +238,8 @@ def test_complete_dpp_flow():
     print("   4. Print QR codes for physical packaging")
     print()
     
-    return True
+    # Test passed — no return value (pytest expects None)
 
 
 if __name__ == "__main__":
-    success = test_complete_dpp_flow()
-    exit(0 if success else 1)
+    test_complete_dpp_flow()

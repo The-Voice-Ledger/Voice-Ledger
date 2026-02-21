@@ -422,10 +422,10 @@ async def list_registrations():
             ''' if reg.reason else ''}
             
             <div class="actions">
-                <form method="POST" action="/admin/registrations/{reg.id}/reject" style="display: inline;">
+                <form method="POST" action="/review/registrations/{reg.id}/reject" style="display: inline;">
                     <button type="submit" class="btn btn-reject">✗ Reject</button>
                 </form>
-                <form method="POST" action="/admin/registrations/{reg.id}/approve" style="display: inline;">
+                <form method="POST" action="/review/registrations/{reg.id}/approve" style="display: inline;">
                     <button type="submit" class="btn btn-approve">✓ Approve</button>
                 </form>
             </div>
@@ -600,7 +600,7 @@ async def approve_registration(registration_id: int):
         logger.info(f"Approved registration REG-{registration_id:04d}")
         
         # Redirect back to registrations page
-        return RedirectResponse(url="/admin/registrations", status_code=303)
+        return RedirectResponse(url="/review/registrations", status_code=303)
         
     except Exception as e:
         db.rollback()
@@ -640,7 +640,7 @@ async def reject_registration(registration_id: int):
         
         logger.info(f"Rejected registration REG-{registration_id:04d}")
         
-        return RedirectResponse(url="/admin/registrations", status_code=303)
+        return RedirectResponse(url="/review/registrations", status_code=303)
         
     except Exception as e:
         db.rollback()

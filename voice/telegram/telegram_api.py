@@ -482,26 +482,56 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Save audio to temp file for processing
         import tempfile
-        with tempfile.NamedTemporaryFile(
-            suffix=f'.{voice_message.audio_format}',
-            delete=False
-        ) as temp_file:
-            temp_file.write(voice_message.audio_data)
-            audio_path = temp_file.name
+        import os
         
-        # Queue async processing task with metadata
-        task = process_voice_command_task.apply_async(
-            args=[audio_path],
-            kwargs={
-                'original_filename': f"telegram_voice.{voice_message.audio_format}",
-                'metadata': {
-                    'user_id': voice_message.user_id,
-                    'username': voice_message.username,
-                    'channel': 'telegram',
-                    **voice_message.metadata
+        # Use persistent temp directory on Railway
+        if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
+            # Railway: Write file directly to Celery task to avoid race condition
+            import base64
+            import json
+            
+            # Encode audio data as base64 to pass in task
+            audio_b64 = base64.b64encode(voice_message.audio_data).decode('utf-8')
+            
+            # Queue async processing task with audio data embedded
+            task = process_voice_command_task.apply_async(
+                args=[],  # No file path
+                kwargs={
+                    'original_filename': f"telegram_voice.{voice_message.audio_format}",
+                    'audio_data_b64': audio_b64,  # Pass audio data directly
+                    'audio_format': voice_message.audio_format,
+                    'metadata': {
+                        'user_id': voice_message.user_id,
+                        'username': voice_message.username,
+                        'channel': 'telegram',
+                        'audio_path': 'embedded_in_task',  # Debug marker
+                        **voice_message.metadata
+                    }
                 }
-            }
-        )
+            )
+        else:
+            # Local: Use regular temp file
+            with tempfile.NamedTemporaryFile(
+                suffix=f'.{voice_message.audio_format}',
+                delete=False
+            ) as temp_file:
+                temp_file.write(voice_message.audio_data)
+                audio_path = temp_file.name
+            
+            # Queue async processing task with metadata
+            task = process_voice_command_task.apply_async(
+                args=[audio_path],
+                kwargs={
+                    'original_filename': f"telegram_voice.{voice_message.audio_format}",
+                    'metadata': {
+                        'user_id': voice_message.user_id,
+                        'username': voice_message.username,
+                        'channel': 'telegram',
+                        'audio_path': audio_path,  # Add actual path for debugging
+                        **voice_message.metadata
+                    }
+                }
+            )
         
         logger.info(f"Queued Telegram voice processing: task_id={task.id}")
         
@@ -834,7 +864,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 
                 base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-                message += f"\n🌐 Review & approve: {base_url}/admin/registrations"
+                message += f"\n🌐 Review & approve: {base_url}/review/registrations"
                 
                 await processor.send_notification(
                     channel_name='telegram',
@@ -1576,6 +1606,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from ssi.user_identity import get_user_by_telegram_id
             from database.models import SessionLocal
             from voice.integrations import ConversationManager
+            from datetime import datetime
             
             db = SessionLocal()
             try:
@@ -1610,6 +1641,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from ssi.user_identity import get_user_by_telegram_id
             from database.models import SessionLocal
             from voice.integrations import ConversationManager
+            from datetime import datetime
             
             db = SessionLocal()
             try:
@@ -2353,6 +2385,9 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
         
         logger.info(f"Processing natural text query from {user_id}: '{text[:50]}...'")
         
+        import os as _os
+        agent_handled = False
+        _agent_error_detail = None        
         # Get user's language preference
         from database.models import SessionLocal
         from ssi.user_identity import get_user_by_telegram_id
@@ -2416,9 +2451,7 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
         
         else:
             # No active workflow — try AI agent first, then legacy keyword routing
-            import os as _os
             response_message = None
-            agent_handled = False
 
             # =================================================================
             # AI AGENT PATH for text input (mirrors voice_tasks.py agent path)
@@ -2443,11 +2476,20 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         logger.info(f"🤖 Agent processing text from user {_db_user_id}: {text[:50]}")
 
                         executor = AgentExecutor()
-                        agent_result = executor.run(
-                            transcript=text,
-                            user_id=_db_user_id,
-                            user_did=_user_did,
-                            language=language,
+                        # Run synchronous executor in thread pool to avoid
+                        # blocking the async event loop (OpenAI SDK is sync).
+                        import asyncio
+                        from functools import partial
+                        _loop = asyncio.get_event_loop()
+                        agent_result = await _loop.run_in_executor(
+                            None,
+                            partial(
+                                executor.run,
+                                transcript=text,
+                                user_id=_db_user_id,
+                                user_did=_user_did,
+                                language=language,
+                            ),
                         )
 
                         logger.info(
@@ -2470,8 +2512,9 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                             agent_handled = True
 
                 except Exception as agent_err:
+                    _agent_error_detail = f"{type(agent_err).__name__}: {agent_err}"
                     logger.error(f"🤖 Agent failed for text, falling back to legacy: {agent_err}", exc_info=True)
-                    logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {type(agent_err).__name__}")
+                    logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {_agent_error_detail}")
 
             # =================================================================
             # LEGACY PATH — keyword routing + RAG + conversational AI
@@ -2590,8 +2633,14 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         language=language,
                     )
 
-        logger.info(f"Natural text query processed successfully for user {user_id}")
-        return {"ok": True, "message": "Natural text query processed"}
+        _response_source = "agent" if agent_handled else ("fallback_nlu" if _os.getenv("AGENT_ENABLED", "false").lower() == "true" else "legacy")
+        logger.info(f"Natural text query processed for user {user_id} via {_response_source}")
+        return {
+            "ok": True,
+            "message": "Natural text query processed",
+            "response_source": _response_source,
+            "agent_error": _agent_error_detail if not agent_handled else None,
+        }
         
     except Exception as e:
         logger.error(f"Error processing natural text query: {e}", exc_info=True)

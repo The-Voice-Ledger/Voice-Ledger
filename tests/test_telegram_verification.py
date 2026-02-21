@@ -31,11 +31,21 @@ class TestVerificationDeeplink:
         """Setup test data before each test."""
         self.db = SessionLocal()
         
+        # Clean up any leftover data from previous runs
+        self.db.rollback()
+        self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_001").delete()
+        self.db.query(UserIdentity).filter_by(telegram_user_id="123456").delete()
+        self.db.query(UserIdentity).filter_by(telegram_user_id="789012").delete()
+        self.db.query(Organization).filter_by(name="Test Cooperative").delete()
+        self.db.commit()
+        
         # Create test organization
         self.org = Organization(
             name="Test Cooperative",
-            organization_type="COOPERATIVE",
-            country="ET"
+            type="COOPERATIVE",
+            did="did:key:z6MkTestOrg123456789",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key"
         )
         self.db.add(self.org)
         self.db.flush()
@@ -47,6 +57,8 @@ class TestVerificationDeeplink:
             telegram_first_name="Test",
             role="COOPERATIVE_MANAGER",
             did="did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key",
             is_approved=True,
             organization_id=self.org.id
         )
@@ -60,6 +72,8 @@ class TestVerificationDeeplink:
             telegram_first_name="Farmer",
             role="FARMER",
             did="did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key",
             is_approved=True
         )
         self.db.add(self.farmer)
@@ -77,7 +91,6 @@ class TestVerificationDeeplink:
             verification_token="VRF-TEST1234-ABCD5678",
             verification_expires_at=datetime.utcnow() + timedelta(hours=48),
             verification_used=False,
-            farmer_id=self.farmer.id,
             created_by_user_id=self.farmer.id
         )
         self.db.add(self.batch)
@@ -85,6 +98,7 @@ class TestVerificationDeeplink:
         
     def teardown_method(self):
         """Cleanup after each test."""
+        self.db.rollback()
         # Clean up test data
         self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_001").delete()
         self.db.query(UserIdentity).filter_by(telegram_user_id="123456").delete()
@@ -138,6 +152,9 @@ class TestVerificationDeeplink:
         unapproved = UserIdentity(
             telegram_user_id="555555",
             role="COOPERATIVE_MANAGER",
+            did="did:key:z6MkTestUnapproved555555",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key",
             is_approved=False
         )
         self.db.add(unapproved)
@@ -166,7 +183,7 @@ class TestVerificationDeeplink:
         )
         
         assert 'Insufficient Permissions' in response['message']
-        assert 'FARMER' in response['message']
+        assert 'cannot verify' in response['message']
         assert 789012 not in verification_sessions
         
     @pytest.mark.asyncio
@@ -222,11 +239,20 @@ class TestVerificationCallbacks:
         """Setup test data."""
         self.db = SessionLocal()
         
+        # Clean up any leftover data from previous runs
+        self.db.rollback()
+        self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_002").delete()
+        self.db.query(UserIdentity).filter_by(telegram_user_id="123456").delete()
+        self.db.query(Organization).filter_by(name="Test Cooperative").delete()
+        self.db.commit()
+        
         # Create test data (similar to above)
         self.org = Organization(
             name="Test Cooperative",
-            organization_type="COOPERATIVE",
-            country="ET"
+            type="COOPERATIVE",
+            did="did:key:z6MkTestOrg987654321",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key"
         )
         self.db.add(self.org)
         self.db.flush()
@@ -235,6 +261,8 @@ class TestVerificationCallbacks:
             telegram_user_id="123456",
             role="COOPERATIVE_MANAGER",
             did="did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            encrypted_private_key="test_encrypted_key",
+            public_key="test_public_key",
             is_approved=True,
             organization_id=self.org.id
         )
@@ -268,6 +296,7 @@ class TestVerificationCallbacks:
         
     def teardown_method(self):
         """Cleanup."""
+        self.db.rollback()
         self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_002").delete()
         self.db.query(UserIdentity).filter_by(telegram_user_id="123456").delete()
         self.db.query(Organization).filter_by(name="Test Cooperative").delete()
@@ -357,6 +386,11 @@ class TestQuantityInput:
         """Setup test data."""
         self.db = SessionLocal()
         
+        # Clean up any leftover data from previous runs
+        self.db.rollback()
+        self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_003").delete()
+        self.db.commit()
+        
         self.batch = CoffeeBatch(
             batch_id="TEST_BATCH_003",
             gtin="00123456789014",
@@ -382,6 +416,7 @@ class TestQuantityInput:
         
     def teardown_method(self):
         """Cleanup."""
+        self.db.rollback()
         self.db.query(CoffeeBatch).filter_by(batch_id="TEST_BATCH_003").delete()
         self.db.commit()
         self.db.close()

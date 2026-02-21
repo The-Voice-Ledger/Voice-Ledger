@@ -140,7 +140,7 @@ def create_test_data(db):
     return farmer, batch
 
 
-def test_eudr_compliance_section(batch, db):
+def run_eudr_compliance_section(batch, db):
     """Test EUDR compliance section generation."""
     print(f"\n🔍 Testing EUDR compliance section...")
     
@@ -187,7 +187,7 @@ def test_eudr_compliance_section(batch, db):
     return eudr_section
 
 
-def test_full_dpp_generation(batch_id):
+def run_full_dpp_generation(batch_id):
     """Test complete DPP generation with EUDR section."""
     print(f"\n📄 Testing full DPP generation...")
     
@@ -234,7 +234,7 @@ def test_full_dpp_generation(batch_id):
     return dpp
 
 
-def test_compliance_levels(db):
+def run_compliance_levels(db):
     """Test different compliance levels."""
     from ssi.did.did_key import generate_did_key
     
@@ -376,13 +376,13 @@ def main():
         farmer, batch = create_test_data(db)
         
         # Test 2: EUDR compliance section
-        eudr_section = test_eudr_compliance_section(batch, db)
+        eudr_section = run_eudr_compliance_section(batch, db)
         
         # Test 3: Full DPP generation
-        dpp = test_full_dpp_generation(batch.batch_id)
+        dpp = run_full_dpp_generation(batch.batch_id)
         
         # Test 4: Different compliance levels
-        test_compliance_levels(db)
+        run_compliance_levels(db)
         
         # Pretty print final DPP
         print("\n" + "="*70)

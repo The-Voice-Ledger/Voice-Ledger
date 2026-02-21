@@ -50,6 +50,8 @@ app.conf.update(
     # Worker settings
     worker_prefetch_multiplier=1,  # Only fetch 1 task at a time (ASR is slow)
     worker_max_tasks_per_child=50,  # Restart worker after 50 tasks (prevent memory leaks)
+    worker_pool='solo',  # SINGLE THREAD ONLY
+    worker_concurrency=1,  # FORCE SINGLE WORKER
     
     # Retry settings
     task_acks_late=True,  # Only ack after task completes

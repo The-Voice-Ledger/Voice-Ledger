@@ -106,7 +106,7 @@ def setup_test_data():
         # Return user IDs and batch database IDs
         return user_id, user_did, [b.id for b in batches]
 
-def mint_test_tokens(user_id, batch_db_ids):
+def run_mint_test_tokens(user_id, batch_db_ids):
     """Mint tokens for test batches"""
     print("\n🪙 Minting batch tokens on blockchain...")
     
@@ -157,7 +157,7 @@ def mint_test_tokens(user_id, batch_db_ids):
     
     return True, minted_tokens
 
-def test_pack_command(user_id, user_did, batch_db_ids):
+def run_test_pack_command(user_id, user_did, batch_db_ids):
     """Test /pack command with container minting"""
     print("\n📦 Testing /pack command...")
     
@@ -216,7 +216,7 @@ def test_pack_command(user_id, user_did, batch_db_ids):
             traceback.print_exc()
             return None, None
 
-def verify_blockchain_state(container_token_id, child_token_ids):
+def run_verify_blockchain_state(container_token_id, child_token_ids):
     """Verify container token and burned children on blockchain"""
     print("\n🔍 Verifying blockchain state...")
     
@@ -266,7 +266,7 @@ def verify_blockchain_state(container_token_id, child_token_ids):
     
     return all_burned
 
-def verify_database_state(container_id, container_token_id):
+def run_verify_database_state(container_id, container_token_id):
     """Verify database records"""
     print("\n💾 Verifying database state...")
     
@@ -302,7 +302,7 @@ def main():
         user_id, user_did, batch_db_ids = setup_test_data()
         
         # Step 2: Mint batch tokens
-        success, minted_tokens = mint_test_tokens(user_id, batch_db_ids)
+        success, minted_tokens = run_mint_test_tokens(user_id, batch_db_ids)
         if not success:
             print("\n❌ Token minting failed, aborting test")
             return False
@@ -311,18 +311,18 @@ def main():
         print(f"\n  📊 Child tokens: {child_token_ids}")
         
         # Step 3: Pack into container
-        container_token_id, container_id = test_pack_command(user_id, user_did, batch_db_ids)
+        container_token_id, container_id = run_test_pack_command(user_id, user_did, batch_db_ids)
         if not container_token_id:
             print("\n❌ Container minting failed, aborting test")
             return False
         
         # Step 4: Verify blockchain
-        if not verify_blockchain_state(container_token_id, child_token_ids):
+        if not run_verify_blockchain_state(container_token_id, child_token_ids):
             print("\n❌ Blockchain verification failed")
             return False
         
         # Step 5: Verify database
-        if not verify_database_state(container_id, container_token_id):
+        if not run_verify_database_state(container_id, container_token_id):
             print("\n❌ Database verification failed")
             return False
         

@@ -32,8 +32,12 @@ AGENT_MODEL = os.getenv("AGENT_MODEL", "gpt-4o")
 AGENT_MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
 AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.2"))
 
-# Initialize OpenAI client
-_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize OpenAI client with explicit timeout (prevents indefinite hangs)
+_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    timeout=45.0,       # 45s per request (Railway allows 60s)
+    max_retries=2,       # Retry on transient 429 / 5xx errors
+)
 
 # Addis AI configuration for Amharic translation
 ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")

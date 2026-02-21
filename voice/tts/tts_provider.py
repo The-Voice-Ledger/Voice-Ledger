@@ -19,6 +19,7 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
+
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Addis AI configuration
 ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
-ADDIS_AI_TTS_URL = "https://api.addisassistant.com/api/v1/audio/speech"
+ADDIS_AI_TTS_URL = "https://api.addisassistant.com/api/v1/audio"
 
 
 class TTSProvider:
@@ -61,10 +62,13 @@ class TTSProvider:
         Raises:
             Exception: If TTS fails
         """
+        # Generate new audio
         if language == 'am':
-            return await TTSProvider._addis_ai_tts(text, voice)
+            audio = await TTSProvider._addis_ai_tts(text, voice)
         else:
-            return await TTSProvider._openai_tts(text, voice, output_format)
+            audio = await TTSProvider._openai_tts(text, voice, output_format)
+            
+        return audio
     
     @staticmethod
     async def _openai_tts(

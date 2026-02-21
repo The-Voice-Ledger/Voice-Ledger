@@ -48,7 +48,7 @@ db.query(PendingRegistration).filter(PendingRegistration.telegram_user_id == int
 db.commit()
 
 
-async def test_pin_validation():
+async def step_pin_validation():
     """Test 1: PIN validation (4 digits, numeric only)"""
     print("\n[TEST 1] PIN validation")
     print("-" * 60)
@@ -88,7 +88,7 @@ async def test_pin_validation():
     print("✅ Test 1 passed!")
 
 
-async def test_pin_confirmation():
+async def step_pin_confirmation():
     """Test 2: PIN confirmation matching"""
     print("\n[TEST 2] PIN confirmation matching")
     print("-" * 60)
@@ -121,7 +121,7 @@ async def test_pin_confirmation():
     print("✅ Test 2 passed!")
 
 
-async def test_pin_in_pending_registration():
+async def step_pin_in_pending_registration():
     """Test 3: PIN stored in pending_registrations"""
     print("\n[TEST 3] PIN storage in pending_registrations")
     print("-" * 60)
@@ -152,7 +152,7 @@ async def test_pin_in_pending_registration():
     print("✅ Test 3 passed!")
 
 
-async def test_set_pin_command():
+async def step_set_pin_command():
     """Test 4: /set-pin command for existing users"""
     print("\n[TEST 4] /set-pin command")
     print("-" * 60)
@@ -202,7 +202,7 @@ async def test_set_pin_command():
     print("✅ Test 4 passed!")
 
 
-async def test_change_pin_command():
+async def step_change_pin_command():
     """Test 5: /change-pin command with verification"""
     print("\n[TEST 5] /change-pin command")
     print("-" * 60)
@@ -247,7 +247,7 @@ async def test_change_pin_command():
     print("✅ Test 5 passed!")
 
 
-async def test_reset_pin_command():
+async def step_reset_pin_command():
     """Test 6: /reset-pin command"""
     print("\n[TEST 6] /reset-pin command")
     print("-" * 60)
@@ -277,15 +277,15 @@ async def test_reset_pin_command():
     print("✅ Test 6 passed!")
 
 
-async def run_all_tests():
-    """Run all PIN setup tests"""
+async def test_pin_setup_flow():
+    """Run all PIN setup tests in order."""
     try:
-        await test_pin_validation()
-        await test_pin_confirmation()
-        await test_pin_in_pending_registration()
-        await test_set_pin_command()
-        await test_change_pin_command()
-        await test_reset_pin_command()
+        await step_pin_validation()
+        await step_pin_confirmation()
+        await step_pin_in_pending_registration()
+        await step_set_pin_command()
+        await step_change_pin_command()
+        await step_reset_pin_command()
         
         print("\n" + "=" * 60)
         print("✅ ALL TESTS PASSED!")
@@ -328,4 +328,4 @@ async def run_all_tests():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_all_tests())
+    asyncio.run(test_pin_setup_flow())

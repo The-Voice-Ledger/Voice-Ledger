@@ -27,6 +27,8 @@ htmlcov/
 .env.local
 .env.team
 *.env
+.env.*
+.env*
 
 # API Keys (if stored in files)
 *api_key*
@@ -117,3 +119,16 @@ voice/rag/chroma_db/
 *.sqlite3
 *.sqlite
 *.db
+
+# Chainlink CRE (if branch merged later)
+chainlink/project.yaml
+chainlink/.env
+chainlink/workflow/dist/
+chainlink/workflow/tmp.*
+chainlink/workflow/bun.lock
+chainlink/workflow/node_modules/
+.*wasm
+
+# TTS Audio Cache (keep directory structure, ignore generated files)
+voice/cache/tts/
+!voice/cache/tts/.gitkeep

@@ -222,7 +222,7 @@ def get_batch_shipment_events(batch_id: str) -> list:
     Returns:
         List of shipment events ordered by event time
     """
-    from database.database import get_db
+    from database.connection import get_db
     from database.models import EPCISEvent, CoffeeBatch
     
     with get_db() as db:

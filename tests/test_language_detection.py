@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from voice.asr.asr_infer import run_asr
 
-def test_language_detection(audio_file: str):
+def run_language_detection(audio_file: str):
     """Test language detection on an audio file."""
     print(f"\n{'='*60}")
     print(f"Testing: {audio_file}")
@@ -56,7 +56,7 @@ Testing with available audio files...
     
     for sample in test_samples:
         if Path(sample).exists():
-            test_language_detection(sample)
+            run_language_detection(sample)
         else:
             print(f"\n⚠️  File not found: {sample}")
     

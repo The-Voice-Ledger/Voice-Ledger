@@ -26,28 +26,55 @@ logger = logging.getLogger(__name__)
 
 # Redis-backed dict-like wrapper for PIN conversation states
 class PinConversationStates:
-    """Dict-like wrapper around Redis session storage for backward compatibility"""
-    
+    """Dict-like wrapper around Redis session storage for backward compatibility.
+
+    Uses an in-memory write-through cache (same pattern as ConversationStates)
+    so that dict-style mutations like  pin_conversation_states[uid]['state'] = X
+    work correctly.  Call save(uid) to persist cached changes to Redis.
+    """
+
+    def __init__(self):
+        self._cache: Dict[int, Dict[str, Any]] = {}
+
     def __contains__(self, user_id: int) -> bool:
         """Check if user has active PIN session"""
-        return session_exists(user_id, prefix="pin")
-    
+        if user_id in self._cache:
+            return True
+        if session_exists(user_id, prefix="pin"):
+            session = get_session(user_id, prefix="pin")
+            if session is not None:
+                self._cache[user_id] = session
+            return True
+        return False
+
     def __getitem__(self, user_id: int) -> Dict[str, Any]:
-        """Get PIN session data"""
+        """Get PIN session data — returns cached reference so mutations persist"""
+        if user_id in self._cache:
+            return self._cache[user_id]
         session = get_session(user_id, prefix="pin")
         if session is None:
             raise KeyError(f"No PIN session for user {user_id}")
+        self._cache[user_id] = session
         return session
-    
+
     def __setitem__(self, user_id: int, value: Dict[str, Any]):
-        """Set PIN session data"""
+        """Set PIN session data (writes to both cache and Redis)"""
+        self._cache[user_id] = value
         set_session(user_id, value, prefix="pin")
-    
+
     def pop(self, user_id: int, default=None):
         """Remove and return PIN session data"""
-        session = get_session(user_id, prefix="pin")
+        session = self._cache.pop(user_id, None)
+        if session is None:
+            session = get_session(user_id, prefix="pin")
         delete_session(user_id, prefix="pin")
         return session if session else default
+
+    def save(self, user_id: int):
+        """Persist cached mutations to Redis and clear the cache entry."""
+        if user_id in self._cache:
+            set_session(user_id, self._cache[user_id], prefix="pin")
+            del self._cache[user_id]
 
 
 # Use Redis-backed PIN conversation states
@@ -494,6 +521,8 @@ async def handle_pin_conversation(user_id: int, telegram_user_id: str, text: str
         }
     finally:
         db.close()
+        # Persist any in-memory mutations back to Redis
+        pin_conversation_states.save(user_id)
 
 
 def clear_pin_conversation(user_id: int):

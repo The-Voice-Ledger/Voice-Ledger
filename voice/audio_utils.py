@@ -47,9 +47,22 @@ def validate_audio_file(file_path: str, max_size_mb: int = MAX_FILE_SIZE_MB) -> 
     """
     path = Path(file_path)
     
-    # Check file exists
+    # Check file exists - with Railway-specific handling
     if not path.exists():
-        raise AudioValidationError(f"Audio file not found: {file_path}")
+        # On Railway, check if file was moved to persistent temp dir
+        if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_SERVICE_NAME"):
+            filename = path.name
+            persistent_path = Path("/tmp/voice_files") / filename
+            if persistent_path.exists():
+                # Update file path to persistent location
+                import warnings
+                warnings.warn(f"Using persistent temp file: {persistent_path}")
+                # Update the path for the rest of the function
+                path = persistent_path
+            else:
+                raise AudioValidationError(f"Audio file not found: {file_path}")
+        else:
+            raise AudioValidationError(f"Audio file not found: {file_path}")
     
     # Check file extension
     if path.suffix.lower() not in SUPPORTED_FORMATS:

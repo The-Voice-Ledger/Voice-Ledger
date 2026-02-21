@@ -38,6 +38,42 @@ def print_step(step_num, title):
     print('─' * 80)
 
 
+def _ensure_farmer_identity(db, user):
+    """Ensure a FarmerIdentity row exists for the given user.
+
+    handle_record_commission looks up farmer by farmer_id=f"FARMER-{user.id}".
+    In production, farmer identity should be created during registration.
+    This helper fills the gap for testing (see FARMER-IDENTITY-GAP).
+    """
+    from database.models import FarmerIdentity
+    fid = f"FARMER-{user.id}"
+    farmer = db.query(FarmerIdentity).filter_by(farmer_id=fid).first()
+    if farmer:
+        return farmer
+
+    # Check if a farmer with this DID exists under a different farmer_id
+    farmer = db.query(FarmerIdentity).filter_by(did=user.did).first()
+    if farmer:
+        # Update farmer_id to match what the source code expects
+        if farmer.farmer_id != fid:
+            farmer.farmer_id = fid
+            db.commit()
+            print(f"  ⚠️  Updated FarmerIdentity '{farmer.farmer_id}' → '{fid}' (DID match)")
+        return farmer
+
+    # Create new farmer identity
+    farmer = FarmerIdentity(
+        farmer_id=fid, did=user.did,
+        encrypted_private_key="test_key", public_key="test_pub",
+        name=user.telegram_first_name or "Test Farmer",
+        region="Gedeo",
+    )
+    db.add(farmer)
+    db.commit()
+    print(f"  ⚠️  Created missing FarmerIdentity '{fid}' (FARMER-IDENTITY-GAP)")
+    return farmer
+
+
 def test_commission_flow():
     """Test commission event with real IPFS + blockchain"""
     print_step(1, "Create Batch with Commission Event")
@@ -52,6 +88,9 @@ def test_commission_flow():
         
         print(f"✓ Using user: {user.telegram_username or user.telegram_first_name}")
         print(f"  DID: {user.did[:30]}...")
+        
+        # Ensure farmer identity exists (production gap — see FARMER-IDENTITY-GAP)
+        _ensure_farmer_identity(db, user)
         
         # Create batch via command handler (automatically creates commission event)
         entities = {
@@ -193,7 +232,7 @@ def verify_blockchain_anchor(tx_hash):
         return None
 
 
-def test_verification_flow(batch_id):
+def run_verification_flow(batch_id):
     """Test verification event creation"""
     print_step(4, "Create Verification Event")
     
@@ -341,7 +380,7 @@ def main():
     
     # Step 4: Create verification event
     try:
-        verification_event = test_verification_flow(batch_id)
+        verification_event = run_verification_flow(batch_id)
         if verification_event:
             results['verification_created'] = True
             

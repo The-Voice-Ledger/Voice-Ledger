@@ -77,7 +77,7 @@ def create_test_photo_with_gps(latitude=9.0320, longitude=38.7469, output_path='
     return output_path
 
 
-def test_gps_extraction(photo_path):
+def run_gps_extraction(photo_path):
     """Test GPS extraction from photo."""
     print(f"\n🔍 Testing GPS Extraction...")
     
@@ -97,7 +97,7 @@ def test_gps_extraction(photo_path):
     return gps_data
 
 
-def test_ethiopia_bounds(gps_data):
+def run_ethiopia_bounds(gps_data):
     """Test Ethiopia boundary validation."""
     print(f"\n🗺️  Testing Ethiopia Boundary Validation...")
     
@@ -115,7 +115,7 @@ def test_ethiopia_bounds(gps_data):
     return in_ethiopia
 
 
-def test_proximity_validation(gps_data, farm_lat=9.0410, farm_lon=38.7469):
+def run_proximity_validation(gps_data, farm_lat=9.0410, farm_lon=38.7469):
     """Test proximity validation against farm location."""
     print(f"\n📏 Testing Proximity Validation...")
     print(f"   Farm location: {farm_lat:.6f}, {farm_lon:.6f}")
@@ -135,7 +135,7 @@ def test_proximity_validation(gps_data, farm_lat=9.0410, farm_lon=38.7469):
     return result
 
 
-def test_timestamp_recency(gps_data):
+def run_timestamp_recency(gps_data):
     """Test timestamp recency validation."""
     print(f"\n⏰ Testing Timestamp Recency...")
     
@@ -153,7 +153,7 @@ def test_timestamp_recency(gps_data):
     return result
 
 
-def test_photo_hashing(photo_path):
+def run_photo_hashing(photo_path):
     """Test photo hash computation."""
     print(f"\n🔐 Testing Photo Hashing...")
     
@@ -191,14 +191,14 @@ def test_eudr_compliance_workflow():
         output_path='test_addis_farm.jpg'
     )
     
-    gps_data = test_gps_extraction(photo_path)
+    gps_data = run_gps_extraction(photo_path)
     if not gps_data:
         return False
     
-    ethiopia_valid = test_ethiopia_bounds(gps_data)
-    proximity_result = test_proximity_validation(gps_data)
-    recency_result = test_timestamp_recency(gps_data)
-    photo_hash = test_photo_hashing(photo_path)
+    ethiopia_valid = run_ethiopia_bounds(gps_data)
+    proximity_result = run_proximity_validation(gps_data)
+    recency_result = run_timestamp_recency(gps_data)
+    photo_hash = run_photo_hashing(photo_path)
     
     # Determine compliance status
     print(f"\n📊 COMPLIANCE ASSESSMENT:")
@@ -224,9 +224,9 @@ def test_eudr_compliance_workflow():
         output_path='test_sidama_farm.jpg'
     )
     
-    gps_data2 = test_gps_extraction(photo_path2)
-    ethiopia_valid2 = test_ethiopia_bounds(gps_data2)
-    proximity_result2 = test_proximity_validation(gps_data2, farm_lat=9.0320, farm_lon=38.7469)
+    gps_data2 = run_gps_extraction(photo_path2)
+    ethiopia_valid2 = run_ethiopia_bounds(gps_data2)
+    proximity_result2 = run_proximity_validation(gps_data2, farm_lat=9.0320, farm_lon=38.7469)
     
     print(f"\n📊 COMPLIANCE ASSESSMENT:")
     if proximity_result2['valid']:
@@ -244,8 +244,8 @@ def test_eudr_compliance_workflow():
         output_path='test_kenya_farm.jpg'
     )
     
-    gps_data3 = test_gps_extraction(photo_path3)
-    ethiopia_valid3 = test_ethiopia_bounds(gps_data3)
+    gps_data3 = run_gps_extraction(photo_path3)
+    ethiopia_valid3 = run_ethiopia_bounds(gps_data3)
     
     print(f"\n📊 COMPLIANCE ASSESSMENT:")
     if not ethiopia_valid3:
