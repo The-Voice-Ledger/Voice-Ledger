@@ -13,20 +13,19 @@ import os
 from typing import Dict, Any, Optional
 from datetime import timedelta
 from urllib.parse import urlparse
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Redis connection - use REDIS_URL env var (Railway sets this automatically)
-_redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-_parsed = urlparse(_redis_url)
+load_dotenv()
+
 redis_client = redis.Redis(
-    host=_parsed.hostname or 'localhost',
-    port=_parsed.port or 6379,
-    db=int((_parsed.path or '/0').lstrip('/') or '0'),
-    password=_parsed.password,
-    decode_responses=True  # Automatically decode bytes to strings
+    host=os.getenv('REDIS_URL'),
+    port=os.getenv('REDIS_PORT'),
+    username=os.getenv('REDIS_USERNAME'),
+    password=os.getenv('REDIS_PASSWORD'),
+    decode_responses=True
 )
-logger.info("Session manager Redis connected")
 
 # Session TTL: 1 hour (3600 seconds)
 SESSION_TTL = 3600
