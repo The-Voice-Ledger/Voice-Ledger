@@ -21,9 +21,9 @@ load_dotenv()
 
 redis_client = redis.Redis(
     host=os.getenv('REDIS_URL'),
-    port=os.getenv('REDIS_PORT'),
-    username=os.getenv('REDIS_USERNAME'),
-    password=os.getenv('REDIS_PASSWORD'),
+    port=os.getenv('REDISPORT'),
+    username=os.getenv('REDISUSER'),
+    password=os.getenv('REDISPASSWORD'),
     decode_responses=True
 )
 
