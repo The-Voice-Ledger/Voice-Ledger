@@ -1,8 +1,8 @@
 {
   "passportId": "DPP-BATCH-DPP-TEST-004",
   "batchId": "BATCH-DPP-TEST-004",
-  "version": "2.0.0",
-  "issuedAt": "2026-02-19T07:19:14.312347+00:00",
+  "version": "3.0.0",
+  "issuedAt": "2026-02-21T09:48:16.081873+00:00",
   "productInformation": {
     "productName": "Persistence Test Coffee",
     "quantity": 100.0,
@@ -37,7 +37,7 @@
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-02-19",
+      "assessmentDate": "2026-02-21",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
     }
@@ -66,7 +66,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-02-19",
+      "assessmentDate": "2026-02-21",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -79,8 +79,15 @@
       "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-02-19"
+      "nextReviewDate": "2027-02-21"
     }
+  },
+  "donAttestation": {
+    "attestationExists": false,
+    "source": "Chainlink Decentralised Oracle Network (DON)",
+    "contract": "ProvenanceDataReceiver",
+    "network": "Base Sepolia",
+    "note": "No DON attestation found for farm FARMER-DPP-TEST"
   },
   "blockchain": {
     "network": "local",
