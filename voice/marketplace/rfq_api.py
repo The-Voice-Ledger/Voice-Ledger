@@ -27,6 +27,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy.orm import joinedload, subqueryload
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -337,7 +338,11 @@ def list_rfqs(
     - variety: Coffee variety
     - user_id: Buyer's user ID
     """
-    query = db.query(RFQ)
+    # Eager load relationships to avoid N+1 queries
+    query = db.query(RFQ).options(
+        joinedload(RFQ.buyer).joinedload(UserIdentity.organization),
+        subqueryload(RFQ.offers)
+    )
     
     if status:
         query = query.filter(RFQ.status == status)
@@ -350,11 +355,8 @@ def list_rfqs(
     
     results = []
     for rfq in rfqs:
-        buyer_org = db.query(Organization).filter_by(
-            id=db.query(UserIdentity).filter_by(id=rfq.buyer_id).first().organization_id
-        ).first()
-        
-        offer_count = db.query(RFQOffer).filter_by(rfq_id=rfq.id).count()
+        buyer_org = rfq.buyer.organization if rfq.buyer and rfq.buyer.organization else None
+        offer_count = len(rfq.offers)
         
         results.append(RFQResponse(
             id=rfq.id,
