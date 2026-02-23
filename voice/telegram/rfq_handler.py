@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 # API base URL
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 
+# Railway-specific fix: use internal service URL if available
+if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_SERVICE_NAME'):
+    # In Railway, use the internal service URL or public URL
+    # Try to use the public URL first, fallback to internal service name
+    public_url = os.getenv('PUBLIC_URL') or os.getenv('RAILWAY_PUBLIC_URL')
+    if public_url:
+        API_BASE_URL = f"{public_url}/api"
+    else:
+        API_BASE_URL = os.getenv('API_BASE_URL', 'http://voice-api:8000/api')
+
+# Debug: Log the final API URL
+logger.info(f"API_BASE_URL configured: {API_BASE_URL}")
+
 # In-memory conversation state for multi-step RFQ creation
 rfq_sessions: Dict[int, Dict[str, Any]] = {}
 
