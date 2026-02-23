@@ -1519,13 +1519,13 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             # Send response with keyboard
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            
             if 'keyboard' in response:
-                requests.post(
+                telegram_response = requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
                         'reply_markup': {'inline_keyboard': response['keyboard']}
                     },
                     timeout=30
@@ -1553,13 +1553,13 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             # Send response
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            
             if 'keyboard' in response:
                 requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
                         'reply_markup': {'inline_keyboard': response['keyboard']}
                     },
                     timeout=30

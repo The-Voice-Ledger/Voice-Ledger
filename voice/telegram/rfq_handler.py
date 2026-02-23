@@ -493,6 +493,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         
         # Fetch open RFQs from API
         api_url = f"{API_BASE_URL}/rfqs?status=OPEN"
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(api_url)
         
@@ -538,7 +539,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         if len(rfqs) > 10:
             message += f"\n_Showing first 10 of {len(rfqs)} RFQs_\n"
         
-        keyboard.append([{'text': '/myoffers - View My Offers'}])
+        keyboard.append([{'text': '📊 My Offers', 'callback_data': 'myoffers'}])
         
         return {
             'message': message,
@@ -580,6 +581,9 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                 'parse_mode': 'Markdown'
             }
         
+        # Close first connection to avoid SSL timeout
+        db.close()
+        
         # Fetch offers from API
         api_url = f"{API_BASE_URL}/offers?user_id={user.id}"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -600,7 +604,7 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                     "Use /offers to view and respond to RFQs."
                 ),
                 'parse_mode': 'Markdown',
-                'keyboard': [[{'text': '/offers - View Available RFQs'}]]
+                'keyboard': [[{'text': '📋 Available RFQs', 'callback_data': 'offers'}]]
             }
         
         # Build message
@@ -629,8 +633,8 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
             'message': message,
             'parse_mode': 'Markdown',
             'keyboard': [
-                [{'text': '/offers - View Available RFQs'}],
-                [{'text': '🔄 Refresh'}]
+                [{'text': '📋 Available RFQs', 'callback_data': 'offers'}],
+                [{'text': '🔄 Refresh', 'callback_data': 'refresh_myoffers'}]
             ]
         }
     
@@ -639,8 +643,6 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
         return {
             'message': f"❌ Error: {str(e)}"
         }
-    finally:
-        db.close()
 
 
 async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
