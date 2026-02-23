@@ -23,13 +23,19 @@ API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 
 # Railway-specific fix: use internal service URL if available
 if os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_SERVICE_NAME'):
-    # In Railway, use the internal service URL or public URL
-    # Try to use the public URL first, fallback to internal service name
-    public_url = os.getenv('PUBLIC_URL') or os.getenv('RAILWAY_PUBLIC_URL')
-    if public_url:
-        API_BASE_URL = f"{public_url}/api"
+    # In Railway, use the public URL since internal DNS may not work
+    railway_public_url = os.getenv('RAILWAY_PUBLIC_URL') or os.getenv('PUBLIC_URL')
+    if railway_public_url:
+        API_BASE_URL = f"{railway_public_url}/api"
     else:
-        API_BASE_URL = os.getenv('API_BASE_URL', 'http://voice-api:8000/api')
+        # Fallback: try to construct from Railway service URL pattern
+        service_name = os.getenv('RAILWAY_SERVICE_NAME', 'voice-api')
+        project_id = os.getenv('RAILWAY_PROJECT_ID')
+        if project_id:
+            API_BASE_URL = f"https://{service_name}-{project_id}.railway.app/api"
+        else:
+            # Final fallback: use API_BASE_URL from env or localhost
+            API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 
 # Debug: Log the final API URL
 logger.info(f"API_BASE_URL configured: {API_BASE_URL}")
