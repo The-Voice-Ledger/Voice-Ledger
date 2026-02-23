@@ -493,6 +493,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         
         # Fetch open RFQs from API
         api_url = f"{API_BASE_URL}/rfqs?status=OPEN"
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(api_url)
         
@@ -538,7 +539,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         if len(rfqs) > 10:
             message += f"\n_Showing first 10 of {len(rfqs)} RFQs_\n"
         
-        keyboard.append([{'text': '/myoffers - View My Offers'}])
+        keyboard.append([{'text': '📊 My Offers', 'callback_data': 'myoffers'}])
         
         return {
             'message': message,
