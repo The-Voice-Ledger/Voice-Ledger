@@ -137,6 +137,11 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
             logger.info("Routing to photo handler (GPS verification)")
             return await handle_photo_message(update_data)
         
+        # Handle location sharing (farmer registration)
+        if 'location' in message:
+            logger.info("Routing to location handler")
+            return await handle_location_message(update_data)
+        
         # Handle voice messages
         if 'voice' in message:
             logger.info("Routing to voice handler")
@@ -233,6 +238,63 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Error handling contact: {e}", exc_info=True)
         return {"ok": True, "message": f"Error: {str(e)}"}
 
+
+
+async def handle_location_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle explicit location sharing from Telegram.
+    """
+    try:
+        message = update_data.get('message', {})
+        location = message.get('location', {})
+        user = message.get('from', {})
+        
+        user_id = user.get('id')
+        latitude = location.get('latitude')
+        longitude = location.get('longitude')
+        
+        if latitude is None or longitude is None:
+            logger.error("Location shared but coordinates missing")
+            return {"ok": True, "message": "Missing coordinates in location"}
+        
+        logger.info(f"User {user_id} shared location: {latitude}, {longitude}")
+        
+        # Check if user is in registration flow expecting a location
+        from voice.telegram.register_handler import (
+            conversation_states, 
+            STATE_SHARE_LOCATION,
+            handle_location_shared
+        )
+        from telegram import ReplyKeyboardRemove
+        
+        if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_SHARE_LOCATION:
+            # Process the shared location
+            response = await handle_location_shared(user_id, latitude, longitude)
+            
+            # Send response and dismiss the share-location keyboard
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response.get('message', '✅ Location received'),
+                parse_mode=response.get('parse_mode'),
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            return {"ok": True, "message": "Location processed in registration"}
+        
+        # User shared location outside of expected state
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message="📍 Location received, but I wasn't expecting it right now. Use /register if you are trying to register."
+        )
+        return {"ok": True, "message": "Location received but ignored"}
+
+    except Exception as e:
+        logger.error(f"Error handling location: {e}", exc_info=True)
+        return {"ok": True, "message": f"Error: {str(e)}"}
 
 
 async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -2824,21 +2886,51 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             message_id = callback_query['message']['message_id']
             chat_id = callback_query['message']['chat']['id']
             
-            payload = {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': response['message'],
-                'parse_mode': response.get('parse_mode', 'Markdown')
-            }
-            
-            if 'inline_keyboard' in response:
-                payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
-            
-            requests.post(
-                f"https://api.telegram.org/bot{bot_token}/editMessageText",
-                json=payload,
-                timeout=30
-            )
+            # If we have a reply_keyboard, we should send it as a NEW message
+            if 'reply_keyboard' in response:
+                logger.info(f"Transitioning to ReplyKeyboard flow for user {user_id}")
+                
+                # Send the new message with reply keyboard (uses send_notification for TTS/dual-delivery)
+                processor = get_processor()
+                success = await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=str(user_id),
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode', 'Markdown'),
+                    reply_markup=response['reply_keyboard']
+                )
+                
+                if success:
+                    # Clear current buttons only if new message sent successfully (prevents dead ends)
+                    logger.info(f"New message sent, clearing old inline buttons for message {message_id}")
+                    requests.post(
+                        f"https://api.telegram.org/bot{bot_token}/editMessageReplyMarkup",
+                        json={
+                            'chat_id': chat_id,
+                            'message_id': message_id,
+                            'reply_markup': {'inline_keyboard': []}
+                        },
+                        timeout=30
+                    )
+                else:
+                    logger.error(f"Failed to send ReplyKeyboard message to user {user_id}")
+            else:
+                # Standard inline update
+                payload = {
+                    'chat_id': chat_id,
+                    'message_id': message_id,
+                    'text': response['message'],
+                    'parse_mode': response.get('parse_mode', 'Markdown')
+                }
+                
+                if 'inline_keyboard' in response:
+                    payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
+                
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
             
             return {"ok": True, "message": "Callback handled"}
         
