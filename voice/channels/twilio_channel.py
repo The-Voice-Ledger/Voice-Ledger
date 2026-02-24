@@ -187,6 +187,15 @@ class TwilioChannel(VoiceChannel):
         """
         message = f"Task {task_id[:8]}... Status: {status}"
         return await self.send_notification(user_id, message, **kwargs)
+
+    async def delete_message(self, user_id: str, message_id: str) -> bool:
+        """
+        Delete a message (no-op for Twilio).
+        
+        SMS messages cannot be deleted from a user's device once sent.
+        """
+        logger.info(f"Delete message requested for Twilio user {user_id}, message {message_id} (no-op)")
+        return False
     
     def send_batch_confirmation_sms(
         self,

@@ -471,7 +471,8 @@ async def send_voice_reply(
                         keyboard_row.append(
                             KeyboardButton(
                                 text=button.get('text', ''),
-                                request_contact=button.get('request_contact', False)
+                                request_contact=button.get('request_contact', False),
+                                request_location=button.get('request_location', False)
                             )
                         )
                     keyboard.append(keyboard_row)

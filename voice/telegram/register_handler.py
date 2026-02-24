@@ -118,6 +118,7 @@ STATE_QUALITY_PREFS = 17  # Moved from 15
 # Farmer GPS photo verification states (EUDR compliance - renumbered)
 STATE_UPLOAD_FARM_PHOTO = 18  # Moved from 16
 STATE_VERIFY_GPS = 19  # Moved from 17
+STATE_SHARE_LOCATION = 20  # NEW: Explicit location sharing
 
 
 async def handle_register_command(user_id: int, username: str, first_name: str, last_name: str) -> Dict[str, Any]:
@@ -291,7 +292,7 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
                     "✅ GPS መረጃ መያዝ አለበት (አብዛኛዎቹ ስማርትፎኖች ይህንን በራስ ሰር ያከማቻሉ)\n"
                     "✅ ወደ ኢትዮጵያ መገኛ ቦታ መጠቆም አለበት\n\n"
                     "የእርሻዎን ፎቶ ለመላክ አሁን ይጫኑ።\n\n"
-                    "_ይህ ወደ አውሮፓ ከሚላኩ ጫማዎች EUDR ማረጋገጫ ይረዳል።_"
+                    "_ይህ በቡና ምርት ላይ ለ EUDR ማረጋገጫ ይረዳል።_"
                 )
             else:
                 message = (
@@ -305,10 +306,21 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
                     "_This helps verify your farm location for EU export compliance._"
                 )
             
+            if lang == 'am':
+                keyboard = [
+                    [{'text': '⏭️ ቦታዬን አጋራ (ያለ ፎቶ)', 'callback_data': 'reg_skip_photo'}],
+                    [{'text': '⏭️ ሁሉንም ዝለል', 'callback_data': 'reg_skip_all_gps'}]
+                ]
+            else:
+                keyboard = [
+                    [{'text': '⏭️ Share Location (Skip Photo)', 'callback_data': 'reg_skip_photo'}],
+                    [{'text': '⏭️ Skip Everything', 'callback_data': 'reg_skip_all_gps'}]
+                ]
+            
             return {
                 'message': message,
                 'parse_mode': 'Markdown',
-                'inline_keyboard': [[{'text': '⏭️ Skip for now', 'callback_data': 'reg_skip_photo'}]]
+                'inline_keyboard': keyboard
             }
         
         # Non-farmers continue with full registration flow
@@ -351,16 +363,32 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         if user_id not in conversation_states:
             return {'message': "❌ Session expired. Please /register again."}
         
-        # Complete registration without GPS verification
-        return await complete_farmer_registration(user_id, skip_photo=True)
+        # Transition to explicit location sharing instead of completing immediately
+        return await prompt_for_location_share(user_id)
+    
+    # Skip everything (photo and location)
+    if callback_data == 'reg_skip_all_gps':
+        if user_id not in conversation_states:
+            return {'message': "❌ Session expired. Please /register again."}
+        
+        # Complete registration without photo OR shared location
+        return await complete_farmer_registration(user_id, skip_photo=True, skip_location=True)
     
     # Confirm GPS from photo
     if callback_data == 'reg_confirm_gps':
         if user_id not in conversation_states:
             return {'message': "❌ Session expired. Please /register again."}
         
-        # Complete registration with GPS verification
-        return await complete_farmer_registration(user_id, skip_photo=False)
+        # Transition to explicit location sharing instead of completing immediately
+        return await prompt_for_location_share(user_id)
+    
+    # Skip location share
+    if callback_data == 'reg_skip_location':
+        if user_id not in conversation_states:
+            return {'message': "❌ Session expired. Please /register again."}
+        
+        # Complete registration without shared location
+        return await complete_farmer_registration(user_id, skip_location=True)
     
     # Retry photo upload
     if callback_data == 'reg_retry_photo':
@@ -377,12 +405,12 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         if lang == 'am':
             return {
                 'message': "📸 እባክዎ አዲስ የእርሻ ፎቶ ይስቀሉ።",
-                'inline_keyboard': [[{'text': '⏭️ Skip for now', 'callback_data': 'reg_skip_photo'}]]
+                'inline_keyboard': [[{'text': '⏭️ ቦታዬን አጋራ (ያለ ፎቶ)', 'callback_data': 'reg_skip_photo'}]]
             }
         else:
             return {
                 'message': "📸 Please upload a new farm photo.",
-                'inline_keyboard': [[{'text': '⏭️ Skip for now', 'callback_data': 'reg_skip_photo'}]]
+                'inline_keyboard': [[{'text': '⏭️ Share Location (Skip Photo)', 'callback_data': 'reg_skip_photo'}]]
             }
     
     # Business type selection (Buyer)
@@ -546,8 +574,10 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
             'message': (
                 "🔒 Set up a 4-digit PIN for web access\n\n"
                 "This PIN will allow you to log into the Voice Ledger web dashboard.\n\n"
-                "📌 Please enter exactly 4 digits (e.g., 1234):"
-            )
+                "📌 Please enter exactly 4 digits (e.g., 1234):\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
     
     # State: SET_PIN (v1.7 - Phase 3)
@@ -579,8 +609,10 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
         return {
             'message': (
                 "🔒 Confirm your PIN\n\n"
-                "Please enter the same 4 digits again:"
-            )
+                "Please enter the same 4 digits again:\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
     
     # State: CONFIRM_PIN (v1.7 - Phase 3)
@@ -663,6 +695,17 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
     if state == STATE_REASON:
         data['reason'] = text.strip()
         return await submit_registration(user_id)
+    
+    # State: SHARE_LOCATION (Skip case)
+    if state == STATE_SHARE_LOCATION:
+        if text.strip().lower() in ['skip', 'ዝለል']:
+            return await complete_farmer_registration(user_id, skip_location=True)
+        return {
+            'message': (
+                "📍 Please use the button below to share your location, "
+                "or type 'Skip' to continue without sharing."
+            )
+        }
     
     # Exporter-specific states
     if state == STATE_EXPORT_LICENSE:
@@ -758,6 +801,17 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
                 "(Optional - helps us understand your needs)"
             ),
             'inline_keyboard': [[{'text': "⏭️ Skip", 'callback_data': 'reg_skip_reason'}]]
+        }
+    
+    # State: SHARE_LOCATION (Skip case)
+    if state == STATE_SHARE_LOCATION:
+        if text.strip().lower() in ['skip', 'ዝለል', '⏭️ skip for now', '⏭️ ዝለል (skip)']:
+            return await complete_farmer_registration(user_id, skip_location=True)
+        return {
+            'message': (
+                "📍 Please use the button below to share your location, "
+                "or type 'Skip' to continue without sharing."
+            )
         }
     
     return {'message': "❌ Unknown registration state. Please /register again."}
@@ -1131,9 +1185,74 @@ async def handle_farm_photo_upload(user_id: int, photo_file_id: str, photo_file_
         conversation_states.save(user_id)
 
 
-async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -> Dict[str, Any]:
+async def prompt_for_location_share(user_id: int) -> Dict[str, Any]:
     """
-    Complete farmer registration with or without GPS photo verification.
+    Prompt user to share their current location (GPS) explicitly.
+    """
+    session = conversation_states[user_id]
+    session['state'] = STATE_SHARE_LOCATION
+    set_session(user_id, session)
+    
+    lang = session['data'].get('preferred_language', 'en')
+    
+    if lang == 'am':
+        message = (
+            "📍 *የእርሻ ቦታዎን ያጋሩ* (Share Location)\n\n"
+            "ትክክለኛውን የእርሻዎ መገኛ ለማረጋገጥ፣ እባክዎ አሁን ያለዎትን ቦታ ያጋሩ።\n\n"
+            "✅ የእርሻ ስራዎን ትክክለኛነት ያረጋግጣል\n"
+            "✅ ለ EUDR ተገዢነት ይረዳል\n\n"
+            "ከታች ያለውን \"📍 ቦታዬን አጋራ\" የሚለውን ቁልፍ ይጫኑ።"
+        )
+        return {
+            'message': message,
+            'parse_mode': 'Markdown',
+            'reply_keyboard': [
+                [{'text': '📍 ቦታዬን አጋራ', 'request_location': True}],
+                [{'text': '⏭️ ዝለል (Skip)'}]
+            ]
+        }
+    else:
+        message = (
+            "📍 *Share Your Farm Location*\n\n"
+            "To confirm your farm's precise coordinates, please share your current location.\n\n"
+            "✅ Verifies your farm records\n"
+            "✅ Ensures EUDR compliance\n\n"
+            "Tap the \"📍 Share My Location\" button below."
+        )
+        return {
+            'message': message,
+            'parse_mode': 'Markdown',
+            'reply_keyboard': [
+                [{'text': '📍 Share My Location', 'request_location': True}],
+                [{'text': '⏭️ Skip for now'}]
+            ]
+        }
+
+
+async def handle_location_shared(user_id: int, latitude: float, longitude: float) -> Dict[str, Any]:
+    """
+    Handle shared GPS location from Telegram.
+    """
+    if user_id not in conversation_states:
+        return {'message': "❌ Session expired. Please /register again."}
+    
+    if conversation_states[user_id]['state'] != STATE_SHARE_LOCATION:
+        return {'message': "❌ Unexpected location data. Use /register to start."}
+    
+    # Store shared coordinates
+    conversation_states[user_id]['data']['shared_location'] = {
+        'latitude': latitude,
+        'longitude': longitude,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+    
+    # Complete registration with the shared location
+    return await complete_farmer_registration(user_id, skip_location=False)
+
+
+async def complete_farmer_registration(user_id: int, skip_photo: bool = False, skip_location: bool = False) -> Dict[str, Any]:
+    """
+    Complete farmer registration with or without GPS photo/location verification.
     """
     from database.models import SessionLocal, UserIdentity, FarmerIdentity
     from ssi.user_identity import get_or_create_user_identity
@@ -1184,7 +1303,8 @@ async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -
             logger.info(f"Created FarmerIdentity {farmer_id_str} for user {user_id} during registration")
         
         # Update farmer with GPS photo data (if provided)
-        if not skip_photo and 'farm_photo' in conversation_states[user_id]['data']:
+        gps_from_photo = not skip_photo and 'farm_photo' in conversation_states[user_id]['data']
+        if gps_from_photo:
             photo_data = conversation_states[user_id]['data']['farm_photo']
             
             farmer.farm_photo_url = photo_data['file_url']
@@ -1204,6 +1324,15 @@ async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -
             
             logger.info(f"Updated farmer {farmer.farmer_id} with GPS-verified photo: {photo_data['latitude']:.6f}, {photo_data['longitude']:.6f}")
         
+        # Update farmer with explicit shared location (if provided)
+        # Shared location takes priority over photo location if both exist
+        if not skip_location and 'shared_location' in conversation_states[user_id]['data']:
+            loc_data = conversation_states[user_id]['data']['shared_location']
+            farmer.latitude = loc_data['latitude']
+            farmer.longitude = loc_data['longitude']
+            farmer.gps_verified_at = datetime.utcnow()
+            logger.info(f"Updated farmer {farmer.latitude:.6f}, {farmer.longitude:.6f}")
+        
         # Only approve AFTER FarmerIdentity is successfully created
         if user:
             user.is_approved = True  # Farmers are auto-approved after FarmerIdentity created
@@ -1213,7 +1342,8 @@ async def complete_farmer_registration(user_id: int, skip_photo: bool = False) -
         
         # Clear conversation state
         lang = conversation_states[user_id]['data'].get('preferred_language', 'en')
-        gps_verified = not skip_photo and 'farm_photo' in conversation_states[user_id]['data']
+        gps_verified = (not skip_photo and 'farm_photo' in conversation_states[user_id]['data']) or \
+                       (not skip_location and 'shared_location' in conversation_states[user_id]['data'])
         conversation_states.pop(user_id, None)
         
         lang_name = "English" if lang == 'en' else "Amharic (አማርኛ)"
@@ -1295,5 +1425,8 @@ __all__ = [
     'STATE_TARGET_VOLUME',
     'STATE_QUALITY_PREFS',
     'STATE_UPLOAD_FARM_PHOTO',
-    'STATE_VERIFY_GPS'
+    'STATE_VERIFY_GPS',
+    'STATE_SHARE_LOCATION',
+    'prompt_for_location_share',
+    'handle_location_shared'
 ]

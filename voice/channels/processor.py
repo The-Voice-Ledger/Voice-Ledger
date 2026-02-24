@@ -154,6 +154,30 @@ class MultiChannelProcessor:
             return False
         
         return await channel.send_status_update(user_id, task_id, status, **kwargs)
+
+    async def delete_message(
+        self,
+        channel_name: str,
+        user_id: str,
+        message_id: str
+    ) -> bool:
+        """
+        Delete a message from a specific channel history.
+        
+        Args:
+            channel_name: Channel name
+            user_id: Channel-specific user ID
+            message_id: ID of the message to delete
+            
+        Returns:
+            bool: True if deleted successfully
+        """
+        channel = self.get_channel(channel_name)
+        if not channel:
+            logger.warning(f"Cannot delete message: {channel_name} not available")
+            return False
+        
+        return await channel.delete_message(user_id, message_id)
     
     async def broadcast_notification(
         self,
