@@ -14,6 +14,7 @@ Lab 17: Bilingual Voice UI - Track 2
 import os
 import logging
 import httpx
+import base64
 from typing import Optional, Dict, Literal
 from pathlib import Path
 from openai import OpenAI
@@ -135,7 +136,15 @@ class TTSProvider:
                 )
                 response.raise_for_status()
                 
-                audio_bytes = response.content
+                # Parse JSON response and decode base64 audio
+                response_data = response.json()
+                audio_base64 = response_data.get("audio")
+                
+                if not audio_base64:
+                    raise Exception("No audio field in Addis AI response")
+                
+                # Decode base64 to get actual audio bytes
+                audio_bytes = base64.b64decode(audio_base64)
                 logger.info(f"Generated {len(audio_bytes)} bytes of Amharic audio")
                 return audio_bytes
                 
