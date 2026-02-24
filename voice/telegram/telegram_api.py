@@ -1437,6 +1437,45 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
             
             return {"ok": True, "message": "Registration started"}
+
+        # Handle /set-pin command - for existing users without PIN
+        if text.startswith('/set-pin'):
+            from voice.telegram.pin_commands import handle_set_pin_command
+            
+            response = await handle_set_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN setup started"}
+
+        # Handle /change-pin command - change existing PIN
+        if text.startswith('/change-pin'):
+            from voice.telegram.pin_commands import handle_change_pin_command
+            
+            response = await handle_change_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN change started"}
+
+        # Handle /reset-pin command - admin reset (or self-reset for now)
+        if text.startswith('/reset-pin'):
+            from voice.telegram.pin_commands import handle_reset_pin_command
+            
+            response = await handle_reset_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN reset successful"}
         
         # Handle /batches command - launch mini app
         if text.startswith('/batches'):
@@ -2336,12 +2375,47 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             
             return {"ok": True, "message": "RFQ response sent"}
+
+        # Check if user is in PIN management conversation
+        from voice.telegram.pin_commands import pin_conversation_states, handle_pin_conversation
+        
+        if int(user_id) in pin_conversation_states:
+            logger.info(f"User {user_id} in PIN session, routing to PIN handler")
+            
+            # Delete user's PIN message immediately (v1.9 - Blurring/Deletion)
+            await processor.delete_message(
+                channel_name='telegram',
+                user_id=user_id,
+                message_id=str(message['message_id'])
+            )
+            
+            response = await handle_pin_conversation(int(user_id), user_id, text)
+            
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            
+            return {"ok": True, "message": "PIN response processed"}
         
         # Check if user is in registration conversation
         from voice.telegram.register_handler import conversation_states, handle_registration_text
         
         if int(user_id) in conversation_states:
             logger.info(f"User {user_id} in registration conversation, routing to registration handler")
+            
+            # Delete message if it's a PIN input (states 7 or 8)
+            state_data = conversation_states[int(user_id)]
+            if state_data.get('state') in [7, 8]:  # STATE_SET_PIN, STATE_CONFIRM_PIN
+                logger.info(f"Deleting registration PIN message for user {user_id}")
+                await processor.delete_message(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message_id=str(message['message_id'])
+                )
+            
             response = await handle_registration_text(int(user_id), text)
             
             # Send response with optional keyboard (inline or reply/contact-share)

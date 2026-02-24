@@ -546,8 +546,10 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
             'message': (
                 "🔒 Set up a 4-digit PIN for web access\n\n"
                 "This PIN will allow you to log into the Voice Ledger web dashboard.\n\n"
-                "📌 Please enter exactly 4 digits (e.g., 1234):"
-            )
+                "📌 Please enter exactly 4 digits (e.g., 1234):\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
     
     # State: SET_PIN (v1.7 - Phase 3)
@@ -579,8 +581,10 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
         return {
             'message': (
                 "🔒 Confirm your PIN\n\n"
-                "Please enter the same 4 digits again:"
-            )
+                "Please enter the same 4 digits again:\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
     
     # State: CONFIRM_PIN (v1.7 - Phase 3)
