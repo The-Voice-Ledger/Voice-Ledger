@@ -18,6 +18,114 @@ from database.models import UserIdentity, Organization, SessionLocal
 
 logger = logging.getLogger(__name__)
 
+
+async def handle_rfq_callback(user_id: int, callback_data: str, username: str = None) -> Dict[str, Any]:
+    """
+    Handle RFQ-related callback queries.
+    
+    Args:
+        user_id: Telegram user ID
+        callback_data: Callback data from button click
+        
+    Returns:
+        Response dict with message and optional keyboard
+    """
+    try:
+        if callback_data == 'myoffers':
+            # Handle "My Offers" button - need username for user lookup
+            return await handle_myoffers_command(user_id, username=None)
+            
+        elif callback_data == 'offers':
+            # Handle "Offers" button - need username for user lookup
+            return await handle_offers_command(user_id, username=None)
+            
+        elif callback_data.startswith('offer_'):
+            # Handle "Offer for RFQ" button - extract RFQ number from callback
+            rfq_number = callback_data.split('_', 1)[1]  # Get everything after "offer_"
+            return await handle_offer_creation(user_id, rfq_number)
+            
+        else:
+            return {
+                'message': '❌ Unknown RFQ action',
+                'parse_mode': 'Markdown'
+            }
+            
+    except Exception as e:
+        logger.error(f"Error handling RFQ callback: {e}")
+        return {
+            'message': '❌ Error processing request',
+            'parse_mode': 'Markdown'
+        }
+
+
+async def handle_offer_creation(user_id: int, rfq_number: str) -> Dict[str, Any]:
+    """
+    Handle offer creation for a specific RFQ.
+    
+    Args:
+        user_id: Telegram user ID
+        rfq_number: RFQ number (e.g., "RFQ-000010")
+        
+    Returns:
+        Response dict with message and keyboard
+    """
+    try:
+        # Get RFQ details by RFQ number
+        API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Search RFQ by number
+            list_response = await client.get(f"{API_BASE_URL}/rfqs?status=OPEN")
+            if list_response.status_code != 200:
+                return {
+                    'message': '❌ Error loading RFQs',
+                    'parse_mode': 'Markdown'
+                }
+            
+            rfqs = list_response.json()
+            # Find RFQ by number
+            rfq = None
+            for r in rfqs:
+                if r.get('rfq_number') == rfq_number:
+                    rfq = r
+                    break
+            
+            if not rfq:
+                return {
+                    'message': f'❌ RFQ {rfq_number} not found',
+                    'parse_mode': 'Markdown'
+                }
+            
+            message = f"📋 **RFQ Details**\n\n"
+            message += f"🔢 *RFQ Number*: {rfq.get('rfq_number', 'N/A')}\n"
+            message += f"☕ *Variety*: {rfq.get('variety', 'N/A')}\n"
+            message += f"⚖️ *Quantity*: {rfq.get('quantity_kg', 'N/A')} kg\n"
+            message += f"⭐ *Grade*: {rfq.get('grade', 'N/A')}\n"
+            message += f"🏷️ *Status*: {rfq.get('status', 'N/A')}\n"
+            message += f"� *Processing Method*: {rfq.get('processing_method', 'N/A')}\n"
+            message += f"🏢 *Buyer Organization*: {rfq.get('buyer_organization', 'N/A')}\n"
+            message += f"📍 *Location*: {rfq.get('delivery_location', 'N/A')}\n"
+            message += f"💬 *Offers*: {rfq.get('offer_count', 0)}\n"
+            message += f"📅 *Deadline*: {rfq.get('delivery_deadline', 'N/A')}\n\n"
+            
+            keyboard = [
+                [{'text': '🔙 Back to Offers', 'callback_data': 'offers'}],
+                [{'text': '📊 My Offers', 'callback_data': 'myoffers'}]
+            ]
+            
+            return {
+                'message': message,
+                'parse_mode': 'Markdown',
+                'inline_keyboard': keyboard
+            }
+            
+    except Exception as e:
+        logger.error(f"Error handling offer creation: {e}")
+        return {
+            'message': '❌ Error loading RFQ details',
+            'parse_mode': 'Markdown'
+        }
+
 # API base URL
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 
@@ -536,7 +644,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
             
             # Add button to make offer
             keyboard.append([
-                {'text': f"💰 Offer for {rfq['rfq_number']}", 'callback_data': f"offer_{rfq['id']}"}
+                {'text': f"💰 Offer for {rfq['rfq_number']}", 'callback_data': f"offer_{rfq['rfq_number']}"}
             ])
         
         if len(rfqs) > 10:
