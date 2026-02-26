@@ -2975,6 +2975,84 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Verification callback handled"}
         
+        # Handle RFQ-related callbacks
+        if callback_data in ('myoffers', 'offers') or callback_data.startswith('offer_'):
+            from voice.telegram.rfq_handler import handle_rfq_callback
+            
+            # Get username from callback query for user lookup
+            username = callback_query['from'].get('username', '')
+            
+            # For 'offers' callback, just trigger original /offers command
+            if callback_data == 'offers':
+                # Answer callback query
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                    json={'callback_query_id': callback_id},
+                    timeout=30
+                )
+                
+                # Trigger /offers command
+                from voice.telegram.rfq_handler import handle_offers_command
+                username = callback_query['from'].get('username', '')
+                response = await handle_offers_command(user_id, username)
+                
+                # Send response exactly
+                if 'keyboard' in response:
+                    requests.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                        json={
+                            'chat_id': user_id,
+                            'text': response['message'],
+                            'reply_markup': {'inline_keyboard': response['keyboard']}
+                        },
+                        timeout=30
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=response['message'],
+                        parse_mode=response.get('parse_mode')
+                    )
+                
+                return {"ok": True, "message": "Offers callback handled"}
+            
+            # Handle other RFQ callbacks
+            response = await handle_rfq_callback(user_id, callback_data, username)
+            
+            # Answer callback query
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                json={'callback_query_id': callback_id},
+                timeout=30
+            )
+            
+            # Standard inline update for other callbacks
+            message_id = callback_query['message']['message_id']
+            chat_id = callback_query['message']['chat']['id']
+            
+            payload = {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'text': response['message'],
+                'parse_mode': response.get('parse_mode', 'Markdown')
+            }
+            
+            if 'inline_keyboard' in response:
+                payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
+            
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                json=payload,
+                timeout=30
+            )
+            
+            return {"ok": True, "message": "RFQ callback handled"}
+        
         # Unknown callback data
         logger.debug(f"Unknown callback data: {callback_data}")
         return {"ok": True, "message": "Callback not recognized"}
