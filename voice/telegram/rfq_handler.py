@@ -692,6 +692,9 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                 'parse_mode': 'Markdown'
             }
         
+        # Store organization name before closing session
+        org_name = user.organization.name if user.organization else 'Your Organization'
+        
         # Close first connection to avoid SSL timeout
         db.close()
         
@@ -720,7 +723,7 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
         
         # Build message
         message = f"📊 *Your Offers ({len(offers)})*\n\n"
-        message += f"{user.organization.name if user.organization else 'Your Organization'}\n\n"
+        message += f"{org_name}\n\n"
         
         for offer in offers:
             status_emoji = {
@@ -736,7 +739,7 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                 f"RFQ: {offer['rfq_id']}\n"
                 f"💰 ${offer['price_per_kg']}/kg × {offer['quantity_offered_kg']:,.0f} kg\n"
                 f"💵 Total: ${total_value:,.2f}\n"
-                f"⏱️ Delivery: {offer['delivery_timeline_days']} days\n"
+                f"⏱️ Delivery: {offer['delivery_timeline']} days\n"
                 f"Status: {offer['status']}\n\n"
             )
         
