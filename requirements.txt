@@ -22,7 +22,7 @@ uvicorn==0.24.0
 python-multipart==0.0.6
 pydantic==2.5.0
 python-dotenv==1.0.0
-openai>=1.12.0
+openai==1.12.0
 python-dateutil==2.8.2     # Natural language date parsing
 
 # -----------------------------
