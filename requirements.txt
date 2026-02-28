@@ -94,11 +94,10 @@ alembic==1.13.1
 # Admin Dashboard & Authentication (Lab 17)
 # -----------------------------
 bcrypt==4.1.2              # Password hashing for admin auth
-httpx>=0.25.0              # HTTP client for Addis AI Translation API (agent)
 
 
 # -----------------------------
 # RAG & Document Indexing
 # -----------------------------
-chromadb==1.4.1
+chromadb==0.4.24
 PyPDF2==3.0.1
