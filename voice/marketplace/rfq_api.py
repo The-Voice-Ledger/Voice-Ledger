@@ -206,10 +206,10 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
         # Only broadcast if relevance > 0.5
         if relevance_score >= 0.5:
             broadcast = RFQBroadcast(
-                rfq_id=rfq.id,
-                cooperative_id=coop.id,
+                rfq_id=int(rfq.id),
+                cooperative_id=int(coop.id),
                 broadcast_reason="SMART_MATCH",
-                relevance_score=relevance_score,
+                relevance_score=float(relevance_score),
                 notified_at=datetime.utcnow()
             )
             db.add(broadcast)
@@ -289,7 +289,12 @@ def create_rfq(
     db.refresh(rfq)
     
     # Smart broadcast to cooperatives
-    broadcast_rfq_to_cooperatives(rfq, db)
+    try:
+        broadcast_rfq_to_cooperatives(rfq, db)
+    except Exception as e:
+        logger.error(f"Failed to broadcast RFQ {rfq.id}: {e}")
+        # We don't want to fail the RFQ creation if broadcast fails
+        pass
     
     # Count how many cooperatives were notified
     broadcast_count = db.query(RFQBroadcast).filter_by(rfq_id=rfq.id).count()

@@ -447,7 +447,8 @@ async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[
                 'keyboard': [[{'text': '❌ Cancel'}]]
             }
         
-        session['data']['delivery_deadline'] = deadline.isoformat()
+        # Ensure it's a full ISO datetime string for the API
+        session['data']['delivery_deadline'] = datetime.combine(deadline, datetime.min.time()).isoformat()
         session['state'] = STATE_CONFIRM
         
         # Show summary
@@ -532,15 +533,15 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
             return {
                 'message': (
                     "✅ *RFQ Created Successfully!*\n\n"
-                    f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
+                    f"📋 RFQ Number: `{escape_markdown(rfq['rfq_number'])}`\n"
                     f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
-                    f"☕ Variety: {rfq['variety']}\n"
-                    f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
-                    f"🔧 Processing: {rfq['processing_method']}\n"
-                    f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                    f"☕ Variety: {escape_markdown(rfq['variety'])}\n"
+                    f"⭐ Grade: {escape_markdown(rfq.get('grade', 'Not specified'))}\n"
+                    f"🔧 Processing: {escape_markdown(rfq.get('processing_method', 'Any'))}\n"
+                    f"📍 Location: {escape_markdown(rfq.get('delivery_location', 'Not specified'))}\n\n"
                     f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
-                    f"Status: {rfq['status']}\n"
-                    f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                    f"Status: {escape_markdown(rfq['status'])}\n"
+                    f"Expires: {escape_markdown(rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A')}\n\n"
                     f"💡 Use /myrfqs to track offers as they come in."
                 ),
                 'parse_mode': 'Markdown',
@@ -550,9 +551,20 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
                 ]
             }
         else:
-            error = response.json().get('detail', 'Unknown error')
+            error_detail = response.text
+            logger.error(f"API Error (Status {response.status_code}): {error_detail}")
+            
+            try:
+                error_json = response.json()
+                error_msg = error_json.get('detail', 'Unknown error')
+                if isinstance(error_msg, list):
+                    # Format validation errors nicely
+                    error_msg = "; ".join([f"{e.get('loc', [])}: {e.get('msg')}" for e in error_msg])
+            except:
+                error_msg = response.text
+                
             return {
-                'message': f"❌ Failed to create RFQ: {error}",
+                'message': f"❌ Failed to create RFQ: {escape_markdown(str(error_msg))}",
                 'keyboard': [[{'text': '/rfq - Try Again'}]]
             }
     
@@ -636,10 +648,10 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         keyboard = []
         for rfq in rfqs[:10]:  # Show first 10
             rfq_summary = (
-                f"📋 *{rfq['rfq_number']}*\n"
-                f"📦 {rfq['quantity_kg']:,.0f} kg {rfq['variety']} {rfq['grade']}\n"
-                f"📍 {rfq['delivery_location']}\n"
-                f"📅 Deadline: {rfq['delivery_deadline']}\n"
+                f"📋 *{escape_markdown(rfq['rfq_number'])}*\n"
+                f"📦 {rfq['quantity_kg']:,.0f} kg {escape_markdown(rfq['variety'])} {escape_markdown(rfq['grade'])}\n"
+                f"📍 {escape_markdown(rfq['delivery_location'])}\n"
+                f"📅 Deadline: {escape_markdown(rfq['delivery_deadline'])}\n"
                 f"💬 Offers: {rfq.get('offer_count', 0)}\n\n"
             )
             message += rfq_summary
@@ -737,12 +749,12 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
             
             total_value = offer['quantity_offered_kg'] * offer['price_per_kg']
             message += (
-                f"{status_emoji} *{offer['offer_number']}*\n"
+                f"{status_emoji} *{escape_markdown(offer['offer_number'])}*\n"
                 f"RFQ: {offer['rfq_id']}\n"
                 f"💰 ${offer['price_per_kg']}/kg × {offer['quantity_offered_kg']:,.0f} kg\n"
                 f"💵 Total: ${total_value:,.2f}\n"
-                f"⏱️ Delivery: {offer['delivery_timeline']} days\n"
-                f"Status: {offer['status']}\n\n"
+                f"⏱️ Delivery: {escape_markdown(offer.get('delivery_timeline', 'N/A'))}\n"
+                f"Status: {escape_markdown(offer['status'])}\n\n"
             )
         
         return {
@@ -823,10 +835,10 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
             }.get(rfq['status'], '📝')
             
             message += (
-                f"{status_emoji} *{rfq['rfq_number']}*\n"
-                f"📦 {rfq['quantity_kg']:,.0f} kg {rfq['variety']}\n"
+                f"{status_emoji} *{escape_markdown(rfq['rfq_number'])}*\n"
+                f"📦 {rfq['quantity_kg']:,.0f} kg {escape_markdown(rfq['variety'])}\n"
                 f"💬 Offers: {rfq.get('offer_count', 0)}\n"
-                f"Status: {rfq['status']}\n\n"
+                f"Status: {escape_markdown(rfq['status'])}\n\n"
             )
             
             if rfq.get('offer_count', 0) > 0:
@@ -1051,15 +1063,15 @@ async def handle_voice_rfq_creation(
                     user_id=user_id,
                     message=(
                         f"✅ *RFQ Created from Voice!*\n\n"
-                        f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
+                        f"📋 RFQ Number: `{escape_markdown(rfq['rfq_number'])}`\n"
                         f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
-                        f"☕ Variety: {rfq['variety']}\n"
-                        f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
-                        f"🔧 Processing: {rfq['processing_method']}\n"
-                        f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                        f"☕ Variety: {escape_markdown(rfq['variety'])}\n"
+                        f"⭐ Grade: {escape_markdown(rfq.get('grade', 'Not specified'))}\n"
+                        f"🔧 Processing: {escape_markdown(rfq.get('processing_method', 'Any'))}\n"
+                        f"📍 Location: {escape_markdown(rfq.get('delivery_location', 'Not specified'))}\n\n"
                         f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
-                        f"Status: {rfq['status']}\n"
-                        f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                        f"Status: {escape_markdown(rfq['status'])}\n"
+                        f"Expires: {escape_markdown(rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A')}\n\n"
                         f"💡 Use /myrfqs to track offers as they come in."
                     ),
                     parse_mode='Markdown'
