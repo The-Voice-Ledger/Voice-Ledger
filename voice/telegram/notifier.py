@@ -135,20 +135,10 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
     # Prepare caption message with nice formatting
     base_url = os.getenv('BASE_URL', 'http://localhost:8000')
     
-    # Escape special Markdown characters in user data
-    def escape_markdown(text):
-        """Escape special characters for Telegram MarkdownV2."""
-        if not text:
-            return text
-        # Escape all special MarkdownV2 characters
-        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-        text = str(text)
-        for char in special_chars:
-            text = text.replace(char, f'\\{char}')
-        return text
-    
     # Get GLN for display
     gln = batch_info.get('gln', 'Not assigned')
+    
+    from voice.telegram.voice_responses import escape_markdown
     
     caption = (
         f"📦 *Batch Created \\- Awaiting Verification*\n\n"

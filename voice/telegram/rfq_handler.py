@@ -15,6 +15,7 @@ import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from database.models import UserIdentity, Organization, SessionLocal
+from voice.telegram.voice_responses import escape_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -97,16 +98,16 @@ async def handle_offer_creation(user_id: int, rfq_number: str) -> Dict[str, Any]
                 }
             
             message = f"📋 **RFQ Details**\n\n"
-            message += f"🔢 *RFQ Number*: {rfq.get('rfq_number', 'N/A')}\n"
-            message += f"☕ *Variety*: {rfq.get('variety', 'N/A')}\n"
+            message += f"🔢 *RFQ Number*: {escape_markdown(rfq.get('rfq_number', 'N/A'))}\n"
+            message += f"☕ *Variety*: {escape_markdown(rfq.get('variety', 'N/A'))}\n"
             message += f"⚖️ *Quantity*: {rfq.get('quantity_kg', 'N/A')} kg\n"
-            message += f"⭐ *Grade*: {rfq.get('grade', 'N/A')}\n"
-            message += f"🏷️ *Status*: {rfq.get('status', 'N/A')}\n"
-            message += f"� *Processing Method*: {rfq.get('processing_method', 'N/A')}\n"
-            message += f"🏢 *Buyer Organization*: {rfq.get('buyer_organization', 'N/A')}\n"
-            message += f"📍 *Location*: {rfq.get('delivery_location', 'N/A')}\n"
+            message += f"⭐ *Grade*: {escape_markdown(rfq.get('grade', 'N/A'))}\n"
+            message += f"🏷️ *Status*: {escape_markdown(rfq.get('status', 'N/A'))}\n"
+            message += f"🌊 *Processing Method*: {escape_markdown(rfq.get('processing_method', 'N/A'))}\n"
+            message += f"🏢 *Buyer Organization*: {escape_markdown(rfq.get('buyer_organization', 'N/A'))}\n"
+            message += f"📍 *Location*: {escape_markdown(rfq.get('delivery_location', 'N/A'))}\n"
             message += f"💬 *Offers*: {rfq.get('offer_count', 0)}\n"
-            message += f"📅 *Deadline*: {rfq.get('delivery_deadline', 'N/A')}\n\n"
+            message += f"📅 *Deadline*: {escape_markdown(rfq.get('delivery_deadline', 'N/A'))}\n\n"
             
             keyboard = [
                 [{'text': '🔙 Back to Offers', 'callback_data': 'offers'}],
@@ -326,7 +327,7 @@ async def handle_variety_input(user_id: int, text: str, session: Dict) -> Dict[s
     
     return {
         'message': (
-            f"✅ Variety: {variety}\n\n"
+            f"✅ Variety: {escape_markdown(variety)}\n\n"
             "⭐ *Step 3/6: Grade*\n\n"
             "What quality grade do you need?"
         ),
@@ -347,7 +348,7 @@ async def handle_grade_input(user_id: int, text: str, session: Dict) -> Dict[str
     
     return {
         'message': (
-            f"✅ Grade: {grade}\n\n"
+            f"✅ Grade: {escape_markdown(grade)}\n\n"
             "🌊 *Step 4/6: Processing Method*\n\n"
             "Which processing method do you prefer?"
         ),
@@ -368,7 +369,7 @@ async def handle_processing_input(user_id: int, text: str, session: Dict) -> Dic
     
     return {
         'message': (
-            f"✅ Processing: {processing}\n\n"
+            f"✅ Processing: {escape_markdown(processing)}\n\n"
             "📍 *Step 5/6: Delivery Location*\n\n"
             "Where should the coffee be delivered?\n"
             "Example: Addis Ababa, Djibouti Port, etc."
@@ -390,7 +391,7 @@ async def handle_location_input(user_id: int, text: str, session: Dict) -> Dict[
     
     return {
         'message': (
-            f"✅ Location: {location}\n\n"
+            f"✅ Location: {escape_markdown(location)}\n\n"
             "📅 *Step 6/6: Delivery Deadline*\n\n"
             "When do you need the coffee delivered?\n"
             "Use format: YYYY-MM-DD\n"
@@ -453,14 +454,15 @@ async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[
         data = session['data']
         return {
             'message': (
-                "📋 *RFQ Summary - Please Confirm*\n\n"
+                f"✅ Deadline: {escape_markdown(deadline.strftime('%B %d, %Y'))}\n\n"
+                "📋 *Review your RFQ:*\n\n"
                 f"📦 Quantity: {data['quantity_kg']:,.0f} kg\n"
-                f"☕ Variety: {data['variety']}\n"
-                f"⭐ Grade: {data['grade']}\n"
-                f"🌊 Processing: {data.get('processing_method', 'Any')}\n"
-                f"📍 Location: {data['delivery_location']}\n"
-                f"📅 Deadline: {deadline.strftime('%B %d, %Y')}\n\n"
-                "Ready to broadcast to cooperatives?"
+                f"☕ Variety: {escape_markdown(data['variety'])}\n"
+                f"⭐ Grade: {escape_markdown(data['grade'])}\n"
+                f"🔧 Processing: {escape_markdown(data.get('processing_method', 'Any'))}\n"
+                f"📍 Location: {escape_markdown(data['delivery_location'])}\n"
+                f"📅 Delivery: {escape_markdown(deadline.strftime('%B %d, %Y'))}\n\n"
+                "Is everything correct?"
             ),
             'parse_mode': 'Markdown',
             'keyboard': [

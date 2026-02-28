@@ -13,6 +13,11 @@ import bcrypt  # For PIN hashing (v1.7 - Phase 3: PIN Setup Integration)
 from typing import Dict, Any, Optional
 from datetime import datetime
 from database.models import PendingRegistration, UserIdentity, SessionLocal
+from voice.telegram.voice_responses import (
+    escape_markdown,
+    translate_text_to_amharic,
+    detect_language
+)
 from voice.telegram.session_manager import (
     get_session,
     set_session,
@@ -326,7 +331,7 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         # Non-farmers continue with full registration flow
         return {
             'message': (
-                f"✅ Selected: *{role.replace('_', ' ').title()}*\n\n"
+                f"✅ Selected: *{escape_markdown(role.replace('_', ' ').title())}*\n\n"
                 f"{role_info.get(role, '')}\n\n"
                 f"What is your full name?"
             ),
@@ -427,7 +432,7 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         
         return {
             'message': (
-                f"Selected: *{business_type.replace('_', ' ').title()}*\n\n"
+                f"Selected: *{escape_markdown(business_type.replace('_', ' ').title())}*\n\n"
                 f"What country are you based in?\n"
                 f"(e.g., 'United States', 'Germany', 'Japan')"
             ),
@@ -454,7 +459,7 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
             set_session(user_id, session)  # Persist to Redis
             return {
                 'message': (
-                    f"Selected: *{port}*\n\n"
+                    f"Selected: *{escape_markdown(port)}*\n\n"
                     f"What is your annual shipping capacity? (in tons)\n"
                     f"(e.g., '100' for 100 tons per year)"
                 ),
@@ -904,8 +909,8 @@ async def submit_registration(user_id: int) -> Dict[str, Any]:
             'message': (
                 f"✅ *Registration Submitted!*\n\n"
                 f"Application ID: `REG-{pending.id:04d}`\n"
-                f"Role: {data['role'].replace('_', ' ').title()}\n"
-                f"Organization: {data['organization_name']}\n\n"
+                f"Role: {escape_markdown(data['role'].replace('_', ' ').title())}\n"
+                f"Organization: {escape_markdown(data['organization_name'])}\n\n"
                 f"Your application has been sent to the admin team for review.\n"
                 f"You will be notified once approved.\n\n"
                 f"⏱️ Review typically takes 1-2 business days."

@@ -18,6 +18,36 @@ from voice.tts.tts_provider import TTSProvider
 logger = logging.getLogger(__name__)
 
 
+def escape_markdown(text):
+    """
+    Escape special characters for Telegram Markdown (V1/Standard).
+    
+    Telegram's 'Markdown' mode (V1) is sensitive to:
+    - Underscores (_) which are often in variables like GRADE_1
+    - Asterisks (*)
+    - Square brackets ([)
+    - Backticks (`)
+    
+    Args:
+        text: Input string to escape
+        
+    Returns:
+        Escaped string safe for Markdown parse_mode
+    """
+    if not text:
+        return text
+    
+    # We only escape these for the standard 'Markdown' mode
+    # For MarkdownV2, a much larger set of characters must be escaped.
+    # Note: Underscores are the main culprit for "Can't parse entities"
+    special_chars = ['_', '*', '[', '`']
+    
+    text = str(text)
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
 async def translate_text_to_amharic(text: str) -> str:
     """
     Translate English text to Amharic using Addis AI.
