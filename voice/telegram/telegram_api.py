@@ -1621,13 +1621,14 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
             
-            if 'keyboard' in response:
+            if 'keyboard' in response or 'inline_keyboard' in response:
+                kb = response.get('inline_keyboard') or response.get('keyboard')
                 telegram_response = requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                        'reply_markup': {'inline_keyboard': kb}
                     },
                     timeout=30
                 )
@@ -1655,13 +1656,14 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
             
-            if 'keyboard' in response:
+            if 'keyboard' in response or 'inline_keyboard' in response:
+                kb = response.get('inline_keyboard') or response.get('keyboard')
                 requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                        'reply_markup': {'inline_keyboard': kb}
                     },
                     timeout=30
                 )
@@ -1691,7 +1693,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 user_id=user_id,
                 message=response['message'],
                 parse_mode=response.get('parse_mode', 'Markdown'),
-                reply_markup=response.get('keyboard')
+                reply_markup=response.get('inline_keyboard') or response.get('keyboard')
             )
             
             return {"ok": True, "message": "My RFQs sent"}
@@ -2976,7 +2978,7 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             return {"ok": True, "message": "Verification callback handled"}
         
         # Handle RFQ-related callbacks
-        if callback_data in ('myoffers', 'offers') or callback_data.startswith('offer_'):
+        if callback_data in ('myoffers', 'offers', 'rfq', 'myrfqs') or callback_data.startswith('offer_'):
             from voice.telegram.rfq_handler import handle_rfq_callback
             
             # Get username from callback query for user lookup
@@ -3044,12 +3046,33 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             if 'inline_keyboard' in response:
                 payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
-            
-            requests.post(
-                f"https://api.telegram.org/bot{bot_token}/editMessageText",
-                json=payload,
-                timeout=30
-            )
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
+            elif 'keyboard' in response:
+                # Text keyboard (ReplyKeyboardMarkup) cannot be used with editMessageText
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': chat_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': response['keyboard'],
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
+                    },
+                    timeout=30
+                )
+            else:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
             
             return {"ok": True, "message": "RFQ callback handled"}
         

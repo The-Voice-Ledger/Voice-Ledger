@@ -40,6 +40,14 @@ async def handle_rfq_callback(user_id: int, callback_data: str, username: str = 
             # Handle "Offers" button - need username for user lookup
             return await handle_offers_command(user_id, username=None)
             
+        elif callback_data == 'rfq':
+            # Handle "Create RFQ" button
+            return await handle_rfq_command(user_id, username)
+            
+        elif callback_data == 'myrfqs':
+            # Handle "My RFQs" button
+            return await handle_myrfqs_command(user_id, username)
+            
         elif callback_data.startswith('offer_'):
             # Handle "Offer for RFQ" button - extract RFQ number from callback
             rfq_number = callback_data.split('_', 1)[1]  # Get everything after "offer_"
@@ -818,7 +826,7 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
                     "Use /rfq to create your first RFQ."
                 ),
                 'parse_mode': 'Markdown',
-                'keyboard': [[{'text': '/rfq - Create RFQ'}]]
+                'inline_keyboard': [[{'text': '➕ Create RFQ', 'callback_data': 'rfq'}]]
             }
         
         # Build message
@@ -847,12 +855,12 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
                      'callback_data': f"view_offers_{rfq['id']}"}
                 ])
         
-        keyboard.append([{'text': '/rfq - Create New RFQ'}])
+        keyboard.append([{'text': '➕ Create New RFQ', 'callback_data': 'rfq'}])
         
         return {
             'message': message,
             'parse_mode': 'Markdown',
-            'keyboard': keyboard
+            'inline_keyboard': keyboard
         }
     
     except Exception as e:
