@@ -24,6 +24,15 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# Import TTS cache
+try:
+    from voice.cache.tts_cache import get_cached_tts_audio, set_cached_tts_audio
+    TTS_CACHE_AVAILABLE = True
+    logger.info("TTS cache module loaded successfully")
+except ImportError as e:
+    logger.warning(f"TTS cache not available: {e}")
+    TTS_CACHE_AVAILABLE = False
+
 # OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -63,11 +72,24 @@ class TTSProvider:
         Raises:
             Exception: If TTS fails
         """
+        # Check cache first
+        if TTS_CACHE_AVAILABLE:
+            cached_audio = get_cached_tts_audio(text, language, voice)
+            if cached_audio:
+                logger.info(f"TTS cache HIT for text: {text[:50]}...")
+                return cached_audio
+            else:
+                logger.info(f"TTS cache MISS for text: {text[:50]}...")
+        
         # Generate new audio
         if language == 'am':
             audio = await TTSProvider._addis_ai_tts(text, voice)
         else:
             audio = await TTSProvider._openai_tts(text, voice, output_format)
+        
+        # Cache the generated audio
+        if TTS_CACHE_AVAILABLE and audio:
+            set_cached_tts_audio(text, language, audio, voice)
             
         return audio
     
