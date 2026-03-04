@@ -146,6 +146,15 @@ MARKETPLACE:
 • Accept a cooperative's offer (accept_offer) — buyers only
 • View your submitted offers (list_my_offers) — cooperative managers only
 
+CONTAINER MARKETPLACE:
+• Browse available containers for fractional purchase (browse_containers)
+• Purchase a partial quantity from a container (purchase_container) — buyers only
+
+CONTAINER POOLS (shared buying for SME roasters):
+• Browse active container pools and fill progress (browse_pools)
+• Commit a fractional quantity to a shared pool (commit_to_pool) — buyers only
+• View your pool commitments (list_my_commitments) — buyers only
+
 COMPLIANCE:
 • Check EUDR compliance for batches (check_eudr_compliance)
 • Validate mass balance for splits/transformations (check_mass_balance)
@@ -491,6 +500,8 @@ class AgentExecutor:
                             "list_pending_verifications",
                             "check_blockchain_anchor", "get_token_info",
                             "verify_batch_hash",
+                            "browse_pools", "list_my_commitments",
+                            "browse_containers",
                         ):
                             performed_write = True
                             last_intent = tool_name

@@ -40,9 +40,9 @@ class TestToolDefinitions:
             assert params["type"] == "object", f"Tool {func['name']} params not object"
     
     def test_tool_count(self):
-        """We should have 25 tools across all 7 agents."""
+        """We should have 34 tools across all agents."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
-        assert len(SUPPLY_CHAIN_TOOLS) == 25
+        assert len(SUPPLY_CHAIN_TOOLS) == 34
     
     def test_tool_names_are_unique(self):
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
@@ -963,10 +963,10 @@ class TestAllToolsIntegration:
     """Verify all agents work together in the unified tool set."""
 
     def test_total_tool_count(self):
-        """We should have 25 tools: 9 core + 5 marketplace + 2 compliance + 4 DPP + 2 verification + 3 blockchain."""
+        """We should have 34 tools total."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
 
-        assert len(SUPPLY_CHAIN_TOOLS) == 25
+        assert len(SUPPLY_CHAIN_TOOLS) == 34
 
     def test_all_tool_names_unique(self):
         """No duplicate tool names across all agents."""
@@ -994,12 +994,16 @@ class TestAllToolsIntegration:
             "get_dpp", "get_container_dpp", "trace_lineage", "validate_dpp",
             "list_pending_verifications",
             "check_blockchain_anchor", "get_token_info", "verify_batch_hash",
+            "browse_containers", "browse_pools", "list_my_commitments",
+            "check_payment_status",
         }
         write_tools = {
             "record_commission", "record_shipment", "record_receipt",
             "record_transformation", "pack_batches", "unpack_batches",
             "split_batch", "create_rfq", "submit_offer", "accept_offer",
-            "verify_batch",
+            "verify_batch", "purchase_container", "commit_to_pool",
+            "confirm_payment", "record_cooperative_payout",
+            "confirm_payment_received",
         }
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
 

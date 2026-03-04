@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-2025-TEST",
   "batchId": "BATCH-2025-TEST",
   "version": "2.0.0",
-  "issuedAt": "2026-02-19T07:19:15.228133+00:00",
+  "issuedAt": "2026-03-04T12:55:08.612392+00:00",
   "productInformation": {
     "productName": "Ethiopian Yirgacheffe - Test Batch",
     "quantity": 100.0,
@@ -37,7 +37,7 @@
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-02-19",
+      "assessmentDate": "2026-03-04",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
     }
@@ -66,7 +66,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-02-19",
+      "assessmentDate": "2026-03-04",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -79,7 +79,7 @@
       "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-02-19"
+      "nextReviewDate": "2027-03-04"
     }
   },
   "blockchain": {

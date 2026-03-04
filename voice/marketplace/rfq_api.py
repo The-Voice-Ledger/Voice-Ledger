@@ -26,7 +26,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Header
 from sqlalchemy.orm import joinedload, subqueryload
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -468,16 +468,28 @@ def create_offer(
 @router.get("/rfq/{rfq_id}/offers", response_model=List[OfferResponse])
 def get_rfq_offers(
     rfq_id: int,
-    user_id: int = Query(..., description="User ID (buyer to view their RFQ offers)"),
+    user_id: Optional[int] = Query(None, description="User ID (fallback for non-JWT clients)"),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     View offers for an RFQ
     
     **Access:** Buyer who created the RFQ
+    Auth: JWT Authorization header (preferred) or user_id query param.
     """
-    # Get user
-    user = get_current_user(user_id, db)
+    # Resolve user from JWT or query param
+    resolved_id = user_id
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            from voice.web.auth import verify_jwt_token
+            payload = verify_jwt_token(authorization.replace("Bearer ", ""))
+            resolved_id = payload.get("user_id", resolved_id)
+        except Exception:
+            pass
+    if not resolved_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = get_current_user(resolved_id, db)
     
     # Get RFQ
     rfq = db.query(RFQ).filter_by(id=rfq_id).first()
