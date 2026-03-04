@@ -26,9 +26,40 @@
   --color-forest-900: #0e320e;
 }
 
+/* ── Mobile-first globals ──────────────────────────────────── */
+
+/* Prevent horizontal overflow on mobile */
+html, body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
+}
+
+/* Respect notched phones (iPhone etc.) */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+/* Better tap targets on mobile – minimum 44px for buttons/links */
+@media (pointer: coarse) {
+  button, a, input, select, textarea {
+    min-height: 44px;
+  }
+  /* Except tiny inline elements like badges */
+  span.text-\[10px\], span.text-xs {
+    min-height: auto;
+  }
+}
+
+/* Prevent iOS zoom on input focus (needs 16px minimum) */
+@media screen and (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Chat bubble animation */

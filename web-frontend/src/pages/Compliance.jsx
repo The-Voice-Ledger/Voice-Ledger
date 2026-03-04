@@ -49,18 +49,18 @@ export default function Compliance() {
         <label className="block text-sm font-medium text-stone-700 mb-1.5">
           Batch IDs (comma or space separated)
         </label>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
             value={batchInput}
             onChange={(e) => setBatchInput(e.target.value)}
-            placeholder="ETH-COOP-001-2025-00001, ETH-COOP-001-2025-00002"
+            placeholder="ETH-COOP-001-2025-00001"
             className="flex-1 rounded-lg border border-stone-300 px-4 py-2.5 text-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200 transition"
           />
           <button
             type="submit"
             disabled={!batchInput.trim() || loading}
-            className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50"
+            className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
           >
             {loading ? 'Checking...' : 'Run Check'}
           </button>
@@ -121,8 +121,8 @@ export default function Compliance() {
 
           {/* Batch-level results */}
           {data?.batch_results && data.batch_results.length > 0 && (
-            <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-xl border border-stone-200 overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm min-w-[500px]">
                 <thead className="bg-stone-50 text-left text-xs text-stone-500 uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">Batch</th>

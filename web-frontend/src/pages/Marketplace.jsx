@@ -249,9 +249,9 @@ export default function Marketplace() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2">
-          <LuHandshake className="w-6 h-6" /> {t('nav_marketplace')}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-stone-900 flex items-center gap-2">
+          <LuHandshake className="w-6 h-6 shrink-0" /> {t('nav_marketplace')}
         </h1>
         <div className="flex items-center gap-3">
           <button

@@ -597,7 +597,20 @@ class AgentExecutor:
     ) -> str:
         """Build the system prompt with optional context."""
         prompt = self.system_prompt
-        
+
+        # Add anonymous user context
+        if user_id == 0 or user_id is None:
+            prompt += (
+                "\n\nAUTHENTICATION STATUS: The user is ANONYMOUS (not signed in).\n"
+                "- They CAN use read-only tools: browse RFQs, query batches, check compliance, view DPPs, etc.\n"
+                "- They CANNOT use write tools: creating batches, RFQs, offers, purchases, commitments, payments, etc.\n"
+                "- When they ask for a write action, DO NOT call the tool. Instead, politely explain they need to "
+                "sign in first and give them two options:\n"
+                "  1. Click 'Sign In' in the navigation bar\n"
+                "  2. Register via Telegram: https://t.me/voice_ledger_bot\n"
+                "- After explaining, ask if there's anything read-only you can help with.\n"
+            )
+
         # Add language context
         if language == "am":
             prompt += (
@@ -632,6 +645,21 @@ class AgentExecutor:
         
         return prompt
     
+    # Tools that anonymous (user_id=0) guests are allowed to call
+    READ_ONLY_TOOLS = {
+        "query_batches", "search_knowledge",
+        "browse_rfqs", "list_my_offers",
+        "check_eudr_compliance", "check_mass_balance",
+        "get_dpp", "get_container_dpp",
+        "trace_lineage", "validate_dpp",
+        "list_pending_verifications",
+        "check_blockchain_anchor", "get_token_info",
+        "verify_batch_hash",
+        "check_don_attestation", "get_don_provenance_metrics",
+        "browse_containers", "browse_pools",
+        "list_my_commitments", "check_payment_status",
+    }
+
     def _execute_tool(
         self,
         tool_name: str,
@@ -645,6 +673,17 @@ class AgentExecutor:
         Returns:
             {"success": bool, "message": str, "data": dict}
         """
+        # --- Anonymous user guard ---
+        if (user_id is None or user_id == 0) and tool_name not in self.READ_ONLY_TOOLS:
+            return {
+                "success": False,
+                "message": (
+                    f"This action ({tool_name.replace('_', ' ')}) requires a registered account. "
+                    "Please sign in or register via Telegram at https://t.me/voice_ledger_bot"
+                ),
+                "data": {"needs_auth": True},
+            }
+
         handler = self.registry.get(tool_name)
         if not handler:
             return {

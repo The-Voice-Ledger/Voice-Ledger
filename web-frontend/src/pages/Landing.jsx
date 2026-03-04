@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { LuCoffee, LuShieldCheck, LuHandshake, LuSprout, LuLink, LuMic, LuMessageCircle } from 'react-icons/lu'
+import { LuCoffee, LuShieldCheck, LuHandshake, LuSprout, LuLink, LuMic, LuMessageCircle, LuRadioTower } from 'react-icons/lu'
 
 export default function Landing() {
   const { t } = useTranslation()
@@ -36,6 +36,12 @@ export default function Landing() {
       title: t('feat_voice'),
       desc: t('feat_voice_desc'),
     },
+    {
+      Icon: LuRadioTower,
+      title: t('feat_cre'),
+      desc: t('feat_cre_desc'),
+      badge: t('feat_cre_badge'),
+    },
   ]
 
   return (
@@ -43,8 +49,8 @@ export default function Landing() {
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 text-white">
         <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnYtMmgtNHY2aDR2LTJ6bTAtMTZ2Mmg0di02aC00djRoLTJ2Mmgyem0tOCA4aDJ2NmgtMnYyaDR2LTZoMnYtMmgtNHYtMnptMC0ydi0ySDI0djJoMnYyaDJ2LTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')]" />
-        <div className="max-w-5xl mx-auto px-6 py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight">
             {t('tagline')}
           </h1>
           <p className="mt-6 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
@@ -68,17 +74,24 @@ export default function Landing() {
       </section>
 
       {/* Features grid */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
         <h2 className="text-2xl md:text-3xl font-bold text-center text-stone-900 mb-12">
           {t('features_heading')}
         </h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="flex flex-wrap justify-center gap-4 sm:gap-8">
           {features.map((f) => (
             <div
               key={f.title}
-              className="bg-white rounded-2xl p-6 shadow-sm border border-stone-100 hover:shadow-md transition"
+              className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-stone-100 hover:shadow-md transition w-full sm:w-[calc(50%-1rem)] lg:w-[calc(33.333%-1.34rem)]"
             >
-              <f.Icon className="w-8 h-8 text-stone-700 mb-3" />
+              <div className="flex items-center gap-2 mb-3">
+                <f.Icon className="w-8 h-8 text-stone-700" />
+                {f.badge && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                    {f.badge}
+                  </span>
+                )}
+              </div>
               <h3 className="text-lg font-semibold text-stone-900 mb-2">{f.title}</h3>
               <p className="text-sm text-stone-600 leading-relaxed">{f.desc}</p>
             </div>
@@ -87,8 +100,8 @@ export default function Landing() {
       </section>
 
       {/* CTA band */}
-      <section className="bg-forest-600 text-white py-16">
-        <div className="max-w-3xl mx-auto text-center px-6">
+      <section className="bg-forest-600 text-white py-12 sm:py-16">
+        <div className="max-w-3xl mx-auto text-center px-4 sm:px-6">
           <h2 className="text-2xl md:text-3xl font-bold">{t('cta_ready')}</h2>
           <p className="mt-3 text-forest-100">
             {t('cta_ready_desc')}

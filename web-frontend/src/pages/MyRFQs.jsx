@@ -47,9 +47,9 @@ export default function MyRFQs() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2">
-          <LuFileText className="w-6 h-6" /> {t('nav_my_rfqs')}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-stone-900 flex items-center gap-2">
+          <LuFileText className="w-6 h-6 shrink-0" /> {t('nav_my_rfqs')}
         </h1>
         <div className="flex items-center gap-3">
           <button

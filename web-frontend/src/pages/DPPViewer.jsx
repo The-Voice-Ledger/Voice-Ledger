@@ -42,21 +42,21 @@ export default function DPPViewer() {
       </p>
 
       {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-2 mb-8">
+      <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-8">
         <div className="relative flex-1">
           <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
             value={batchId}
             onChange={(e) => setBatchId(e.target.value)}
-            placeholder="Enter Batch ID or GTIN (e.g. ETH-COOP-001-2025-00001)"
+            placeholder="Batch ID or GTIN"
             className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-stone-300 text-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200 transition"
           />
         </div>
         <button
           type="submit"
           disabled={!batchId.trim() || loading}
-          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50"
+          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
         >
           {loading ? 'Looking up...' : 'Look Up'}
         </button>

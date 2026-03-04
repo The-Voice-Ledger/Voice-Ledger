@@ -102,6 +102,9 @@ READ_TOOLS = {
     "check_don_attestation",
     "get_don_provenance_metrics",
     "browse_containers",
+    "browse_pools",
+    "list_my_commitments",
+    "check_payment_status",
 }
 
 # Tool name → response_type mapping for rich cards
@@ -161,6 +164,11 @@ def _infer_response_type(tool_calls) -> tuple:
     """
     if not tool_calls:
         return "text", {}
+
+    # Check if any tool call returned needs_auth (anonymous user blocked)
+    for tc in reversed(tool_calls):
+        if not tc.success and isinstance(tc.result_data, dict) and tc.result_data.get("needs_auth"):
+            return "needs_auth", tc.result_data
 
     # Use the last successful tool call for the card type
     for tc in reversed(tool_calls):
