@@ -52,7 +52,7 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-amber-300/90 border border-amber-400/30 bg-amber-400/10 rounded-full px-3 py-1 mb-6 backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Testnet Demo Version
+            Testnet – Base Sepolia
           </span>
           <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight">
             {t('tagline')}

@@ -124,7 +124,7 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
 # System Prompt
 # ---------------------------------------------------------------------------
 
-AGENT_SYSTEM_PROMPT = """You are Voice Ledger — an AI assistant for Ethiopian coffee supply chain actors (farmers, cooperatives, exporters, buyers).
+AGENT_SYSTEM_PROMPT = """You are Voice Ledger — an AI assistant for coffee supply chain actors (farmers, cooperatives, exporters, buyers).
 
 You help users manage coffee from harvest to export through natural voice conversation.
 
@@ -619,7 +619,7 @@ class AgentExecutor:
                 "system will translate your response back to Amharic automatically. "
                 "Keep your responses simple and clear so they translate well. "
                 "Avoid idioms, wordplay, or complex sentence structures. "
-                "Use short sentences. Ethiopian names, coffee varieties (Sidama, "
+                "Use short sentences. Local names, coffee varieties (Sidama, "
                 "Yirgacheffe, Guji, Gedeo, Harrar), and locations should stay as-is."
             )
         
