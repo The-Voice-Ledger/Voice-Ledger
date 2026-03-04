@@ -146,6 +146,15 @@ MARKETPLACE:
 • Accept a cooperative's offer (accept_offer) — buyers only
 • View your submitted offers (list_my_offers) — cooperative managers only
 
+CONTAINER MARKETPLACE:
+• Browse available containers for fractional purchase (browse_containers)
+• Purchase a partial quantity from a container (purchase_container) — buyers only
+
+CONTAINER POOLS (shared buying for SME roasters):
+• Browse active container pools and fill progress (browse_pools)
+• Commit a fractional quantity to a shared pool (commit_to_pool) — buyers only
+• View your pool commitments (list_my_commitments) — buyers only
+
 COMPLIANCE:
 • Check EUDR compliance for batches (check_eudr_compliance)
 • Validate mass balance for splits/transformations (check_mass_balance)
@@ -169,6 +178,12 @@ CHAINLINK DON ATTESTATION:
 • Request Chainlink DON deforestation verification for a farm (request_don_attestation)
 • Read DON-attested compliance result from blockchain (check_don_attestation)
 • Get DON-attested supply chain metrics from blockchain (get_don_provenance_metrics)
+
+SETTLEMENT / PAYMENTS:
+• Confirm a bank transfer payment for an acceptance or commitment (confirm_payment) — buyers only
+• Check the payment/settlement status of an acceptance or commitment (check_payment_status)
+• Record that the cooperative has received and forwarded payment to farmers (record_cooperative_payout) — cooperative managers only
+• Confirm receipt of a cooperative payout (confirm_payment_received) — cooperative managers only
 
 CONVERSATION RULES:
 1. Be warm, clear, and concise — users are often speaking via voice
@@ -497,6 +512,8 @@ class AgentExecutor:
                             "check_blockchain_anchor", "get_token_info",
                             "verify_batch_hash",
                             "check_don_attestation", "get_don_provenance_metrics",
+                            "browse_pools", "list_my_commitments",
+                            "browse_containers", "check_payment_status",
                         ):
                             performed_write = True
                             last_intent = tool_name

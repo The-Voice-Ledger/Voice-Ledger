@@ -134,9 +134,9 @@ class TestToolSchemas:
         assert "get_don_provenance_metrics" in tool_names
 
     def test_total_tool_count(self):
-        """Should now have 28 tools (25 original + 3 CRE)."""
+        """Should now have 37 tools (25 original + 3 CRE + 9 marketplace/settlement)."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
-        assert len(SUPPLY_CHAIN_TOOLS) == 28
+        assert len(SUPPLY_CHAIN_TOOLS) == 37
 
     def test_request_don_attestation_schema(self):
         from voice.agent.tools import REQUEST_DON_ATTESTATION
@@ -179,13 +179,13 @@ class TestRegistryHandlers:
         assert registry.has("get_don_provenance_metrics")
 
     def test_total_registered_tools(self):
-        """Should have 28 tools registered."""
+        """Should have 37 tools registered."""
         import voice.agent.registry as reg_mod
         reg_mod._registry = None
         from voice.agent.registry import get_tool_registry
 
         registry = get_tool_registry()
-        assert len(registry.tool_names) == 28
+        assert len(registry.tool_names) == 37
 
     @patch("voice.agent.registry._get_cre_client")
     def test_check_don_attestation_no_farm_id(self, mock_client):

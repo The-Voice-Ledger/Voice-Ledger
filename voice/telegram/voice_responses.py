@@ -18,6 +18,88 @@ from voice.tts.tts_provider import TTSProvider
 logger = logging.getLogger(__name__)
 
 
+def escape_markdown(text):
+    """
+    Escape special characters for Telegram Markdown (V1/Standard).
+    
+    Telegram's 'Markdown' mode (V1) is sensitive to:
+    - Underscores (_) which are often in variables like GRADE_1
+    - Asterisks (*)
+    - Square brackets ([)
+    - Backticks (`)
+    
+    Args:
+        text: Input string to escape
+        
+    Returns:
+        Escaped string safe for Markdown parse_mode
+    """
+    if not text:
+        return text
+    
+    # We only escape these for the standard 'Markdown' mode
+    # For MarkdownV2, a much larger set of characters must be escaped.
+    # Note: Underscores are the main culprit for "Can't parse entities"
+    special_chars = ['_', '*', '[', '`']
+    
+    text = str(text)
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
+async def translate_text_to_amharic(text: str) -> str:
+    """
+    Translate English text to Amharic using Addis AI.
+    
+    Args:
+        text: English text to translate
+        
+    Returns:
+        Amharic translation
+    """
+    try:
+        import httpx
+        
+        # Use Addis AI for translation
+        ADDIS_AI_API_KEY = os.getenv("ADDIS_AI_API_KEY")
+        ADDIS_AI_CHAT_URL = "https://api.addisassistant.com/api/v1/chat_generate"
+        
+        if not ADDIS_AI_API_KEY:
+            return text
+        
+        headers = {
+            "X-API-Key": ADDIS_AI_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "prompt": text,
+            "target_language": "am"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(ADDIS_AI_CHAT_URL, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Extract translation from nested structure
+                translation = (
+                    data.get("data", {}).get("response_text") or 
+                    data.get("response_text") or 
+                    data.get("response") or 
+                    data.get("text") or 
+                    data.get("answer") or 
+                    text
+                )
+                return translation
+            else:
+                return text
+                
+    except Exception as e:
+        return text  # Return original if translation fails
+
+
 def detect_language(text: str) -> str:
     """
     Detect language from text using Unicode ranges.
@@ -262,6 +344,10 @@ async def _generate_and_send_voice(
         
         logger.info(f"🎤 Generating TTS: {len(voice_friendly_text)} chars (formatted), lang: {language}, chat: {chat_id}")
         
+        # Translate English to Amharic if user prefers Amharic but text is English
+        if user_preference_language == "am" and detect_language(voice_friendly_text) == "en":
+            voice_friendly_text = await translate_text_to_amharic(voice_friendly_text)
+        
         # Route TTS based on language
         audio_bytes = None
         
@@ -289,10 +375,18 @@ async def _generate_and_send_voice(
         if audio_bytes:
             # Save to temporary file for Telegram upload
             import tempfile
-            suffix = '.wav' if language == "am" else '.mp3'
-            with tempfile.NamedTemporaryFile(mode='wb', suffix=suffix, delete=False) as tmp_file:
-                tmp_file.write(audio_bytes)
-                audio_path = tmp_file.name
+            
+            # Addis AI returns MP3 audio, use MP3 extension for proper file format
+            if language == "am":
+                suffix = '.mp3'  # Addis AI returns MP3
+                with tempfile.NamedTemporaryFile(mode='wb', suffix=suffix, delete=False) as tmp_file:
+                    tmp_file.write(audio_bytes)
+                    audio_path = tmp_file.name
+            else:
+                suffix = '.mp3'
+                with tempfile.NamedTemporaryFile(mode='wb', suffix=suffix, delete=False) as tmp_file:
+                    tmp_file.write(audio_bytes)
+                    audio_path = tmp_file.name
             
             # Send voice message
             try:
@@ -405,7 +499,11 @@ async def send_voice_reply(
                     keyboard_row = []
                     for button in row:
                         keyboard_row.append(
-                            KeyboardButton(text=button.get('text', ''))
+                            KeyboardButton(
+                                text=button.get('text', ''),
+                                request_contact=button.get('request_contact', False),
+                                request_location=button.get('request_location', False)
+                            )
                         )
                     keyboard.append(keyboard_row)
                 telegram_reply_markup = ReplyKeyboardMarkup(

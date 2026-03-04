@@ -97,6 +97,20 @@ class VoiceChannel(ABC):
             bool: True if update sent successfully, False otherwise
         """
         pass
+
+    @abstractmethod
+    async def delete_message(self, user_id: str, message_id: str) -> bool:
+        """
+        Delete a message from the channel history.
+        
+        Args:
+            user_id: Channel-specific user identifier (chat ID)
+            message_id: ID of the message to delete
+            
+        Returns:
+            bool: True if deleted successfully
+        """
+        pass
     
     def get_channel_name(self) -> str:
         """Return the name of this channel."""

@@ -49,6 +49,15 @@ class ToolRegistry:
         self._tools["submit_offer"] = self._submit_offer
         self._tools["accept_offer"] = self._accept_offer
         self._tools["list_my_offers"] = self._list_my_offers
+
+        # Container marketplace tools (Agent #3b)
+        self._tools["browse_containers"] = self._browse_containers
+        self._tools["purchase_container"] = self._purchase_container
+
+        # Container pool tools - shared buying (Agent #3c)
+        self._tools["browse_pools"] = self._browse_pools
+        self._tools["commit_to_pool"] = self._commit_to_pool
+        self._tools["list_my_commitments"] = self._list_my_commitments
         
         # Compliance tools (Agent #4)
         self._tools["check_eudr_compliance"] = self._check_eudr_compliance
@@ -73,7 +82,824 @@ class ToolRegistry:
         self._tools["request_don_attestation"] = self._request_don_attestation
         self._tools["check_don_attestation"] = self._check_don_attestation
         self._tools["get_don_provenance_metrics"] = self._get_don_provenance_metrics
+
+        # Settlement / Payment tools (Agent #9)
+        self._tools["confirm_payment"] = self._confirm_payment
+        self._tools["check_payment_status"] = self._check_payment_status
+        self._tools["record_cooperative_payout"] = self._record_cooperative_payout
+        self._tools["confirm_payment_received"] = self._confirm_payment_received
+
+    # ------------------------------------------------------------------
+    # Container marketplace tool implementations (Agent #3b)
+    # ------------------------------------------------------------------
+
+    def _browse_containers(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Browse available container offerings."""
+        from database.models import ContainerOffering, Organization
+
+        query = db.query(ContainerOffering).filter(
+            ContainerOffering.status.in_(['AVAILABLE', 'PARTIALLY_SOLD'])
+        )
+
+        variety = args.get("variety")
+        if variety:
+            query = query.filter(ContainerOffering.variety.ilike(f"%{variety}%"))
+
+        min_qty = args.get("min_quantity_kg")
+        if min_qty:
+            query = query.filter(ContainerOffering.available_quantity_kg >= float(min_qty))
+
+        limit = args.get("limit", 10)
+        offerings = query.order_by(ContainerOffering.created_at.desc()).limit(limit).all()
+
+        if not offerings:
+            return ("No available containers found.", {"containers": [], "count": 0})
+
+        container_list = []
+        for o in offerings:
+            coop = db.query(Organization).filter_by(id=o.cooperative_id).first()
+            container_list.append({
+                "id": o.id,
+                "container_sscc": o.container_sscc,
+                "cooperative": coop.name if coop else "Unknown",
+                "total_quantity_kg": o.total_quantity_kg,
+                "available_quantity_kg": o.available_quantity_kg,
+                "price_per_kg": o.price_per_kg,
+                "currency": o.currency,
+                "variety": o.variety,
+                "processing_method": o.processing_method,
+                "grade": o.grade,
+                "status": o.status,
+                "delivery_location": o.delivery_location,
+                "dpp_url": o.dpp_url,
+            })
+
+        msg = f"Found {len(container_list)} available container(s)."
+        return (msg, {"containers": container_list, "count": len(container_list)})
+
+    def _purchase_container(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Purchase a partial quantity from a container offering."""
+        from database.models import (
+            ContainerOffering, RFQAcceptance, UserIdentity, Organization
+        )
+        from datetime import datetime
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found. Please register first.", {"error": "user_not_found"})
+        if user.role not in ("BUYER", "ADMIN"):
+            return (
+                f"Only buyers can purchase containers. Your role is {user.role}.",
+                {"error": "role_not_buyer"},
+            )
+
+        container_id = args.get("container_id")
+        quantity_kg = args.get("quantity_kg", 0)
+        if not container_id or quantity_kg <= 0:
+            return ("Please specify a container_id and quantity_kg.", {"error": "missing_fields"})
+
+        offering = db.query(ContainerOffering).filter_by(id=int(container_id)).first()
+        if not offering:
+            return ("Container offering not found.", {"error": "not_found"})
+        if offering.status not in ('AVAILABLE', 'PARTIALLY_SOLD'):
+            return (f"Container is not available (status: {offering.status}).", {"error": "unavailable"})
+        if quantity_kg > offering.available_quantity_kg:
+            return (
+                f"Insufficient quantity. Available: {offering.available_quantity_kg}kg, requested: {quantity_kg}kg.",
+                {"error": "insufficient_qty"},
+            )
+
+        total_amount = quantity_kg * offering.price_per_kg
+
+        # Generate acceptance number
+        last = db.query(RFQAcceptance).order_by(RFQAcceptance.id.desc()).first()
+        next_num = (last.id + 1) if last else 1
+        acceptance_number = f"ACC-{next_num:06d}"
+
+        acceptance = RFQAcceptance(
+            rfq_id=None,
+            offer_id=None,
+            container_offering_id=int(container_id),
+            acceptance_number=acceptance_number,
+            quantity_accepted_kg=quantity_kg,
+            payment_terms=args.get("payment_terms", "Net 7 days"),
+            payment_status="PENDING",
+            delivery_status="PENDING",
+        )
+        db.add(acceptance)
+
+        offering.available_quantity_kg -= quantity_kg
+        offering.reserved_quantity_kg += quantity_kg
+        if offering.available_quantity_kg == 0:
+            offering.status = 'FULLY_RESERVED'
+        else:
+            offering.status = 'PARTIALLY_SOLD'
+        offering.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(acceptance)
+
+        coop = db.query(Organization).filter_by(id=offering.cooperative_id).first()
+
+        return (
+            f"Purchase confirmed! {quantity_kg}kg from container {offering.container_sscc} "
+            f"at ${offering.price_per_kg}/kg (total ${total_amount:,.2f}). "
+            f"Acceptance #{acceptance_number}. Payment instructions will follow.",
+            {
+                "acceptance_id": acceptance.id,
+                "acceptance_number": acceptance_number,
+                "container_sscc": offering.container_sscc,
+                "cooperative": coop.name if coop else "Unknown",
+                "quantity_kg": quantity_kg,
+                "price_per_kg": offering.price_per_kg,
+                "total_amount_usd": total_amount,
+                "payment_status": "PENDING",
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Container Pool tool implementations (Agent #3c - shared buying)
+    # ------------------------------------------------------------------
+
+    def _browse_pools(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Browse active container pools with fill-progress."""
+        from database.models import ContainerPool, ContainerOffering, Organization
+
+        query = db.query(ContainerPool).filter(
+            ContainerPool.status.in_(["FILLING", "CONFIRMED"])
+        )
+
+        region = args.get("region")
+        if region:
+            query = query.filter(ContainerPool.destination_region.ilike(f"%{region}%"))
+
+        offering_id = args.get("container_offering_id")
+        if offering_id:
+            query = query.filter(ContainerPool.container_offering_id == int(offering_id))
+
+        pools = query.order_by(ContainerPool.created_at.desc()).limit(20).all()
+
+        if not pools:
+            return ("No active container pools found.", {"pools": [], "count": 0})
+
+        pool_list = []
+        for p in pools:
+            offering = db.query(ContainerOffering).filter_by(id=p.container_offering_id).first()
+            coop = None
+            if offering:
+                coop = db.query(Organization).filter_by(id=offering.cooperative_id).first()
+            pool_list.append({
+                "id": p.id,
+                "container_sscc": offering.container_sscc if offering else None,
+                "cooperative": coop.name if coop else "Unknown",
+                "variety": offering.variety if offering else None,
+                "grade": offering.grade if offering else None,
+                "price_per_kg": offering.price_per_kg if offering else 0,
+                "destination_region": p.destination_region,
+                "destination_port": p.destination_port,
+                "fill_target_kg": p.fill_target_kg,
+                "filled_kg": p.filled_kg,
+                "fill_pct": p.fill_pct,
+                "remaining_kg": p.remaining_kg,
+                "buyer_count": p.buyer_count,
+                "status": p.status,
+                "deadline": p.deadline.isoformat() if p.deadline else None,
+            })
+
+        msg = f"Found {len(pool_list)} active pool(s)."
+        return (msg, {"pools": pool_list, "count": len(pool_list)})
+
+    def _commit_to_pool(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Commit a fractional quantity to a shared container pool."""
+        from database.models import (
+            ContainerPool, BuyerCommitment, ContainerOffering,
+            UserIdentity, Organization, Buyer, REGION_PORT_MAP,
+            POOL_AUTO_CONFIRM_PCT,
+        )
+        from datetime import datetime, timedelta
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found. Please register first.", {"error": "user_not_found"})
+        if user.role not in ("BUYER", "SYSTEM_ADMIN"):
+            return (
+                f"Only buyers can commit to pools. Your role is {user.role}.",
+                {"error": "role_not_buyer"},
+            )
+
+        offering_id = args.get("container_offering_id")
+        quantity_kg = args.get("quantity_kg", 0)
+        if not offering_id or quantity_kg <= 0:
+            return ("Please specify container_offering_id and quantity_kg.", {"error": "missing_fields"})
+
+        offering = db.query(ContainerOffering).filter_by(id=int(offering_id)).first()
+        if not offering:
+            return ("Container offering not found.", {"error": "not_found"})
+        if offering.status not in ("AVAILABLE", "PARTIALLY_SOLD"):
+            return (f"Container is not available (status: {offering.status}).", {"error": "unavailable"})
+        if quantity_kg > offering.available_quantity_kg:
+            return (
+                f"Insufficient quantity. Available: {offering.available_quantity_kg} kg, "
+                f"requested: {quantity_kg} kg.",
+                {"error": "insufficient_qty"},
+            )
+
+        # Resolve destination
+        country = args.get("delivery_country")
+        if not country:
+            buyer_profile = db.query(Buyer).filter_by(organization_id=user.organization_id).first()
+            if buyer_profile and buyer_profile.country:
+                country = buyer_profile.country[:2].upper()
+
+        if country and country.upper() in REGION_PORT_MAP:
+            port, region = REGION_PORT_MAP[country.upper()]
+        else:
+            port, region = "Djibouti", "International"
+
+        # Get or create pool
+        pool = (
+            db.query(ContainerPool)
+            .filter(
+                ContainerPool.container_offering_id == offering.id,
+                ContainerPool.destination_region == region,
+                ContainerPool.status == "FILLING",
+            )
+            .first()
+        )
+        if not pool:
+            pool = ContainerPool(
+                container_offering_id=offering.id,
+                destination_region=region,
+                destination_port=port,
+                fill_target_kg=offering.available_quantity_kg,
+                filled_kg=0,
+                status="FILLING",
+                deadline=datetime.utcnow() + timedelta(days=30),
+            )
+            db.add(pool)
+            db.flush()
+
+        total_amount = round(quantity_kg * offering.price_per_kg, 2)
+
+        commitment = BuyerCommitment(
+            pool_id=pool.id,
+            buyer_id=user.id,
+            organization_id=user.organization_id,
+            quantity_kg=quantity_kg,
+            unit_price=offering.price_per_kg,
+            total_amount=total_amount,
+            currency=offering.currency or "USD",
+            delivery_country=country,
+            delivery_city=args.get("delivery_city"),
+            status="COMMITTED",
+        )
+        db.add(commitment)
+
+        pool.filled_kg += quantity_kg
+        pool.updated_at = datetime.utcnow()
+
+        offering.available_quantity_kg -= quantity_kg
+        offering.reserved_quantity_kg += quantity_kg
+        if offering.available_quantity_kg <= 0:
+            offering.status = "FULLY_RESERVED"
+        else:
+            offering.status = "PARTIALLY_SOLD"
+        offering.updated_at = datetime.utcnow()
+
+        # Auto-confirm check
+        if pool.fill_pct >= POOL_AUTO_CONFIRM_PCT:
+            pool.status = "CONFIRMED"
+            pool.confirmed_at = datetime.utcnow()
+            for c in pool.commitments:
+                if c.status == "COMMITTED":
+                    c.status = "PAYMENT_PENDING"
+                    c.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(commitment)
+        db.refresh(pool)
+
+        coop = db.query(Organization).filter_by(id=offering.cooperative_id).first()
+
+        status_msg = (
+            f"Committed {quantity_kg} kg from container {offering.container_sscc} "
+            f"to the {region} pool (shipping via {port}) "
+            f"at ${offering.price_per_kg}/kg (total ${total_amount:,.2f}). "
+            f"Pool is now {pool.fill_pct}% full."
+        )
+        if pool.status == "CONFIRMED":
+            status_msg += " Pool confirmed for shipment! Payment instructions will follow."
+
+        return (
+            status_msg,
+            {
+                "commitment_id": commitment.id,
+                "pool_id": pool.id,
+                "destination_region": region,
+                "destination_port": port,
+                "container_sscc": offering.container_sscc,
+                "cooperative": coop.name if coop else "Unknown",
+                "quantity_kg": quantity_kg,
+                "price_per_kg": offering.price_per_kg,
+                "total_amount": total_amount,
+                "pool_fill_pct": pool.fill_pct,
+                "pool_status": pool.status,
+            },
+        )
+
+    def _list_my_commitments(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """List the buyer's own pool commitments."""
+        from database.models import ContainerPool, BuyerCommitment, ContainerOffering, Organization
+
+        commitments = (
+            db.query(BuyerCommitment)
+            .filter(BuyerCommitment.buyer_id == user_id)
+            .order_by(BuyerCommitment.created_at.desc())
+            .limit(20)
+            .all()
+        )
+
+        if not commitments:
+            return ("You have no pool commitments yet.", {"commitments": [], "count": 0})
+
+        items = []
+        for c in commitments:
+            pool = db.query(ContainerPool).filter_by(id=c.pool_id).first()
+            offering = db.query(ContainerOffering).filter_by(id=pool.container_offering_id).first() if pool else None
+            coop = db.query(Organization).filter_by(id=offering.cooperative_id).first() if offering else None
+            items.append({
+                "commitment_id": c.id,
+                "pool_id": c.pool_id,
+                "container_sscc": offering.container_sscc if offering else None,
+                "cooperative": coop.name if coop else "Unknown",
+                "variety": offering.variety if offering else None,
+                "quantity_kg": c.quantity_kg,
+                "unit_price": c.unit_price,
+                "total_amount": c.total_amount,
+                "destination_region": pool.destination_region if pool else None,
+                "destination_port": pool.destination_port if pool else None,
+                "pool_fill_pct": pool.fill_pct if pool else 0,
+                "pool_status": pool.status if pool else "UNKNOWN",
+                "commitment_status": c.status,
+                "delivery_country": c.delivery_country,
+                "delivery_city": c.delivery_city,
+            })
+
+        msg = f"You have {len(items)} pool commitment(s)."
+        return (msg, {"commitments": items, "count": len(items)})
     
+    # ------------------------------------------------------------------
+    # Settlement / Payment tool implementations (Agent #9)
+    # ------------------------------------------------------------------
+
+    def _confirm_payment(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Buyer confirms they made a bank transfer for a commitment or
+        acceptance.  Records settlement on-chain.
+        """
+        from database.models import (
+            BuyerCommitment, ContainerPool, ContainerOffering,
+            RFQAcceptance, RFQOffer, UserIdentity, Organization,
+        )
+        from datetime import datetime
+
+        commitment_id = args.get("commitment_id")
+        acceptance_number = args.get("acceptance_number")
+        payment_reference = args.get("payment_reference")
+
+        if commitment_id:
+            c = db.query(BuyerCommitment).filter_by(id=int(commitment_id)).first()
+            if not c:
+                return ("Commitment not found.", {"error": "not_found"})
+            if c.buyer_id != user_id:
+                return ("This is not your commitment.", {"error": "forbidden"})
+            if c.status == "PAID":
+                return ("Already paid.", {"error": "already_paid"})
+
+            pool = db.query(ContainerPool).filter_by(id=c.pool_id).first()
+            offering = (
+                db.query(ContainerOffering)
+                .filter_by(id=pool.container_offering_id)
+                .first()
+                if pool else None
+            )
+            coop = (
+                db.query(Organization).filter_by(id=offering.cooperative_id).first()
+                if offering else None
+            )
+
+            # On-chain settlement
+            settlement_result = None
+            if coop and getattr(coop, "wallet_address", None):
+                try:
+                    from blockchain.settlement_manager import SettlementManager
+                    sm = SettlementManager()
+                    settlement_result = sm.record_commitment_settlement(
+                        commitment_id=c.id,
+                        recipient_address=coop.wallet_address,
+                        amount_usd=c.total_amount,
+                    )
+                    c.settlement_tx_hash = settlement_result["tx_hash"]
+                    c.settlement_recorded_at = datetime.utcnow()
+                    c.settlement_blockchain_confirmed = settlement_result["confirmed"]
+                except Exception as e:
+                    logger.error("Blockchain settlement failed: %s", e)
+
+            c.status = "PAID"
+            c.payment_method = "BANK_TRANSFER"
+            c.payment_confirmed_by_buyer_at = datetime.utcnow()
+            c.paid_at = datetime.utcnow()
+            if payment_reference:
+                c.payment_reference = payment_reference
+            c.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(c)
+
+            msg = (
+                f"Payment confirmed for commitment #{c.id} "
+                f"(${c.total_amount:,.2f})."
+            )
+            if settlement_result:
+                msg += f" Blockchain TX: {settlement_result['tx_hash'][:16]}..."
+
+            return (msg, {
+                "commitment_id": c.id,
+                "amount": c.total_amount,
+                "status": c.status,
+                "settlement_tx": c.settlement_tx_hash,
+            })
+
+        elif acceptance_number:
+            a = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number.upper()
+            ).first()
+            if not a:
+                return (f"Acceptance {acceptance_number} not found.", {"error": "not_found"})
+
+            from database.models import RFQ
+            rfq = db.query(RFQ).filter_by(id=a.rfq_id).first()
+            if rfq and rfq.buyer_id != user_id:
+                return ("This is not your acceptance.", {"error": "forbidden"})
+
+            if a.payment_status in ("CONFIRMED_BY_BUYER", "RECEIVED"):
+                return ("Payment already confirmed.", {"error": "already_paid"})
+
+            offer = db.query(RFQOffer).filter_by(id=a.offer_id).first()
+            coop = (
+                db.query(Organization).filter_by(id=offer.cooperative_id).first()
+                if offer else None
+            )
+            total_amount = a.quantity_accepted_kg * offer.price_per_kg if offer else 0
+
+            settlement_result = None
+            if coop and getattr(coop, "wallet_address", None):
+                try:
+                    from blockchain.settlement_manager import SettlementManager
+                    sm = SettlementManager()
+                    settlement_result = sm.record_settlement(
+                        acceptance_id=a.id,
+                        recipient_address=coop.wallet_address,
+                        amount_usd=total_amount,
+                    )
+                    a.settlement_tx_hash = settlement_result["tx_hash"]
+                    a.settlement_recorded_at = datetime.utcnow()
+                    a.settlement_blockchain_confirmed = settlement_result["confirmed"]
+                except Exception as e:
+                    logger.error("Blockchain settlement failed: %s", e)
+
+            a.payment_status = "CONFIRMED_BY_BUYER"
+            a.payment_method = "BANK_TRANSFER"
+            a.payment_confirmed_by_buyer_at = datetime.utcnow()
+            if payment_reference:
+                a.payment_receipt_url = payment_reference  # text ref
+            a.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(a)
+
+            msg = (
+                f"Payment confirmed for acceptance {a.acceptance_number} "
+                f"(${total_amount:,.2f})."
+            )
+            if settlement_result:
+                msg += f" Blockchain TX: {settlement_result['tx_hash'][:16]}..."
+
+            return (msg, {
+                "acceptance_number": a.acceptance_number,
+                "amount": total_amount,
+                "payment_status": a.payment_status,
+                "settlement_tx": a.settlement_tx_hash,
+            })
+
+        return (
+            "Please provide a commitment_id or acceptance_number.",
+            {"error": "missing_id"},
+        )
+
+    def _check_payment_status(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Check payment & blockchain settlement status."""
+        from database.models import (
+            BuyerCommitment, ContainerPool, ContainerOffering,
+            RFQAcceptance, RFQOffer, Organization,
+        )
+
+        commitment_id = args.get("commitment_id")
+        acceptance_number = args.get("acceptance_number")
+
+        if commitment_id:
+            c = db.query(BuyerCommitment).filter_by(id=int(commitment_id)).first()
+            if not c:
+                return ("Commitment not found.", {"error": "not_found"})
+            pool = db.query(ContainerPool).filter_by(id=c.pool_id).first()
+            offering = (
+                db.query(ContainerOffering)
+                .filter_by(id=pool.container_offering_id)
+                .first()
+                if pool else None
+            )
+            coop = (
+                db.query(Organization).filter_by(id=offering.cooperative_id).first()
+                if offering else None
+            )
+            msg = (
+                f"Commitment #{c.id}: {c.quantity_kg} kg, "
+                f"${c.total_amount:,.2f}\n"
+                f"Payment status: {c.status}\n"
+                f"Buyer confirmed: {'Yes' if c.payment_confirmed_by_buyer_at else 'No'}\n"
+                f"Coop confirmed: {'Yes' if c.payment_received_by_coop_at else 'No'}\n"
+                f"Blockchain TX: {c.settlement_tx_hash or 'Not yet'}\n"
+                f"Coop payout TX: {c.coop_payout_tx_hash or 'Not yet'}"
+            )
+            return (msg, {
+                "commitment_id": c.id,
+                "quantity_kg": c.quantity_kg,
+                "total_amount": c.total_amount,
+                "status": c.status,
+                "buyer_confirmed": c.payment_confirmed_by_buyer_at is not None,
+                "coop_confirmed": c.payment_received_by_coop_at is not None,
+                "settlement_tx": c.settlement_tx_hash,
+                "coop_payout_tx": c.coop_payout_tx_hash,
+                "cooperative": coop.name if coop else None,
+            })
+
+        elif acceptance_number:
+            a = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number.upper()
+            ).first()
+            if not a:
+                return (f"Acceptance {acceptance_number} not found.", {"error": "not_found"})
+            offer = db.query(RFQOffer).filter_by(id=a.offer_id).first()
+            coop = (
+                db.query(Organization).filter_by(id=offer.cooperative_id).first()
+                if offer else None
+            )
+            total = a.quantity_accepted_kg * offer.price_per_kg if offer else 0
+            msg = (
+                f"Acceptance {a.acceptance_number}: {a.quantity_accepted_kg} kg, "
+                f"${total:,.2f}\n"
+                f"Payment status: {a.payment_status}\n"
+                f"Buyer confirmed: {'Yes' if a.payment_confirmed_by_buyer_at else 'No'}\n"
+                f"Coop confirmed: {'Yes' if a.payment_received_by_coop_at else 'No'}\n"
+                f"Blockchain TX: {a.settlement_tx_hash or 'Not yet'}\n"
+                f"Coop payout TX: {a.coop_payout_tx_hash or 'Not yet'}"
+            )
+            return (msg, {
+                "acceptance_number": a.acceptance_number,
+                "quantity_kg": a.quantity_accepted_kg,
+                "total_amount": total,
+                "payment_status": a.payment_status,
+                "buyer_confirmed": a.payment_confirmed_by_buyer_at is not None,
+                "coop_confirmed": a.payment_received_by_coop_at is not None,
+                "settlement_tx": a.settlement_tx_hash,
+                "coop_payout_tx": a.coop_payout_tx_hash,
+                "cooperative": coop.name if coop else None,
+            })
+
+        return (
+            "Please provide a commitment_id or acceptance_number.",
+            {"error": "missing_id"},
+        )
+
+    def _record_cooperative_payout(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Admin records that WAGA forwarded funds to the cooperative’s
+        Ethiopian bank account. Records the payout on-chain.
+        """
+        from database.models import (
+            BuyerCommitment, ContainerPool, ContainerOffering,
+            RFQAcceptance, RFQOffer, UserIdentity, Organization,
+        )
+        from datetime import datetime
+
+        # Verify admin
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or user.role not in ("SYSTEM_ADMIN", "ADMIN"):
+            return ("Only admins can record cooperative payouts.", {"error": "forbidden"})
+
+        commitment_id = args.get("commitment_id")
+        acceptance_number = args.get("acceptance_number")
+
+        if commitment_id:
+            record_type = "commitment"
+            record = db.query(BuyerCommitment).filter_by(id=int(commitment_id)).first()
+            if not record:
+                return ("Commitment not found.", {"error": "not_found"})
+            pool = db.query(ContainerPool).filter_by(id=record.pool_id).first()
+            offering = (
+                db.query(ContainerOffering)
+                .filter_by(id=pool.container_offering_id)
+                .first()
+                if pool else None
+            )
+            coop = (
+                db.query(Organization).filter_by(id=offering.cooperative_id).first()
+                if offering else None
+            )
+            amount = record.total_amount
+            record_id = record.id
+
+        elif acceptance_number:
+            record_type = "acceptance"
+            record = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number.upper()
+            ).first()
+            if not record:
+                return (f"Acceptance {acceptance_number} not found.", {"error": "not_found"})
+            offer = db.query(RFQOffer).filter_by(id=record.offer_id).first()
+            coop = (
+                db.query(Organization).filter_by(id=offer.cooperative_id).first()
+                if offer else None
+            )
+            amount = record.quantity_accepted_kg * offer.price_per_kg if offer else 0
+            record_id = record.id
+        else:
+            return (
+                "Please provide a commitment_id or acceptance_number.",
+                {"error": "missing_id"},
+            )
+
+        if not coop or not getattr(coop, "wallet_address", None):
+            return (
+                f"Cooperative has no wallet address on file.",
+                {"error": "no_wallet"},
+            )
+
+        if record.coop_payout_tx_hash:
+            return (
+                f"Payout already recorded (TX: {record.coop_payout_tx_hash[:16]}...).",
+                {"error": "already_recorded"},
+            )
+
+        try:
+            from blockchain.settlement_manager import SettlementManager
+            sm = SettlementManager()
+            if record_type == "acceptance":
+                result = sm.record_cooperative_payout_for_acceptance(
+                    acceptance_id=record_id,
+                    recipient_address=coop.wallet_address,
+                    amount_usd=amount,
+                )
+            else:
+                result = sm.record_cooperative_payout_for_commitment(
+                    commitment_id=record_id,
+                    recipient_address=coop.wallet_address,
+                    amount_usd=amount,
+                )
+        except Exception as e:
+            logger.error("Cooperative payout TX failed: %s", e)
+            return (f"Blockchain transaction failed: {e}", {"error": "tx_failed"})
+
+        record.coop_payout_tx_hash = result["tx_hash"]
+        record.coop_payout_at = datetime.utcnow()
+        record.coop_payout_confirmed = result["confirmed"]
+        record.updated_at = datetime.utcnow()
+        db.commit()
+
+        msg = (
+            f"Cooperative payout recorded for {coop.name}: "
+            f"${amount:,.2f}. TX: {result['tx_hash'][:16]}... "
+            f"(block {result['block_number']})"
+        )
+        return (msg, {
+            "cooperative": coop.name,
+            "amount": amount,
+            "tx_hash": result["tx_hash"],
+            "block_number": result["block_number"],
+            "confirmed": result["confirmed"],
+        })
+
+    def _confirm_payment_received(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Cooperative confirms they received the buyer's bank transfer.
+        Updates acceptance to RECEIVED or commitment receipt timestamp.
+        """
+        from database.models import (
+            BuyerCommitment, ContainerPool, ContainerOffering,
+            RFQAcceptance, RFQOffer, UserIdentity, Organization,
+        )
+        from datetime import datetime
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found.", {"error": "user_not_found"})
+
+        commitment_id = args.get("commitment_id")
+        acceptance_number = args.get("acceptance_number")
+
+        if commitment_id:
+            c = db.query(BuyerCommitment).filter_by(id=int(commitment_id)).first()
+            if not c:
+                return ("Commitment not found.", {"error": "not_found"})
+            pool = db.query(ContainerPool).filter_by(id=c.pool_id).first()
+            offering = (
+                db.query(ContainerOffering)
+                .filter_by(id=pool.container_offering_id)
+                .first()
+                if pool else None
+            )
+            if not offering or user.organization_id != offering.cooperative_id:
+                return ("You are not the cooperative for this commitment.", {"error": "forbidden"})
+            if c.payment_received_by_coop_at:
+                return ("Receipt already confirmed.", {"error": "already_confirmed"})
+
+            c.payment_received_by_coop_at = datetime.utcnow()
+            c.updated_at = datetime.utcnow()
+            db.commit()
+
+            return (
+                f"Receipt confirmed for commitment #{c.id} "
+                f"(${c.total_amount:,.2f}). Shipment can proceed.",
+                {
+                    "commitment_id": c.id,
+                    "amount": c.total_amount,
+                    "status": c.status,
+                    "receipt_confirmed": True,
+                },
+            )
+
+        elif acceptance_number:
+            a = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number.upper()
+            ).first()
+            if not a:
+                return (f"Acceptance {acceptance_number} not found.", {"error": "not_found"})
+            offer = db.query(RFQOffer).filter_by(id=a.offer_id).first()
+            if not offer or user.organization_id != offer.cooperative_id:
+                return ("You are not the cooperative for this acceptance.", {"error": "forbidden"})
+            if a.payment_status == "RECEIVED":
+                return ("Receipt already confirmed.", {"error": "already_confirmed"})
+
+            a.payment_status = "RECEIVED"
+            a.payment_received_by_coop_at = datetime.utcnow()
+            a.payment_released_at = datetime.utcnow()
+            a.delivery_status = "PREPARING_SHIPMENT"
+            a.updated_at = datetime.utcnow()
+            db.commit()
+
+            total = a.quantity_accepted_kg * offer.price_per_kg
+            return (
+                f"Receipt confirmed for acceptance {a.acceptance_number} "
+                f"(${total:,.2f}). Delivery status → PREPARING_SHIPMENT.",
+                {
+                    "acceptance_number": a.acceptance_number,
+                    "amount": total,
+                    "payment_status": a.payment_status,
+                    "delivery_status": a.delivery_status,
+                    "receipt_confirmed": True,
+                },
+            )
+
+        return (
+            "Please provide a commitment_id or acceptance_number.",
+            {"error": "missing_id"},
+        )
+
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
         self._tools[name] = handler

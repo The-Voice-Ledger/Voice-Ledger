@@ -137,8 +137,10 @@ async def handle_set_pin_command(user_id: int, telegram_user_id: str) -> Dict[st
             'message': (
                 "🔒 Set up your 4-digit PIN\n\n"
                 "This PIN will allow you to log into the Voice Ledger web dashboard.\n\n"
-                "📌 Please enter exactly 4 digits (e.g., 1234):"
-            )
+                "📌 Please enter exactly 4 digits (e.g., 1234):\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
         
     except Exception as e:
@@ -199,8 +201,10 @@ async def handle_change_pin_command(user_id: int, telegram_user_id: str) -> Dict
         return {
             'message': (
                 "🔒 Change your PIN\n\n"
-                "First, please enter your current PIN:"
-            )
+                "First, please enter your current PIN:\n\n"
+                "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+            ),
+            'parse_mode': 'HTML'
         }
         
     except Exception as e:
@@ -313,8 +317,10 @@ async def handle_pin_conversation(user_id: int, telegram_user_id: str, text: str
             return {
                 'message': (
                     "🔒 Confirm your PIN\n\n"
-                    "Please enter the same 4 digits again:"
-                )
+                    "Please enter the same 4 digits again:\n\n"
+                    "<i>(Note: Your PIN message will be deleted immediately for security.)</i>"
+                ),
+                'parse_mode': 'HTML'
             }
         
         # State: CONFIRM_NEW (confirm initial PIN)

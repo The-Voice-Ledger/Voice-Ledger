@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from database.models import (
     RFQAcceptance, RFQOffer, RFQ,
+    BuyerCommitment, ContainerPool, ContainerOffering,
     UserIdentity, Organization, SessionLocal
 )
 from blockchain.settlement_manager import SettlementManager
@@ -551,5 +552,294 @@ async def handle_dispute_payment(
         return {
             'message': f"❌ Error processing dispute: {str(e)}"
         }
+    finally:
+        db.close()
+
+
+# ======================================================================
+#  Pool-commitment payment handlers
+# ======================================================================
+
+async def handle_confirm_pool_payment(
+    user_id: int,
+    commitment_id: int,
+    photo_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Buyer confirms bank transfer for a pool commitment.
+
+    Usage (Telegram): /confirm_pool_payment <commitment_id> [photo]
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+        if not user:
+            return {"message": "❌ User not found. Please /register first."}
+
+        commitment = db.query(BuyerCommitment).filter_by(id=commitment_id).first()
+        if not commitment:
+            return {"message": f"❌ Commitment #{commitment_id} not found."}
+
+        if commitment.buyer_id != user.id:
+            return {"message": "❌ You are not the buyer for this commitment."}
+
+        if commitment.status == "PAID":
+            return {"message": f"✅ Commitment #{commitment_id} is already paid."}
+
+        if commitment.status not in ("COMMITTED", "PAYMENT_PENDING"):
+            return {
+                "message": (
+                    f"❌ Cannot confirm payment — commitment status is "
+                    f"{commitment.status}."
+                )
+            }
+
+        pool = db.query(ContainerPool).filter_by(id=commitment.pool_id).first()
+        offering = (
+            db.query(ContainerOffering)
+            .filter_by(id=pool.container_offering_id)
+            .first()
+            if pool
+            else None
+        )
+        coop = (
+            db.query(Organization)
+            .filter_by(id=offering.cooperative_id)
+            .first()
+            if offering
+            else None
+        )
+
+        # Record settlement on blockchain
+        settlement_result = None
+        if coop and coop.wallet_address:
+            try:
+                sm = SettlementManager()
+                settlement_result = sm.record_commitment_settlement(
+                    commitment_id=commitment.id,
+                    recipient_address=coop.wallet_address,
+                    amount_usd=commitment.total_amount,
+                    payment_method="BANK_TRANSFER",
+                )
+                commitment.settlement_tx_hash = settlement_result["tx_hash"]
+                commitment.settlement_recorded_at = datetime.utcnow()
+                commitment.settlement_blockchain_confirmed = settlement_result[
+                    "confirmed"
+                ]
+                logger.info(
+                    "Pool settlement on-chain: commitment=%s tx=%s",
+                    commitment.id,
+                    settlement_result["tx_hash"],
+                )
+            except Exception as e:
+                logger.error(f"Blockchain settlement failed for commitment: {e}")
+
+        commitment.status = "PAID"
+        commitment.payment_method = "BANK_TRANSFER"
+        commitment.payment_receipt_url = photo_url
+        commitment.payment_confirmed_by_buyer_at = datetime.utcnow()
+        commitment.paid_at = datetime.utcnow()
+        commitment.updated_at = datetime.utcnow()
+
+        db.commit()
+
+        msg = (
+            f"✅ *Payment Confirmed*\n\n"
+            f"Commitment: #{commitment.id}\n"
+            f"Amount: ${commitment.total_amount:,.2f}\n"
+            f"Cooperative: {coop.name if coop else 'Unknown'}\n"
+        )
+        if settlement_result:
+            msg += (
+                f"\n🔗 *Blockchain Receipt*\n"
+                f"TX: `{settlement_result['tx_hash'][:16]}...`\n"
+                f"Block: {settlement_result['block_number']}\n"
+            )
+
+        return {"message": msg, "parse_mode": "Markdown"}
+
+    except Exception as e:
+        logger.error(f"Error in handle_confirm_pool_payment: {e}", exc_info=True)
+        return {"message": f"❌ Error: {str(e)}"}
+    finally:
+        db.close()
+
+
+async def handle_confirm_pool_receipt(
+    user_id: int,
+    commitment_id: int,
+) -> Dict[str, Any]:
+    """Cooperative confirms pool payment received in bank."""
+    db = SessionLocal()
+    try:
+        user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+        if not user:
+            return {"message": "❌ User not found."}
+
+        commitment = db.query(BuyerCommitment).filter_by(id=commitment_id).first()
+        if not commitment:
+            return {"message": f"❌ Commitment #{commitment_id} not found."}
+
+        pool = db.query(ContainerPool).filter_by(id=commitment.pool_id).first()
+        offering = (
+            db.query(ContainerOffering)
+            .filter_by(id=pool.container_offering_id)
+            .first()
+            if pool
+            else None
+        )
+        if not offering or user.organization_id != offering.cooperative_id:
+            return {"message": "❌ Access denied — not your cooperative's container."}
+
+        if commitment.status != "PAID":
+            return {
+                "message": (
+                    f"⏳ Buyer has not yet confirmed payment "
+                    f"(status: {commitment.status})."
+                )
+            }
+
+        commitment.payment_received_by_coop_at = datetime.utcnow()
+        commitment.updated_at = datetime.utcnow()
+        db.commit()
+
+        return {
+            "message": (
+                f"✅ *Receipt Confirmed*\n\n"
+                f"Commitment #{commitment.id} — "
+                f"${commitment.total_amount:,.2f}\n"
+                f"Shipment preparation can begin."
+            ),
+            "parse_mode": "Markdown",
+        }
+
+    except Exception as e:
+        logger.error(f"Error in handle_confirm_pool_receipt: {e}", exc_info=True)
+        return {"message": f"❌ Error: {str(e)}"}
+    finally:
+        db.close()
+
+
+# ======================================================================
+#  Cooperative payout recording  (admin / internal)
+# ======================================================================
+
+async def handle_record_cooperative_payout(
+    record_id: int,
+    record_type: str = "acceptance",
+    admin_user_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Record on-chain that WAGA forwarded funds to the cooperative's
+    Ethiopian bank account.
+
+    Called by an admin (via Telegram command, web agent, or internal tool).
+    Blockchain TX proves the cooperative was paid.
+
+    Args:
+        record_id:   RFQAcceptance.id   (record_type="acceptance")
+                     BuyerCommitment.id  (record_type="commitment")
+        record_type: "acceptance" or "commitment"
+        admin_user_id: Optional admin who triggered the payout
+    """
+    db = SessionLocal()
+    try:
+        if record_type == "acceptance":
+            record = db.query(RFQAcceptance).filter_by(id=record_id).first()
+            if not record:
+                return {"message": f"❌ Acceptance #{record_id} not found."}
+            # Determine cooperative from offer
+            offer = db.query(RFQOffer).filter_by(id=record.offer_id).first()
+            coop = (
+                db.query(Organization).filter_by(id=offer.cooperative_id).first()
+                if offer
+                else None
+            )
+            amount = record.quantity_accepted_kg * offer.price_per_kg if offer else 0
+        else:
+            record = db.query(BuyerCommitment).filter_by(id=record_id).first()
+            if not record:
+                return {"message": f"❌ Commitment #{record_id} not found."}
+            pool = db.query(ContainerPool).filter_by(id=record.pool_id).first()
+            offering = (
+                db.query(ContainerOffering)
+                .filter_by(id=pool.container_offering_id)
+                .first()
+                if pool
+                else None
+            )
+            coop = (
+                db.query(Organization).filter_by(id=offering.cooperative_id).first()
+                if offering
+                else None
+            )
+            amount = record.total_amount
+
+        if not coop:
+            return {"message": "❌ Could not resolve cooperative."}
+
+        if not coop.wallet_address:
+            return {
+                "message": (
+                    f"❌ Cooperative *{coop.name}* has no wallet address. "
+                    f"Please update their profile first."
+                ),
+                "parse_mode": "Markdown",
+            }
+
+        # Already recorded?
+        if record.coop_payout_tx_hash:
+            return {
+                "message": (
+                    f"ℹ️ Payout already recorded.\n"
+                    f"TX: `{record.coop_payout_tx_hash[:16]}...`"
+                ),
+                "parse_mode": "Markdown",
+            }
+
+        # Record on blockchain
+        sm = SettlementManager()
+        if record_type == "acceptance":
+            result = sm.record_cooperative_payout_for_acceptance(
+                acceptance_id=record_id,
+                recipient_address=coop.wallet_address,
+                amount_usd=amount,
+            )
+        else:
+            result = sm.record_cooperative_payout_for_commitment(
+                commitment_id=record_id,
+                recipient_address=coop.wallet_address,
+                amount_usd=amount,
+            )
+
+        record.coop_payout_tx_hash = result["tx_hash"]
+        record.coop_payout_at = datetime.utcnow()
+        record.coop_payout_confirmed = result["confirmed"]
+        record.updated_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(
+            "Cooperative payout recorded: %s #%s → %s  tx=%s",
+            record_type,
+            record_id,
+            coop.name,
+            result["tx_hash"],
+        )
+
+        return {
+            "message": (
+                f"✅ *Cooperative Payout Recorded*\n\n"
+                f"Cooperative: {coop.name}\n"
+                f"Amount: ${amount:,.2f}\n"
+                f"TX: `{result['tx_hash'][:16]}...`\n"
+                f"Block: {result['block_number']}\n\n"
+                f"The cooperative's payment is now permanently recorded on-chain."
+            ),
+            "parse_mode": "Markdown",
+        }
+
+    except Exception as e:
+        logger.error(f"Error recording cooperative payout: {e}", exc_info=True)
+        return {"message": f"❌ Error: {str(e)}"}
     finally:
         db.close()

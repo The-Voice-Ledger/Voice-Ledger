@@ -26,7 +26,8 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Header
+from sqlalchemy.orm import joinedload, subqueryload
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -205,10 +206,10 @@ def broadcast_rfq_to_cooperatives(rfq: RFQ, db: Session):
         # Only broadcast if relevance > 0.5
         if relevance_score >= 0.5:
             broadcast = RFQBroadcast(
-                rfq_id=rfq.id,
-                cooperative_id=coop.id,
+                rfq_id=int(rfq.id),
+                cooperative_id=int(coop.id),
                 broadcast_reason="SMART_MATCH",
-                relevance_score=relevance_score,
+                relevance_score=float(relevance_score),
                 notified_at=datetime.utcnow()
             )
             db.add(broadcast)
@@ -288,7 +289,12 @@ def create_rfq(
     db.refresh(rfq)
     
     # Smart broadcast to cooperatives
-    broadcast_rfq_to_cooperatives(rfq, db)
+    try:
+        broadcast_rfq_to_cooperatives(rfq, db)
+    except Exception as e:
+        logger.error(f"Failed to broadcast RFQ {rfq.id}: {e}")
+        # We don't want to fail the RFQ creation if broadcast fails
+        pass
     
     # Count how many cooperatives were notified
     broadcast_count = db.query(RFQBroadcast).filter_by(rfq_id=rfq.id).count()
@@ -337,7 +343,11 @@ def list_rfqs(
     - variety: Coffee variety
     - user_id: Buyer's user ID
     """
-    query = db.query(RFQ)
+    # Eager load relationships to avoid N+1 queries
+    query = db.query(RFQ).options(
+        joinedload(RFQ.buyer).joinedload(UserIdentity.organization),
+        subqueryload(RFQ.offers)
+    )
     
     if status:
         query = query.filter(RFQ.status == status)
@@ -350,11 +360,8 @@ def list_rfqs(
     
     results = []
     for rfq in rfqs:
-        buyer_org = db.query(Organization).filter_by(
-            id=db.query(UserIdentity).filter_by(id=rfq.buyer_id).first().organization_id
-        ).first()
-        
-        offer_count = db.query(RFQOffer).filter_by(rfq_id=rfq.id).count()
+        buyer_org = rfq.buyer.organization if rfq.buyer and rfq.buyer.organization else None
+        offer_count = len(rfq.offers)
         
         results.append(RFQResponse(
             id=rfq.id,
@@ -461,16 +468,28 @@ def create_offer(
 @router.get("/rfq/{rfq_id}/offers", response_model=List[OfferResponse])
 def get_rfq_offers(
     rfq_id: int,
-    user_id: int = Query(..., description="User ID (buyer to view their RFQ offers)"),
+    user_id: Optional[int] = Query(None, description="User ID (fallback for non-JWT clients)"),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     View offers for an RFQ
     
     **Access:** Buyer who created the RFQ
+    Auth: JWT Authorization header (preferred) or user_id query param.
     """
-    # Get user
-    user = get_current_user(user_id, db)
+    # Resolve user from JWT or query param
+    resolved_id = user_id
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            from voice.web.auth import verify_jwt_token
+            payload = verify_jwt_token(authorization.replace("Bearer ", ""))
+            resolved_id = payload.get("user_id", resolved_id)
+        except Exception:
+            pass
+    if not resolved_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = get_current_user(resolved_id, db)
     
     # Get RFQ
     rfq = db.query(RFQ).filter_by(id=rfq_id).first()

@@ -14,6 +14,7 @@ Lab 17: Bilingual Voice UI - Track 2
 import os
 import logging
 import httpx
+import base64
 from typing import Optional, Dict, Literal
 from pathlib import Path
 from openai import OpenAI
@@ -22,6 +23,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+# Import TTS cache
+try:
+    from voice.cache.tts_cache import get_cached_tts_audio, set_cached_tts_audio
+    TTS_CACHE_AVAILABLE = True
+    logger.info("TTS cache module loaded successfully")
+except ImportError as e:
+    logger.warning(f"TTS cache not available: {e}")
+    TTS_CACHE_AVAILABLE = False
 
 # OpenAI client
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -62,11 +72,24 @@ class TTSProvider:
         Raises:
             Exception: If TTS fails
         """
+        # Check cache first
+        if TTS_CACHE_AVAILABLE:
+            cached_audio = get_cached_tts_audio(text, language, voice)
+            if cached_audio:
+                logger.info(f"TTS cache HIT for text: {text[:50]}...")
+                return cached_audio
+            else:
+                logger.info(f"TTS cache MISS for text: {text[:50]}...")
+        
         # Generate new audio
         if language == 'am':
             audio = await TTSProvider._addis_ai_tts(text, voice)
         else:
             audio = await TTSProvider._openai_tts(text, voice, output_format)
+        
+        # Cache the generated audio
+        if TTS_CACHE_AVAILABLE and audio:
+            set_cached_tts_audio(text, language, audio, voice)
             
         return audio
     
@@ -135,7 +158,15 @@ class TTSProvider:
                 )
                 response.raise_for_status()
                 
-                audio_bytes = response.content
+                # Parse JSON response and decode base64 audio
+                response_data = response.json()
+                audio_base64 = response_data.get("audio")
+                
+                if not audio_base64:
+                    raise Exception("No audio field in Addis AI response")
+                
+                # Decode base64 to get actual audio bytes
+                audio_bytes = base64.b64decode(audio_base64)
                 logger.info(f"Generated {len(audio_bytes)} bytes of Amharic audio")
                 return audio_bytes
                 

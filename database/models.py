@@ -605,6 +605,24 @@ class RFQAcceptance(Base):
     payment_status = Column(String(20), default='PENDING', index=True)
     delivery_status = Column(String(20), default='PENDING', index=True)
     
+    # Payment coordination
+    payment_method = Column(String(30), nullable=True)            # BANK_TRANSFER
+    payment_receipt_url = Column(String(500), nullable=True)      # Photo of bank receipt
+    payment_confirmed_by_buyer_at = Column(DateTime, nullable=True)
+    payment_received_by_coop_at = Column(DateTime, nullable=True)
+    payment_dispute_reason = Column(Text, nullable=True)
+    payment_disputed_at = Column(DateTime, nullable=True)
+
+    # Blockchain settlement — buyer payment leg
+    settlement_tx_hash = Column(String(66), nullable=True)
+    settlement_recorded_at = Column(DateTime, nullable=True)
+    settlement_blockchain_confirmed = Column(Boolean, default=False)
+
+    # Blockchain settlement — cooperative payout leg
+    coop_payout_tx_hash = Column(String(66), nullable=True)
+    coop_payout_at = Column(DateTime, nullable=True)
+    coop_payout_confirmed = Column(Boolean, default=False)
+
     # Metadata
     accepted_at = Column(DateTime, default=datetime.utcnow)
     delivered_at = Column(DateTime)
@@ -637,6 +655,179 @@ class RFQBroadcast(Base):
     # Relationships
     rfq = relationship("RFQ", back_populates="broadcasts")
     cooperative = relationship("Organization", foreign_keys=[cooperative_id])
+
+
+# ======================================================================
+# Container Pool & Buyer Commitment  (Phase 4.6 - Shared Container Buying)
+# ======================================================================
+
+# Port-region mapping: buyer country  →  destination port  →  pool region
+REGION_PORT_MAP = {
+    # Benelux
+    "NL": ("Rotterdam", "Benelux"),
+    "BE": ("Rotterdam", "Benelux"),
+    "LU": ("Rotterdam", "Benelux"),
+    # DACH
+    "DE": ("Hamburg", "DACH"),
+    "AT": ("Hamburg", "DACH"),
+    "CH": ("Hamburg", "DACH"),
+    # Mediterranean
+    "FR": ("Marseille", "Mediterranean"),
+    "ES": ("Marseille", "Mediterranean"),
+    "PT": ("Marseille", "Mediterranean"),
+    "IT": ("Marseille", "Mediterranean"),
+    "GR": ("Marseille", "Mediterranean"),
+    # Nordic
+    "DK": ("Gothenburg", "Nordic"),
+    "SE": ("Gothenburg", "Nordic"),
+    "NO": ("Gothenburg", "Nordic"),
+    "FI": ("Gothenburg", "Nordic"),
+    "IS": ("Gothenburg", "Nordic"),
+    # British Isles
+    "GB": ("Felixstowe", "British Isles"),
+    "IE": ("Felixstowe", "British Isles"),
+    # Eastern Europe
+    "PL": ("Gdansk", "Eastern Europe"),
+    "CZ": ("Hamburg", "DACH"),
+    "RO": ("Constanta", "Eastern Europe"),
+    "HU": ("Hamburg", "DACH"),
+    # North America
+    "US": ("New York", "North America"),
+    "CA": ("Montreal", "North America"),
+    # East Asia
+    "JP": ("Yokohama", "East Asia"),
+    "KR": ("Busan", "East Asia"),
+    "CN": ("Shanghai", "East Asia"),
+    # Middle East
+    "AE": ("Dubai", "Middle East"),
+    "SA": ("Jeddah", "Middle East"),
+}
+
+# Default fill thresholds
+POOL_AUTO_CONFIRM_PCT = 80   # confirm shipment at 80%
+POOL_MIN_SHIP_PCT = 60       # ship anyway at deadline if ≥ 60%
+
+
+class ContainerPool(Base):
+    """
+    Demand-side aggregation pool for shared container buying.
+
+    Multiple buyers from the same destination region can commit quantities
+    into a pool until it reaches the fill threshold and triggers shipment.
+    """
+    __tablename__ = "container_pools"
+
+    id = Column(Integer, primary_key=True)
+
+    # Supply side
+    container_offering_id = Column(
+        Integer, ForeignKey("container_offerings.id"), nullable=False, index=True
+    )
+
+    # Destination
+    destination_region = Column(String(50), nullable=False, index=True)   # "Benelux", "DACH", …
+    destination_port = Column(String(100), nullable=False)                # "Rotterdam", "Hamburg", …
+
+    # Quantity tracking
+    fill_target_kg = Column(Float, nullable=False)          # usually = offering.total_quantity_kg
+    filled_kg = Column(Float, nullable=False, default=0)    # sum of committed quantities
+
+    # Status: FILLING → CONFIRMED → SHIPPED → DELIVERED | CANCELLED
+    status = Column(String(20), default="FILLING", nullable=False, index=True)
+
+    # Deadline -- pool ships when full OR when deadline is reached (if ≥ min %)
+    deadline = Column(DateTime, nullable=True)
+
+    # Logistics
+    estimated_departure = Column(DateTime, nullable=True)
+    estimated_arrival = Column(DateTime, nullable=True)
+    shipping_reference = Column(String(100), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    confirmed_at = Column(DateTime, nullable=True)
+    shipped_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    container_offering = relationship("ContainerOffering", foreign_keys=[container_offering_id])
+    commitments = relationship("BuyerCommitment", back_populates="pool", order_by="BuyerCommitment.created_at")
+
+    @property
+    def fill_pct(self) -> float:
+        if self.fill_target_kg == 0:
+            return 0.0
+        return round(self.filled_kg / self.fill_target_kg * 100, 1)
+
+    @property
+    def remaining_kg(self) -> float:
+        return max(0, self.fill_target_kg - self.filled_kg)
+
+    @property
+    def buyer_count(self) -> int:
+        return len(self.commitments) if self.commitments else 0
+
+
+class BuyerCommitment(Base):
+    """
+    A single buyer's fractional commitment within a container pool.
+    """
+    __tablename__ = "buyer_commitments"
+
+    id = Column(Integer, primary_key=True)
+
+    pool_id = Column(
+        Integer, ForeignKey("container_pools.id"), nullable=False, index=True
+    )
+    buyer_id = Column(
+        Integer, ForeignKey("user_identities.id"), nullable=False, index=True
+    )
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id"), nullable=True, index=True
+    )
+
+    # Commitment details
+    quantity_kg = Column(Float, nullable=False)
+    unit_price = Column(Float, nullable=False)          # $/kg at time of commitment
+    total_amount = Column(Float, nullable=False)         # quantity * unit_price
+    currency = Column(String(3), default="USD")
+
+    # Delivery
+    delivery_country = Column(String(2), nullable=True)  # ISO 3166-1 alpha-2
+    delivery_city = Column(String(200), nullable=True)
+    delivery_address = Column(Text, nullable=True)
+
+    # Status: COMMITTED → PAYMENT_PENDING → PAID → IN_TRANSIT → DELIVERED | CANCELLED
+    status = Column(String(20), default="COMMITTED", nullable=False, index=True)
+
+    # Payment tracking
+    payment_reference = Column(String(100), nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    payment_method = Column(String(30), nullable=True)            # BANK_TRANSFER
+    payment_receipt_url = Column(String(500), nullable=True)      # Photo of bank receipt
+    payment_confirmed_by_buyer_at = Column(DateTime, nullable=True)
+    payment_received_by_coop_at = Column(DateTime, nullable=True)
+    payment_dispute_reason = Column(Text, nullable=True)
+    payment_disputed_at = Column(DateTime, nullable=True)
+
+    # Blockchain settlement — buyer payment leg
+    settlement_tx_hash = Column(String(66), nullable=True)
+    settlement_recorded_at = Column(DateTime, nullable=True)
+    settlement_blockchain_confirmed = Column(Boolean, default=False)
+
+    # Blockchain settlement — cooperative payout leg
+    coop_payout_tx_hash = Column(String(66), nullable=True)
+    coop_payout_at = Column(DateTime, nullable=True)
+    coop_payout_confirmed = Column(Boolean, default=False)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    pool = relationship("ContainerPool", back_populates="commitments")
+    buyer = relationship("UserIdentity", foreign_keys=[buyer_id])
+    organization = relationship("Organization", foreign_keys=[organization_id])
 
 # Database connection
 engine = create_engine(DATABASE_URL, echo=True)

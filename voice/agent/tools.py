@@ -906,6 +906,289 @@ VERIFY_BATCH_HASH = {
 }
 
 
+# ===========================================================================
+# CONTAINER MARKETPLACE TOOLS (Agent #3b — fractional container sales)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: browse_containers  (READ — list available containers)
+# ---------------------------------------------------------------------------
+BROWSE_CONTAINERS = {
+    "type": "function",
+    "function": {
+        "name": "browse_containers",
+        "description": (
+            "Browse containers available for fractional purchase. "
+            "Cooperatives list full shipping containers; buyers purchase portions. "
+            "Use when user asks 'show containers', 'available containers', "
+            "'what can I buy', 'container marketplace', 'browse lots'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "variety": {
+                    "type": "string",
+                    "description": "Filter by coffee variety",
+                },
+                "min_quantity_kg": {
+                    "type": "number",
+                    "description": "Minimum available quantity in kg",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 10)",
+                    "default": 10,
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: purchase_container  (WRITE — buyer buys a portion of a container)
+# ---------------------------------------------------------------------------
+PURCHASE_CONTAINER = {
+    "type": "function",
+    "function": {
+        "name": "purchase_container",
+        "description": (
+            "Purchase a partial quantity from a container offering. "
+            "Only BUYER role users can purchase. "
+            "Use when buyer says 'buy from container', 'purchase 500kg', "
+            "'I want some from that container'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_id": {
+                    "type": "integer",
+                    "description": "Container offering ID",
+                },
+                "quantity_kg": {
+                    "type": "number",
+                    "description": "Quantity to purchase in kilograms",
+                },
+                "payment_terms": {
+                    "type": "string",
+                    "description": "Payment terms: NET_7, NET_30, CASH_ON_DELIVERY",
+                    "default": "Net 7 days",
+                },
+            },
+            "required": ["container_id", "quantity_kg"],
+        },
+    },
+}
+
+
+# Tool: browse_pools  (READ -- list active container pools with fill progress)
+# ──────────────────────────────────────────────────────────────────────────────
+BROWSE_POOLS = {
+    "type": "function",
+    "function": {
+        "name": "browse_pools",
+        "description": (
+            "Browse shared-container pools that buyers can commit fractional "
+            "quantities into. Pools aggregate demand by destination region so "
+            "SME roasters can co-purchase a full container."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "region": {
+                    "type": "string",
+                    "description": "Filter by destination region (Benelux, DACH, Nordic, Mediterranean, etc.)",
+                },
+                "container_offering_id": {
+                    "type": "integer",
+                    "description": "Filter pools for a specific container offering",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+# Tool: commit_to_pool  (WRITE -- buyer commits a fractional qty to a pool)
+# ──────────────────────────────────────────────────────────────────────────────
+COMMIT_TO_POOL = {
+    "type": "function",
+    "function": {
+        "name": "commit_to_pool",
+        "description": (
+            "Commit a fractional quantity from a container into a region-based "
+            "pool. The system auto-assigns the buyer to the right pool based on "
+            "their delivery country, and auto-confirms shipment when the pool "
+            "reaches 80 percent fill."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_offering_id": {
+                    "type": "integer",
+                    "description": "ID of the container offering to buy from",
+                },
+                "quantity_kg": {
+                    "type": "number",
+                    "description": "Kilograms to commit (fractional purchase)",
+                },
+                "delivery_country": {
+                    "type": "string",
+                    "description": "ISO 3166-1 alpha-2 country code (e.g. DE, FR, NL)",
+                },
+                "delivery_city": {
+                    "type": "string",
+                    "description": "City name for last-mile delivery",
+                },
+            },
+            "required": ["container_offering_id", "quantity_kg"],
+        },
+    },
+}
+
+# Tool: list_my_commitments  (READ -- buyer views their own commitments)
+# ──────────────────────────────────────────────────────────────────────────────
+LIST_MY_COMMITMENTS = {
+    "type": "function",
+    "function": {
+        "name": "list_my_commitments",
+        "description": (
+            "List the authenticated buyer's own pool commitments, showing "
+            "quantity, price, pool fill progress, and delivery status."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
+
+# ===========================================================================
+# Settlement / Payment tools (Agent #8)
+# ===========================================================================
+
+# Tool: confirm_payment  (WRITE — buyer confirms bank transfer)
+# ──────────────────────────────────────────────────────────────────────────────
+CONFIRM_PAYMENT = {
+    "type": "function",
+    "function": {
+        "name": "confirm_payment",
+        "description": (
+            "Buyer confirms they made a bank transfer for a pool commitment "
+            "or RFQ acceptance.  Records settlement on-chain as proof of "
+            "payment.  Provide either commitment_id (pool purchase) or "
+            "acceptance_number (RFQ purchase)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "commitment_id": {
+                    "type": "integer",
+                    "description": "Pool commitment ID (for pool purchases)",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number like ACC-000001 (for RFQ purchases)",
+                },
+                "payment_reference": {
+                    "type": "string",
+                    "description": "Bank transfer reference (optional)",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+# Tool: check_payment_status  (READ — check payment + settlement status)
+# ──────────────────────────────────────────────────────────────────────────────
+CHECK_PAYMENT_STATUS = {
+    "type": "function",
+    "function": {
+        "name": "check_payment_status",
+        "description": (
+            "Check the payment and blockchain settlement status for a pool "
+            "commitment or RFQ acceptance.  Shows buyer confirmation, "
+            "cooperative confirmation, and on-chain transaction hashes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "commitment_id": {
+                    "type": "integer",
+                    "description": "Pool commitment ID",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number like ACC-000001",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+# Tool: record_cooperative_payout  (WRITE — admin records coop payout on-chain)
+# ──────────────────────────────────────────────────────────────────────────────
+RECORD_COOPERATIVE_PAYOUT = {
+    "type": "function",
+    "function": {
+        "name": "record_cooperative_payout",
+        "description": (
+            "Admin tool: record on-chain that WAGA has forwarded the buyer's "
+            "payment from the European bank account to the cooperative's "
+            "Ethiopian bank account.  Creates an immutable on-chain receipt "
+            "of the cooperative payout."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "commitment_id": {
+                    "type": "integer",
+                    "description": "Pool commitment ID (if pool purchase)",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number (if RFQ purchase)",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+# Tool: confirm_payment_received  (WRITE — cooperative confirms receipt)
+# ──────────────────────────────────────────────────────────────────────────────
+CONFIRM_PAYMENT_RECEIVED = {
+    "type": "function",
+    "function": {
+        "name": "confirm_payment_received",
+        "description": (
+            "Cooperative confirms they received the buyer's bank transfer in "
+            "their bank account.  Triggers shipment preparation.  Provide "
+            "either commitment_id or acceptance_number."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "commitment_id": {
+                    "type": "integer",
+                    "description": "Pool commitment ID",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number like ACC-000001",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Tool: request_don_attestation
@@ -1009,6 +1292,13 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     SUBMIT_OFFER,
     ACCEPT_OFFER,
     LIST_MY_OFFERS,
+    # Container marketplace (Agent #3b)
+    BROWSE_CONTAINERS,
+    PURCHASE_CONTAINER,
+    # Container pools - shared buying (Agent #3c)
+    BROWSE_POOLS,
+    COMMIT_TO_POOL,
+    LIST_MY_COMMITMENTS,
     # Compliance (Agent #4)
     CHECK_EUDR_COMPLIANCE,
     CHECK_MASS_BALANCE,
@@ -1028,4 +1318,9 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     REQUEST_DON_ATTESTATION,
     CHECK_DON_ATTESTATION,
     GET_DON_PROVENANCE_METRICS,
+    # Settlement / Payment (Agent #9)
+    CONFIRM_PAYMENT,
+    CHECK_PAYMENT_STATUS,
+    RECORD_COOPERATIVE_PAYOUT,
+    CONFIRM_PAYMENT_RECEIVED,
 ]

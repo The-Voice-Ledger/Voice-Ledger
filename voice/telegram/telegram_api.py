@@ -137,6 +137,11 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
             logger.info("Routing to photo handler (GPS verification)")
             return await handle_photo_message(update_data)
         
+        # Handle location sharing (farmer registration)
+        if 'location' in message:
+            logger.info("Routing to location handler")
+            return await handle_location_message(update_data)
+        
         # Handle voice messages
         if 'voice' in message:
             logger.info("Routing to voice handler")
@@ -189,6 +194,7 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Check if user is in registration flow
         from voice.telegram.register_handler import conversation_states, STATE_PHONE
+        from telegram import ReplyKeyboardRemove
         
         if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_PHONE:
             # User is in registration flow - store phone in conversation state
@@ -198,14 +204,14 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from voice.telegram.register_handler import handle_registration_text
             response = await handle_registration_text(user_id, phone_number)
             
-            # Send response
+            # Send response and dismiss the share-phone keyboard
             processor = get_processor()
             await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
                 message=response.get('message', '✅ Phone number received'),
                 parse_mode=response.get('parse_mode'),
-                inline_keyboard=response.get('inline_keyboard')
+                reply_markup=ReplyKeyboardRemove()
             )
             
             return {"ok": True, "message": "Phone processed in registration"}
@@ -232,6 +238,63 @@ async def handle_contact_shared(update_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Error handling contact: {e}", exc_info=True)
         return {"ok": True, "message": f"Error: {str(e)}"}
 
+
+
+async def handle_location_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle explicit location sharing from Telegram.
+    """
+    try:
+        message = update_data.get('message', {})
+        location = message.get('location', {})
+        user = message.get('from', {})
+        
+        user_id = user.get('id')
+        latitude = location.get('latitude')
+        longitude = location.get('longitude')
+        
+        if latitude is None or longitude is None:
+            logger.error("Location shared but coordinates missing")
+            return {"ok": True, "message": "Missing coordinates in location"}
+        
+        logger.info(f"User {user_id} shared location: {latitude}, {longitude}")
+        
+        # Check if user is in registration flow expecting a location
+        from voice.telegram.register_handler import (
+            conversation_states, 
+            STATE_SHARE_LOCATION,
+            handle_location_shared
+        )
+        from telegram import ReplyKeyboardRemove
+        
+        if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_SHARE_LOCATION:
+            # Process the shared location
+            response = await handle_location_shared(user_id, latitude, longitude)
+            
+            # Send response and dismiss the share-location keyboard
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response.get('message', '✅ Location received'),
+                parse_mode=response.get('parse_mode'),
+                reply_markup=ReplyKeyboardRemove()
+            )
+            
+            return {"ok": True, "message": "Location processed in registration"}
+        
+        # User shared location outside of expected state
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message="📍 Location received, but I wasn't expecting it right now. Use /register if you are trying to register."
+        )
+        return {"ok": True, "message": "Location received but ignored"}
+
+    except Exception as e:
+        logger.error(f"Error handling location: {e}", exc_info=True)
+        return {"ok": True, "message": f"Error: {str(e)}"}
 
 
 async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1387,7 +1450,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 last_name=last_name
             )
             
-            # Send response with optional inline keyboard
+            # Send response with optional keyboard (inline or reply/contact-share)
             if 'inline_keyboard' in response:
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -1401,6 +1464,32 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     },
                     timeout=30
                 )
+            elif 'reply_keyboard' in response:
+                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                keyboard_rows = [
+                    [
+                        {k: v for k, v in btn.items() if k != 'text'}
+                        | {'text': btn['text']}
+                        for btn in row
+                    ]
+                    for row in response['reply_keyboard']
+                ]
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': keyboard_rows,
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
+                    },
+                    timeout=30
+                )
             else:
                 await processor.send_notification(
                     channel_name='telegram',
@@ -1410,6 +1499,45 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
             
             return {"ok": True, "message": "Registration started"}
+
+        # Handle /set-pin command - for existing users without PIN
+        if text.startswith('/set-pin'):
+            from voice.telegram.pin_commands import handle_set_pin_command
+            
+            response = await handle_set_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN setup started"}
+
+        # Handle /change-pin command - change existing PIN
+        if text.startswith('/change-pin'):
+            from voice.telegram.pin_commands import handle_change_pin_command
+            
+            response = await handle_change_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN change started"}
+
+        # Handle /reset-pin command - admin reset (or self-reset for now)
+        if text.startswith('/reset-pin'):
+            from voice.telegram.pin_commands import handle_reset_pin_command
+            
+            response = await handle_reset_pin_command(int(user_id), user_id)
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            return {"ok": True, "message": "PIN reset successful"}
         
         # Handle /batches command - launch mini app
         if text.startswith('/batches'):
@@ -1492,14 +1620,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             # Send response with keyboard
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-            if 'keyboard' in response:
-                requests.post(
+            
+            if 'keyboard' in response or 'inline_keyboard' in response:
+                kb = response.get('inline_keyboard') or response.get('keyboard')
+                telegram_response = requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
-                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                        'reply_markup': {'inline_keyboard': kb}
                     },
                     timeout=30
                 )
@@ -1526,14 +1655,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             # Send response
             import requests
             bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-            if 'keyboard' in response:
+            
+            if 'keyboard' in response or 'inline_keyboard' in response:
+                kb = response.get('inline_keyboard') or response.get('keyboard')
                 requests.post(
                     f"https://api.telegram.org/bot{bot_token}/sendMessage",
                     json={
                         'chat_id': user_id,
                         'text': response['message'],
-                        'parse_mode': response.get('parse_mode', 'Markdown'),
-                        'reply_markup': {'inline_keyboard': response['keyboard']}
+                        'reply_markup': {'inline_keyboard': kb}
                     },
                     timeout=30
                 )
@@ -1563,7 +1693,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 user_id=user_id,
                 message=response['message'],
                 parse_mode=response.get('parse_mode', 'Markdown'),
-                reply_markup=response.get('keyboard')
+                reply_markup=response.get('inline_keyboard') or response.get('keyboard')
             )
             
             return {"ok": True, "message": "My RFQs sent"}
@@ -2309,15 +2439,50 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             
             return {"ok": True, "message": "RFQ response sent"}
+
+        # Check if user is in PIN management conversation
+        from voice.telegram.pin_commands import pin_conversation_states, handle_pin_conversation
+        
+        if int(user_id) in pin_conversation_states:
+            logger.info(f"User {user_id} in PIN session, routing to PIN handler")
+            
+            # Delete user's PIN message immediately (v1.9 - Blurring/Deletion)
+            await processor.delete_message(
+                channel_name='telegram',
+                user_id=user_id,
+                message_id=str(message['message_id'])
+            )
+            
+            response = await handle_pin_conversation(int(user_id), user_id, text)
+            
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode='HTML'
+            )
+            
+            return {"ok": True, "message": "PIN response processed"}
         
         # Check if user is in registration conversation
         from voice.telegram.register_handler import conversation_states, handle_registration_text
         
         if int(user_id) in conversation_states:
             logger.info(f"User {user_id} in registration conversation, routing to registration handler")
+            
+            # Delete message if it's a PIN input (states 7 or 8)
+            state_data = conversation_states[int(user_id)]
+            if state_data.get('state') in [7, 8]:  # STATE_SET_PIN, STATE_CONFIRM_PIN
+                logger.info(f"Deleting registration PIN message for user {user_id}")
+                await processor.delete_message(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message_id=str(message['message_id'])
+                )
+            
             response = await handle_registration_text(int(user_id), text)
             
-            # Send response with optional inline keyboard
+            # Send response with optional keyboard (inline or reply/contact-share)
             if 'inline_keyboard' in response:
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -2328,6 +2493,32 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         'text': response['message'],
                         'parse_mode': response.get('parse_mode', 'Markdown'),
                         'reply_markup': {'inline_keyboard': response['inline_keyboard']}
+                    },
+                    timeout=30
+                )
+            elif 'reply_keyboard' in response:
+                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                keyboard_rows = [
+                    [
+                        {k: v for k, v in btn.items() if k != 'text'}
+                        | {'text': btn['text']}
+                        for btn in row
+                    ]
+                    for row in response['reply_keyboard']
+                ]
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': user_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': keyboard_rows,
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
                     },
                     timeout=30
                 )
@@ -2697,21 +2888,51 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             message_id = callback_query['message']['message_id']
             chat_id = callback_query['message']['chat']['id']
             
-            payload = {
-                'chat_id': chat_id,
-                'message_id': message_id,
-                'text': response['message'],
-                'parse_mode': response.get('parse_mode', 'Markdown')
-            }
-            
-            if 'inline_keyboard' in response:
-                payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
-            
-            requests.post(
-                f"https://api.telegram.org/bot{bot_token}/editMessageText",
-                json=payload,
-                timeout=30
-            )
+            # If we have a reply_keyboard, we should send it as a NEW message
+            if 'reply_keyboard' in response:
+                logger.info(f"Transitioning to ReplyKeyboard flow for user {user_id}")
+                
+                # Send the new message with reply keyboard (uses send_notification for TTS/dual-delivery)
+                processor = get_processor()
+                success = await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=str(user_id),
+                    message=response['message'],
+                    parse_mode=response.get('parse_mode', 'Markdown'),
+                    reply_markup=response['reply_keyboard']
+                )
+                
+                if success:
+                    # Clear current buttons only if new message sent successfully (prevents dead ends)
+                    logger.info(f"New message sent, clearing old inline buttons for message {message_id}")
+                    requests.post(
+                        f"https://api.telegram.org/bot{bot_token}/editMessageReplyMarkup",
+                        json={
+                            'chat_id': chat_id,
+                            'message_id': message_id,
+                            'reply_markup': {'inline_keyboard': []}
+                        },
+                        timeout=30
+                    )
+                else:
+                    logger.error(f"Failed to send ReplyKeyboard message to user {user_id}")
+            else:
+                # Standard inline update
+                payload = {
+                    'chat_id': chat_id,
+                    'message_id': message_id,
+                    'text': response['message'],
+                    'parse_mode': response.get('parse_mode', 'Markdown')
+                }
+                
+                if 'inline_keyboard' in response:
+                    payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
+                
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
             
             return {"ok": True, "message": "Callback handled"}
         
@@ -2755,6 +2976,105 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             
             return {"ok": True, "message": "Verification callback handled"}
+        
+        # Handle RFQ-related callbacks
+        if callback_data in ('myoffers', 'offers', 'rfq', 'myrfqs') or callback_data.startswith('offer_'):
+            from voice.telegram.rfq_handler import handle_rfq_callback
+            
+            # Get username from callback query for user lookup
+            username = callback_query['from'].get('username', '')
+            
+            # For 'offers' callback, just trigger original /offers command
+            if callback_data == 'offers':
+                # Answer callback query
+                import requests
+                bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                    json={'callback_query_id': callback_id},
+                    timeout=30
+                )
+                
+                # Trigger /offers command
+                from voice.telegram.rfq_handler import handle_offers_command
+                username = callback_query['from'].get('username', '')
+                response = await handle_offers_command(user_id, username)
+                
+                # Send response exactly
+                if 'keyboard' in response:
+                    requests.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                        json={
+                            'chat_id': user_id,
+                            'text': response['message'],
+                            'reply_markup': {'inline_keyboard': response['keyboard']}
+                        },
+                        timeout=30
+                    )
+                else:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message=response['message'],
+                        parse_mode=response.get('parse_mode')
+                    )
+                
+                return {"ok": True, "message": "Offers callback handled"}
+            
+            # Handle other RFQ callbacks
+            response = await handle_rfq_callback(user_id, callback_data, username)
+            
+            # Answer callback query
+            import requests
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            requests.post(
+                f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                json={'callback_query_id': callback_id},
+                timeout=30
+            )
+            
+            # Standard inline update for other callbacks
+            message_id = callback_query['message']['message_id']
+            chat_id = callback_query['message']['chat']['id']
+            
+            payload = {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'text': response['message'],
+                'parse_mode': response.get('parse_mode', 'Markdown')
+            }
+            
+            if 'inline_keyboard' in response:
+                payload['reply_markup'] = {'inline_keyboard': response['inline_keyboard']}
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
+            elif 'keyboard' in response:
+                # Text keyboard (ReplyKeyboardMarkup) cannot be used with editMessageText
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={
+                        'chat_id': chat_id,
+                        'text': response['message'],
+                        'parse_mode': response.get('parse_mode', 'Markdown'),
+                        'reply_markup': {
+                            'keyboard': response['keyboard'],
+                            'resize_keyboard': True,
+                            'one_time_keyboard': True
+                        }
+                    },
+                    timeout=30
+                )
+            else:
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/editMessageText",
+                    json=payload,
+                    timeout=30
+                )
+            
+            return {"ok": True, "message": "RFQ callback handled"}
         
         # Unknown callback data
         logger.debug(f"Unknown callback data: {callback_data}")

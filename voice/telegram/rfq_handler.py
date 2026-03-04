@@ -15,11 +15,131 @@ import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from database.models import UserIdentity, Organization, SessionLocal
+from voice.telegram.voice_responses import escape_markdown
 
 logger = logging.getLogger(__name__)
 
+
+async def handle_rfq_callback(user_id: int, callback_data: str, username: str = None) -> Dict[str, Any]:
+    """
+    Handle RFQ-related callback queries.
+    
+    Args:
+        user_id: Telegram user ID
+        callback_data: Callback data from button click
+        
+    Returns:
+        Response dict with message and optional keyboard
+    """
+    try:
+        if callback_data == 'myoffers':
+            # Handle "My Offers" button - need username for user lookup
+            return await handle_myoffers_command(user_id, username=None)
+            
+        elif callback_data == 'offers':
+            # Handle "Offers" button - need username for user lookup
+            return await handle_offers_command(user_id, username=None)
+            
+        elif callback_data == 'rfq':
+            # Handle "Create RFQ" button
+            return await handle_rfq_command(user_id, username)
+            
+        elif callback_data == 'myrfqs':
+            # Handle "My RFQs" button
+            return await handle_myrfqs_command(user_id, username)
+            
+        elif callback_data.startswith('offer_'):
+            # Handle "Offer for RFQ" button - extract RFQ number from callback
+            rfq_number = callback_data.split('_', 1)[1]  # Get everything after "offer_"
+            return await handle_offer_creation(user_id, rfq_number)
+            
+        else:
+            return {
+                'message': '❌ Unknown RFQ action',
+                'parse_mode': 'Markdown'
+            }
+            
+    except Exception as e:
+        logger.error(f"Error handling RFQ callback: {e}")
+        return {
+            'message': '❌ Error processing request',
+            'parse_mode': 'Markdown'
+        }
+
+
+async def handle_offer_creation(user_id: int, rfq_number: str) -> Dict[str, Any]:
+    """
+    Handle offer creation for a specific RFQ.
+    
+    Args:
+        user_id: Telegram user ID
+        rfq_number: RFQ number (e.g., "RFQ-000010")
+        
+    Returns:
+        Response dict with message and keyboard
+    """
+    try:
+        # Get RFQ details by RFQ number
+        API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Search RFQ by number
+            list_response = await client.get(f"{API_BASE_URL}/rfqs?status=OPEN")
+            if list_response.status_code != 200:
+                return {
+                    'message': '❌ Error loading RFQs',
+                    'parse_mode': 'Markdown'
+                }
+            
+            rfqs = list_response.json()
+            # Find RFQ by number
+            rfq = None
+            for r in rfqs:
+                if r.get('rfq_number') == rfq_number:
+                    rfq = r
+                    break
+            
+            if not rfq:
+                return {
+                    'message': f'❌ RFQ {rfq_number} not found',
+                    'parse_mode': 'Markdown'
+                }
+            
+            message = f"📋 **RFQ Details**\n\n"
+            message += f"🔢 *RFQ Number*: {escape_markdown(rfq.get('rfq_number', 'N/A'))}\n"
+            message += f"☕ *Variety*: {escape_markdown(rfq.get('variety', 'N/A'))}\n"
+            message += f"⚖️ *Quantity*: {rfq.get('quantity_kg', 'N/A')} kg\n"
+            message += f"⭐ *Grade*: {escape_markdown(rfq.get('grade', 'N/A'))}\n"
+            message += f"🏷️ *Status*: {escape_markdown(rfq.get('status', 'N/A'))}\n"
+            message += f"🌊 *Processing Method*: {escape_markdown(rfq.get('processing_method', 'N/A'))}\n"
+            message += f"🏢 *Buyer Organization*: {escape_markdown(rfq.get('buyer_organization', 'N/A'))}\n"
+            message += f"📍 *Location*: {escape_markdown(rfq.get('delivery_location', 'N/A'))}\n"
+            message += f"💬 *Offers*: {rfq.get('offer_count', 0)}\n"
+            message += f"📅 *Deadline*: {escape_markdown(rfq.get('delivery_deadline', 'N/A'))}\n\n"
+            
+            keyboard = [
+                [{'text': '🔙 Back to Offers', 'callback_data': 'offers'}],
+                [{'text': '📊 My Offers', 'callback_data': 'myoffers'}]
+            ]
+            
+            return {
+                'message': message,
+                'parse_mode': 'Markdown',
+                'inline_keyboard': keyboard
+            }
+            
+    except Exception as e:
+        logger.error(f"Error handling offer creation: {e}")
+        return {
+            'message': '❌ Error loading RFQ details',
+            'parse_mode': 'Markdown'
+        }
+
 # API base URL
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
+
+# Debug: Log the final API URL
+logger.info(f"API_BASE_URL configured: {API_BASE_URL}")
 
 # In-memory conversation state for multi-step RFQ creation
 rfq_sessions: Dict[int, Dict[str, Any]] = {}
@@ -215,7 +335,7 @@ async def handle_variety_input(user_id: int, text: str, session: Dict) -> Dict[s
     
     return {
         'message': (
-            f"✅ Variety: {variety}\n\n"
+            f"✅ Variety: {escape_markdown(variety)}\n\n"
             "⭐ *Step 3/6: Grade*\n\n"
             "What quality grade do you need?"
         ),
@@ -236,7 +356,7 @@ async def handle_grade_input(user_id: int, text: str, session: Dict) -> Dict[str
     
     return {
         'message': (
-            f"✅ Grade: {grade}\n\n"
+            f"✅ Grade: {escape_markdown(grade)}\n\n"
             "🌊 *Step 4/6: Processing Method*\n\n"
             "Which processing method do you prefer?"
         ),
@@ -257,7 +377,7 @@ async def handle_processing_input(user_id: int, text: str, session: Dict) -> Dic
     
     return {
         'message': (
-            f"✅ Processing: {processing}\n\n"
+            f"✅ Processing: {escape_markdown(processing)}\n\n"
             "📍 *Step 5/6: Delivery Location*\n\n"
             "Where should the coffee be delivered?\n"
             "Example: Addis Ababa, Djibouti Port, etc."
@@ -279,7 +399,7 @@ async def handle_location_input(user_id: int, text: str, session: Dict) -> Dict[
     
     return {
         'message': (
-            f"✅ Location: {location}\n\n"
+            f"✅ Location: {escape_markdown(location)}\n\n"
             "📅 *Step 6/6: Delivery Deadline*\n\n"
             "When do you need the coffee delivered?\n"
             "Use format: YYYY-MM-DD\n"
@@ -335,21 +455,23 @@ async def handle_deadline_input(user_id: int, text: str, session: Dict) -> Dict[
                 'keyboard': [[{'text': '❌ Cancel'}]]
             }
         
-        session['data']['delivery_deadline'] = deadline.isoformat()
+        # Ensure it's a full ISO datetime string for the API
+        session['data']['delivery_deadline'] = datetime.combine(deadline, datetime.min.time()).isoformat()
         session['state'] = STATE_CONFIRM
         
         # Show summary
         data = session['data']
         return {
             'message': (
-                "📋 *RFQ Summary - Please Confirm*\n\n"
+                f"✅ Deadline: {escape_markdown(deadline.strftime('%B %d, %Y'))}\n\n"
+                "📋 *Review your RFQ:*\n\n"
                 f"📦 Quantity: {data['quantity_kg']:,.0f} kg\n"
-                f"☕ Variety: {data['variety']}\n"
-                f"⭐ Grade: {data['grade']}\n"
-                f"🌊 Processing: {data.get('processing_method', 'Any')}\n"
-                f"📍 Location: {data['delivery_location']}\n"
-                f"📅 Deadline: {deadline.strftime('%B %d, %Y')}\n\n"
-                "Ready to broadcast to cooperatives?"
+                f"☕ Variety: {escape_markdown(data['variety'])}\n"
+                f"⭐ Grade: {escape_markdown(data['grade'])}\n"
+                f"🔧 Processing: {escape_markdown(data.get('processing_method', 'Any'))}\n"
+                f"📍 Location: {escape_markdown(data['delivery_location'])}\n"
+                f"📅 Delivery: {escape_markdown(deadline.strftime('%B %d, %Y'))}\n\n"
+                "Is everything correct?"
             ),
             'parse_mode': 'Markdown',
             'keyboard': [
@@ -419,15 +541,15 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
             return {
                 'message': (
                     "✅ *RFQ Created Successfully!*\n\n"
-                    f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
+                    f"📋 RFQ Number: `{escape_markdown(rfq['rfq_number'])}`\n"
                     f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
-                    f"☕ Variety: {rfq['variety']}\n"
-                    f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
-                    f"🔧 Processing: {rfq['processing_method']}\n"
-                    f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                    f"☕ Variety: {escape_markdown(rfq['variety'])}\n"
+                    f"⭐ Grade: {escape_markdown(rfq.get('grade', 'Not specified'))}\n"
+                    f"🔧 Processing: {escape_markdown(rfq.get('processing_method', 'Any'))}\n"
+                    f"📍 Location: {escape_markdown(rfq.get('delivery_location', 'Not specified'))}\n\n"
                     f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
-                    f"Status: {rfq['status']}\n"
-                    f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                    f"Status: {escape_markdown(rfq['status'])}\n"
+                    f"Expires: {escape_markdown(rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A')}\n\n"
                     f"💡 Use /myrfqs to track offers as they come in."
                 ),
                 'parse_mode': 'Markdown',
@@ -437,9 +559,20 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
                 ]
             }
         else:
-            error = response.json().get('detail', 'Unknown error')
+            error_detail = response.text
+            logger.error(f"API Error (Status {response.status_code}): {error_detail}")
+            
+            try:
+                error_json = response.json()
+                error_msg = error_json.get('detail', 'Unknown error')
+                if isinstance(error_msg, list):
+                    # Format validation errors nicely
+                    error_msg = "; ".join([f"{e.get('loc', [])}: {e.get('msg')}" for e in error_msg])
+            except:
+                error_msg = response.text
+                
             return {
-                'message': f"❌ Failed to create RFQ: {error}",
+                'message': f"❌ Failed to create RFQ: {escape_markdown(str(error_msg))}",
                 'keyboard': [[{'text': '/rfq - Try Again'}]]
             }
     
@@ -493,6 +626,7 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         
         # Fetch open RFQs from API
         api_url = f"{API_BASE_URL}/rfqs?status=OPEN"
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(api_url)
         
@@ -522,23 +656,23 @@ async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:
         keyboard = []
         for rfq in rfqs[:10]:  # Show first 10
             rfq_summary = (
-                f"📋 *{rfq['rfq_number']}*\n"
-                f"📦 {rfq['quantity_kg']:,.0f} kg {rfq['variety']} {rfq['grade']}\n"
-                f"📍 {rfq['delivery_location']}\n"
-                f"📅 Deadline: {rfq['delivery_deadline']}\n"
+                f"📋 *{escape_markdown(rfq['rfq_number'])}*\n"
+                f"📦 {rfq['quantity_kg']:,.0f} kg {escape_markdown(rfq['variety'])} {escape_markdown(rfq['grade'])}\n"
+                f"📍 {escape_markdown(rfq['delivery_location'])}\n"
+                f"📅 Deadline: {escape_markdown(rfq['delivery_deadline'])}\n"
                 f"💬 Offers: {rfq.get('offer_count', 0)}\n\n"
             )
             message += rfq_summary
             
             # Add button to make offer
             keyboard.append([
-                {'text': f"💰 Offer for {rfq['rfq_number']}", 'callback_data': f"offer_{rfq['id']}"}
+                {'text': f"💰 Offer for {rfq['rfq_number']}", 'callback_data': f"offer_{rfq['rfq_number']}"}
             ])
         
         if len(rfqs) > 10:
             message += f"\n_Showing first 10 of {len(rfqs)} RFQs_\n"
         
-        keyboard.append([{'text': '/myoffers - View My Offers'}])
+        keyboard.append([{'text': '📊 My Offers', 'callback_data': 'myoffers'}])
         
         return {
             'message': message,
@@ -580,6 +714,12 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                 'parse_mode': 'Markdown'
             }
         
+        # Store organization name before closing session
+        org_name = user.organization.name if user.organization else 'Your Organization'
+        
+        # Close first connection to avoid SSL timeout
+        db.close()
+        
         # Fetch offers from API
         api_url = f"{API_BASE_URL}/offers?user_id={user.id}"
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -600,12 +740,12 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
                     "Use /offers to view and respond to RFQs."
                 ),
                 'parse_mode': 'Markdown',
-                'keyboard': [[{'text': '/offers - View Available RFQs'}]]
+                'keyboard': [[{'text': '📋 Available RFQs', 'callback_data': 'offers'}]]
             }
         
         # Build message
         message = f"📊 *Your Offers ({len(offers)})*\n\n"
-        message += f"{user.organization.name if user.organization else 'Your Organization'}\n\n"
+        message += f"{org_name}\n\n"
         
         for offer in offers:
             status_emoji = {
@@ -617,20 +757,20 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
             
             total_value = offer['quantity_offered_kg'] * offer['price_per_kg']
             message += (
-                f"{status_emoji} *{offer['offer_number']}*\n"
+                f"{status_emoji} *{escape_markdown(offer['offer_number'])}*\n"
                 f"RFQ: {offer['rfq_id']}\n"
                 f"💰 ${offer['price_per_kg']}/kg × {offer['quantity_offered_kg']:,.0f} kg\n"
                 f"💵 Total: ${total_value:,.2f}\n"
-                f"⏱️ Delivery: {offer['delivery_timeline_days']} days\n"
-                f"Status: {offer['status']}\n\n"
+                f"⏱️ Delivery: {escape_markdown(offer.get('delivery_timeline', 'N/A'))}\n"
+                f"Status: {escape_markdown(offer['status'])}\n\n"
             )
         
         return {
             'message': message,
             'parse_mode': 'Markdown',
             'keyboard': [
-                [{'text': '/offers - View Available RFQs'}],
-                [{'text': '🔄 Refresh'}]
+                [{'text': '📋 Available RFQs', 'callback_data': 'offers'}],
+                [{'text': '🔄 Refresh', 'callback_data': 'refresh_myoffers'}]
             ]
         }
     
@@ -639,8 +779,6 @@ async def handle_myoffers_command(user_id: int, username: str) -> Dict[str, Any]
         return {
             'message': f"❌ Error: {str(e)}"
         }
-    finally:
-        db.close()
 
 
 async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
@@ -688,7 +826,7 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
                     "Use /rfq to create your first RFQ."
                 ),
                 'parse_mode': 'Markdown',
-                'keyboard': [[{'text': '/rfq - Create RFQ'}]]
+                'inline_keyboard': [[{'text': '➕ Create RFQ', 'callback_data': 'rfq'}]]
             }
         
         # Build message
@@ -705,10 +843,10 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
             }.get(rfq['status'], '📝')
             
             message += (
-                f"{status_emoji} *{rfq['rfq_number']}*\n"
-                f"📦 {rfq['quantity_kg']:,.0f} kg {rfq['variety']}\n"
+                f"{status_emoji} *{escape_markdown(rfq['rfq_number'])}*\n"
+                f"📦 {rfq['quantity_kg']:,.0f} kg {escape_markdown(rfq['variety'])}\n"
                 f"💬 Offers: {rfq.get('offer_count', 0)}\n"
-                f"Status: {rfq['status']}\n\n"
+                f"Status: {escape_markdown(rfq['status'])}\n\n"
             )
             
             if rfq.get('offer_count', 0) > 0:
@@ -717,12 +855,12 @@ async def handle_myrfqs_command(user_id: int, username: str) -> Dict[str, Any]:
                      'callback_data': f"view_offers_{rfq['id']}"}
                 ])
         
-        keyboard.append([{'text': '/rfq - Create New RFQ'}])
+        keyboard.append([{'text': '➕ Create New RFQ', 'callback_data': 'rfq'}])
         
         return {
             'message': message,
             'parse_mode': 'Markdown',
-            'keyboard': keyboard
+            'inline_keyboard': keyboard
         }
     
     except Exception as e:
@@ -933,15 +1071,15 @@ async def handle_voice_rfq_creation(
                     user_id=user_id,
                     message=(
                         f"✅ *RFQ Created from Voice!*\n\n"
-                        f"📋 RFQ Number: `{rfq['rfq_number']}`\n"
+                        f"📋 RFQ Number: `{escape_markdown(rfq['rfq_number'])}`\n"
                         f"📦 Quantity: {rfq['quantity_kg']:,.0f} kg\n"
-                        f"☕ Variety: {rfq['variety']}\n"
-                        f"⭐ Grade: {rfq.get('grade', 'Not specified')}\n"
-                        f"🔧 Processing: {rfq['processing_method']}\n"
-                        f"📍 Location: {rfq.get('delivery_location', 'Not specified')}\n\n"
+                        f"☕ Variety: {escape_markdown(rfq['variety'])}\n"
+                        f"⭐ Grade: {escape_markdown(rfq.get('grade', 'Not specified'))}\n"
+                        f"🔧 Processing: {escape_markdown(rfq.get('processing_method', 'Any'))}\n"
+                        f"📍 Location: {escape_markdown(rfq.get('delivery_location', 'Not specified'))}\n\n"
                         f"🔔 *Broadcasted to {broadcast_count} cooperatives*\n"
-                        f"Status: {rfq['status']}\n"
-                        f"Expires: {rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A'}\n\n"
+                        f"Status: {escape_markdown(rfq['status'])}\n"
+                        f"Expires: {escape_markdown(rfq.get('expires_at', 'N/A')[:10] if rfq.get('expires_at') else 'N/A')}\n\n"
                         f"💡 Use /myrfqs to track offers as they come in."
                     ),
                     parse_mode='Markdown'

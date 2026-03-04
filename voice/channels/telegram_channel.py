@@ -263,6 +263,28 @@ class TelegramChannel(VoiceChannel):
         message += "• Add another: Send voice note"
         
         return await self.send_notification(user_id, message, **kwargs)
+
+    async def delete_message(self, user_id: str, message_id: str) -> bool:
+        """
+        Delete a message from Telegram chat history.
+        
+        Args:
+            user_id: Telegram chat ID
+            message_id: ID of the message to delete
+            
+        Returns:
+            bool: True if deleted successfully
+        """
+        try:
+            await self.bot.delete_message(chat_id=int(user_id), message_id=int(message_id))
+            logger.info(f"Deleted Telegram message {message_id} in chat {user_id}")
+            return True
+        except TelegramError as e:
+            logger.error(f"Failed to delete Telegram message {message_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting Telegram message: {e}")
+            return False
     
     def get_bot_info(self) -> Dict[str, Any]:
         """

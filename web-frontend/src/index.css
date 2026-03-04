@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/* Custom design tokens */
+@theme {
+  --color-coffee-50: #fdf8f0;
+  --color-coffee-100: #f5ead6;
+  --color-coffee-200: #e8d0a8;
+  --color-coffee-300: #d4ad6e;
+  --color-coffee-400: #c08e42;
+  --color-coffee-500: #a67428;
+  --color-coffee-600: #8a5d1e;
+  --color-coffee-700: #6e4818;
+  --color-coffee-800: #553714;
+  --color-coffee-900: #3d2710;
+  --color-coffee-950: #231607;
+
+  --color-forest-50: #f0faf0;
+  --color-forest-100: #d6f0d6;
+  --color-forest-200: #a8e0a8;
+  --color-forest-300: #6cc86c;
+  --color-forest-400: #3daa3d;
+  --color-forest-500: #258c25;
+  --color-forest-600: #1e721e;
+  --color-forest-700: #185a18;
+  --color-forest-800: #144514;
+  --color-forest-900: #0e320e;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Chat bubble animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fadeInUp 0.25s ease-out;
+}
+
+/* Pulse animation for recording indicator */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}

@@ -22,7 +22,7 @@ uvicorn==0.24.0
 python-multipart==0.0.6
 pydantic==2.5.0
 python-dotenv==1.0.0
-openai>=1.12.0
+openai==1.12.0
 python-dateutil==2.8.2     # Natural language date parsing
 
 # -----------------------------
@@ -94,4 +94,10 @@ alembic==1.13.1
 # Admin Dashboard & Authentication (Lab 17)
 # -----------------------------
 bcrypt==4.1.2              # Password hashing for admin auth
-httpx>=0.25.0              # HTTP client for Addis AI Translation API (agent)
+
+
+# -----------------------------
+# RAG & Document Indexing
+# -----------------------------
+chromadb==0.4.24
+PyPDF2==3.0.1

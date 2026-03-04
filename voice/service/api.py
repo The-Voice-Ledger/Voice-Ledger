@@ -145,6 +145,22 @@ try:
 except ImportError as e:
     MINIAPP_AVAILABLE = False
     print(f"ℹ️  Mini app module not available: {e}")
+
+# Import Agent REST API router (Web Frontend chat)
+try:
+    from voice.web.agent_api import router as agent_api_router
+    AGENT_API_AVAILABLE = True
+except ImportError as e:
+    AGENT_API_AVAILABLE = False
+    print(f"ℹ️  Agent API module not available: {e}")
+
+# Import Container Pool API router (Phase 4.6 - shared container buying)
+try:
+    from voice.marketplace.pool_api import router as pool_api_router
+    POOL_API_AVAILABLE = True
+except ImportError as e:
+    POOL_API_AVAILABLE = False
+    print(f"ℹ️  Pool API module not available: {e}")
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -220,6 +236,16 @@ try:
     print("✅ CRE Provenance endpoints registered at /api/provenance, /api/batch/*, /api/deforestation/*")
 except ImportError as e:
     print(f"ℹ️  CRE Provenance API not available: {e}")
+
+# Include Agent REST API router (Web Frontend chat)
+if AGENT_API_AVAILABLE:
+    app.include_router(agent_api_router)
+    print("✅ Agent chat endpoints registered at /api/agent/*")
+
+# Include Container Pool API router (Phase 4.6)
+if POOL_API_AVAILABLE:
+    app.include_router(pool_api_router)
+    print("✅ Container pool endpoints registered at /api/pools, /api/pool/*, /api/my/*")
 
 # CORS Configuration - Allow frontend origins
 # Development: localhost:3000 (local Next.js)
@@ -831,6 +857,32 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from pathlib import Path
 
+# Serve SPA frontend at /app (React build from web-frontend/dist)
+spa_dir = Path(__file__).parent.parent.parent / "web-frontend" / "dist"
+if spa_dir.exists():
+    # Redirect bare / to /app/ so users land on the SPA
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse("/app/", status_code=302)
+
+    # SPA catch-all: serve index.html for any /app/* route
+    @app.get("/app/{rest_of_path:path}", include_in_schema=False)
+    async def serve_spa(rest_of_path: str = ""):
+        # If the path matches a real file in dist, serve it
+        file_path = spa_dir / rest_of_path
+        if rest_of_path and file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        # Otherwise serve index.html (client-side routing)
+        return FileResponse(str(spa_dir / "index.html"))
+
+    # Mount static assets directory
+    spa_assets = spa_dir / "assets"
+    if spa_assets.exists():
+        app.mount("/app/assets", StaticFiles(directory=str(spa_assets)), name="spa-assets")
+    print(f"✅ SPA frontend served at /app/ from {spa_dir}")
+else:
+    print(f"ℹ️  SPA frontend not found at {spa_dir} (run: cd web-frontend && npm run build)")
+
 frontend_dir = Path(__file__).parent.parent.parent / "frontend"
 if frontend_dir.exists():
     # Mount static asset directories
@@ -842,10 +894,11 @@ if frontend_dir.exists():
     if miniapps_dir.exists():
         app.mount("/miniapps", StaticFiles(directory=str(miniapps_dir)), name="miniapps")
     
-    # Serve HTML pages as specific routes
-    @app.get("/", include_in_schema=False)
-    async def serve_index():
-        return FileResponse(str(frontend_dir / "index.html"))
+    # Serve HTML pages as specific routes (skip / if SPA already handles it)
+    if not spa_dir.exists():
+        @app.get("/", include_in_schema=False)
+        async def serve_index():
+            return FileResponse(str(frontend_dir / "index.html"))
     
     @app.get("/login.html", include_in_schema=False)
     async def serve_login():
