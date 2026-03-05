@@ -115,7 +115,7 @@ class BlockchainAnchor:
             )
             
             # Build transaction
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
+            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
             
             # Estimate gas
             gas_estimate = self.contract.functions.anchorEvent(

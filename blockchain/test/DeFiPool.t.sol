@@ -230,7 +230,7 @@ contract DeFiPoolIntegrationTest is Test {
         assertEq(info.decimals, 6);
 
         // Verify: cumulative analytics
-        assertEq(pool.cumulativeFeesEarned(), expectedFee);
+        assertEq(pool.cumulativeTradeFees(), expectedFee);
         assertEq(distributor.totalDistributed(), expectedFee);
     }
 
@@ -365,6 +365,11 @@ contract DeFiPoolIntegrationTest is Test {
         vm.prank(seller);
         uint256 tradeId = escrow.requestAdvance(1, 500, buyer, CONTAINER_PRICE, SHIPMENT_HASH, FARM_ID);
 
+        uint256 advanceAmount = CONTAINER_PRICE - (CONTAINER_PRICE * 200 / 10_000);
+
+        // Verify pool accounting before default
+        assertEq(pool.totalAdvanced(), advanceAmount);
+
         // Fast-forward past deadline (60 days default)
         vm.warp(block.timestamp + 61 days);
 
@@ -379,6 +384,10 @@ contract DeFiPoolIntegrationTest is Test {
 
         // Token no longer pledged
         assertFalse(escrow.isTokenPledged(1));
+
+        // CRITICAL: pool totalAdvanced reduced to 0 (writeOffDefault called)
+        assertEq(pool.totalAdvanced(), 0);
+        assertEq(pool.cumulativeDefaulted(), advanceAmount);
     }
 
     function test_RevertWhen_DefaultBeforeDeadline() public {

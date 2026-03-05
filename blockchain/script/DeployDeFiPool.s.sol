@@ -19,7 +19,7 @@ import {FeeDistributor} from "../src/FeeDistributor.sol";
  *           USDC_ADDRESS                     — USDC token on target chain
  *           COFFEE_BATCH_TOKEN_ADDRESS       — Existing CoffeeBatchToken
  *           EPCIS_EVENT_ANCHOR_ADDRESS       — Existing EPCISEventAnchor
- *           PROVENANCE_DATA_RECEIVER_ADDRESS — Existing ProvenanceDataReceiver
+ *           PROVENANCE_RECEIVER_ADDRESS      — Existing ProvenanceDataReceiver
  *           SETTLEMENT_CONTRACT_ADDRESS      — Existing SettlementContract
  *           TREASURY_ADDRESS                 — Protocol treasury wallet
  *           RESERVE_FUND_ADDRESS             — Reserve fund wallet
@@ -40,7 +40,7 @@ contract DeployDeFiPool is Script {
         address usdc       = vm.envAddress("USDC_ADDRESS");
         address batchToken = vm.envAddress("COFFEE_BATCH_TOKEN_ADDRESS");
         address epcis      = vm.envAddress("EPCIS_EVENT_ANCHOR_ADDRESS");
-        address provenance = vm.envAddress("PROVENANCE_DATA_RECEIVER_ADDRESS");
+        address provenance = vm.envAddress("PROVENANCE_RECEIVER_ADDRESS");
         address settlement = vm.envAddress("SETTLEMENT_CONTRACT_ADDRESS");
         address treasury   = vm.envAddress("TREASURY_ADDRESS");
         address reserve    = vm.envAddress("RESERVE_FUND_ADDRESS");

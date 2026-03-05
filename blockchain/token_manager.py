@@ -330,8 +330,10 @@ class CoffeeBatchTokenManager:
                 'quantity': metadata[1],
                 'metadata_json': metadata[2],
                 'ipfs_cid': metadata[3],
-                'is_aggregated': metadata[4],
-                'child_token_ids': list(metadata[5])
+                'created_at': metadata[4],
+                'exists': metadata[5],
+                'is_aggregated': metadata[6],
+                'child_token_ids': list(metadata[7])
             }
             
         except Exception as e:

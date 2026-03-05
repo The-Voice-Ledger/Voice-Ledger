@@ -45,6 +45,7 @@ interface ISettlementContract {
 interface IFinancingPool {
     function drawFunds(uint256 tradeId, uint256 amount, address recipient) external;
     function returnFunds(uint256 tradeId, uint256 principal, uint256 fee) external;
+    function writeOffDefault(uint256 tradeId, uint256 principal) external;
     function asset() external view returns (address);
 }
 
@@ -156,7 +157,7 @@ contract TradeEscrow is ERC1155Holder {
     );
 
     event DefaultFeeBpsUpdated(uint256 oldBps, uint256 newBps);
-    event MaxTransitDaysUpdated(uint256 oldDays, uint256 newDays);
+    event MaxTransitSecondsUpdated(uint256 oldSeconds, uint256 newSeconds);
 
     // ─────────────────────────────────────────────
     // State
@@ -431,6 +432,9 @@ contract TradeEscrow is ERC1155Holder {
             ""
         );
 
+        // Write off the advance so pool accounting stays accurate
+        financingPool.writeOffDefault(tradeId, trade.advanceAmount);
+
         trade.status = TradeStatus.Defaulted;
         trade.settledAt = block.timestamp;
         delete tokenToTrade[trade.tokenId];
@@ -514,7 +518,7 @@ contract TradeEscrow is ERC1155Holder {
     }
 
     function setMaxTransitSeconds(uint256 _seconds) external onlyOwner {
-        emit MaxTransitDaysUpdated(maxTransitSeconds, _seconds);
+        emit MaxTransitSecondsUpdated(maxTransitSeconds, _seconds);
         maxTransitSeconds = _seconds;
     }
 

@@ -41,6 +41,7 @@ contract FinancingPool is ERC4626 {
     event EscrowUpdated(address indexed oldEscrow, address indexed newEscrow);
     event FundsDrawn(uint256 indexed tradeId, uint256 amount);
     event FundsReturned(uint256 indexed tradeId, uint256 principal, uint256 fee);
+    event DefaultWrittenOff(uint256 indexed tradeId, uint256 principal);
     event MaxAdvanceRatioUpdated(uint256 oldRatio, uint256 newRatio);
     event MaxSingleAdvanceUpdated(uint256 oldMax, uint256 newMax);
 
@@ -63,8 +64,13 @@ contract FinancingPool is ERC4626 {
     /// @notice Maximum single advance size (USDC, 6 decimals). 0 = no cap.
     uint256 public maxSingleAdvance;
 
-    /// @notice Cumulative fees earned by the pool (for analytics only — fees are in totalAssets)
-    uint256 public cumulativeFeesEarned;
+    /// @notice Cumulative total trade fees passed through the system (analytics only).
+    ///         NOTE: Only the investor share (~62.5%) accrues in the pool;
+    ///         the rest goes to protocol treasury and reserve fund.
+    uint256 public cumulativeTradeFees;
+
+    /// @notice Cumulative principal written off from buyer defaults
+    uint256 public cumulativeDefaulted;
 
     // ─────────────────────────────────────────────
     // Constants
@@ -183,9 +189,22 @@ contract FinancingPool is ERC4626 {
     function returnFunds(uint256 tradeId, uint256 principal, uint256 fee) external onlyEscrow {
         // Reduce outstanding advances
         totalAdvanced -= principal;
-        cumulativeFeesEarned += fee;
+        cumulativeTradeFees += fee;
 
         emit FundsReturned(tradeId, principal, fee);
+    }
+
+    /**
+     * @notice Write off a defaulted advance — reduces totalAdvanced so the
+     *         pool's totalAssets accurately reflects the loss.
+     * @dev    Only callable by the authorised TradeEscrow on markDefault().
+     * @param  tradeId   Defaulted trade identifier
+     * @param  principal Original advance amount that will not be recovered
+     */
+    function writeOffDefault(uint256 tradeId, uint256 principal) external onlyEscrow {
+        totalAdvanced -= principal;
+        cumulativeDefaulted += principal;
+        emit DefaultWrittenOff(tradeId, principal);
     }
 
     // ─────────────────────────────────────────────

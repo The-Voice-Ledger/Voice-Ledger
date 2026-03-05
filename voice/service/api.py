@@ -161,6 +161,14 @@ try:
 except ImportError as e:
     POOL_API_AVAILABLE = False
     print(f"ℹ️  Pool API module not available: {e}")
+
+# Import DeFi Financing Pool API router (receivables factoring)
+try:
+    from voice.service.financing_api import router as financing_api_router
+    FINANCING_API_AVAILABLE = True
+except ImportError as e:
+    FINANCING_API_AVAILABLE = False
+    print(f"ℹ️  Financing API module not available: {e}")
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -246,6 +254,11 @@ if AGENT_API_AVAILABLE:
 if POOL_API_AVAILABLE:
     app.include_router(pool_api_router)
     print("✅ Container pool endpoints registered at /api/pools, /api/pool/*, /api/my/*")
+
+# Include DeFi Financing Pool API router
+if FINANCING_API_AVAILABLE:
+    app.include_router(financing_api_router)
+    print("✅ Financing pool endpoints registered at /api/financing/*")
 
 # CORS Configuration - Allow frontend origins
 # Development: localhost:3000 (local Next.js)
