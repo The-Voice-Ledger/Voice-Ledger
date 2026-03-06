@@ -339,6 +339,19 @@ async def handle_confirm_receipt(
         
         db.commit()
         
+        # Dispatch webhook to LSPs / customs brokers
+        try:
+            from voice.service.webhook_dispatcher import dispatch_webhook_sync
+            dispatch_webhook_sync("PREPARING_SHIPMENT", {
+                "acceptance_number": acceptance_number,
+                "container_sscc": getattr(acceptance, 'container_offering', None) and
+                                  getattr(acceptance.container_offering, 'container_sscc', None),
+                "total_amount_usd": total_amount,
+                "dpp_url": f"/api/dpp/batch/{acceptance_number}",
+            })
+        except Exception:
+            pass  # webhook delivery is best-effort
+        
         # Prepare response
         response_message = (
             f"✅ *Payment Receipt Confirmed*\n\n"
