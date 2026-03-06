@@ -1287,6 +1287,11 @@ async def complete_farmer_registration(user_id: int, skip_photo: bool = False, s
             if 'phone_number' in conversation_states[user_id]['data']:
                 user.phone_number = conversation_states[user_id]['data']['phone_number']
                 logger.info(f"📞 Saved phone {user.phone_number} to UserIdentity for user {user_id}")
+            # CRITICAL FIX: Save PIN hash to UserIdentity
+            if 'pin_hash' in conversation_states[user_id]['data']:
+                user.pin_hash = conversation_states[user_id]['data']['pin_hash']
+                user.pin_set_at = datetime.utcnow()
+                logger.info(f"🔐 Saved PIN hash to UserIdentity for user {user_id}")
             # NOTE: is_approved set to True AFTER FarmerIdentity is created successfully
         
         # Create or update FarmerIdentity with GPS photo data

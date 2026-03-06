@@ -566,6 +566,13 @@ async def approve_registration(registration_id: int):
         user.approved_at = datetime.utcnow()
         user.preferred_language = preferred_language
         user.language_set_at = datetime.utcnow()
+        if registration.phone_number:
+            user.phone_number = registration.phone_number
+            logger.info(f"📞 Transferred phone number for user {user.id}")
+        if registration.pin_hash:
+            user.pin_hash = registration.pin_hash
+            user.pin_set_at = datetime.utcnow()
+            logger.info(f"🔐 Transferred PIN hash for user {user.id}")
         logger.info(f"Updated user: {user.telegram_first_name} - Role: {user.role}, Org: {organization_id}, Lang: {preferred_language}")
         
         # Initialize reputation record for user
