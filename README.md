@@ -2,16 +2,16 @@
 
 **A Voice-first blockchain traceability System for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
-**Current:** v2.2 (Production) — 37-tool AI agent, DeFi trade finance, LSP & customs integration  
+**Current:** v2.2 (Production) - 37-tool AI agent, DeFi trade finance, LSP & customs integration  
 **Status:** Deployed on Railway + Base Sepolia · 7 verified smart contracts · Telegram bot live
 
 ---
 
 ## What It Does
 
-The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. An **AI agent powered by GPT-4o tool-calling** transcribes speech, reasons about intent, and autonomously selects from 37 tools across 10 domains — recording batches, managing marketplace offers, arranging DeFi financing, checking EUDR compliance, tracing provenance, and anchoring data on-chain. Full event data is stored on IPFS with cryptographic hashes anchored to Base Sepolia.
+The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. An **AI agent powered by GPT-4o tool-calling** transcribes speech, reasons about intent, and autonomously selects from 37 tools across 10 domains - recording batches, managing marketplace offers, arranging DeFi financing, checking EUDR compliance, tracing provenance, and anchoring data on-chain. Full event data is stored on IPFS with cryptographic hashes anchored to Base Sepolia.
 
-**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. The AI agent selects the right tool, validates the data, creates a tokenized batch (ERC-1155) with blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that any buyer or customs broker can scan for full supply chain history — including EUDR Article 9 compliance data ready for EU import filing. All accessible through Telegram Mini Apps with voice-first interaction.
+**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. The AI agent selects the right tool, validates the data, creates a tokenized batch (ERC-1155) with blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that any buyer or customs broker can scan for full supply chain history - including EUDR Article 9 compliance data ready for EU import filing. All accessible through Telegram Mini Apps with voice-first interaction.
 
 ---
 
@@ -68,7 +68,7 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
   - `CoffeeBatchToken.sol`: ERC-1155 semi-fungible tokens for batches & containers
   - `SettlementContract.sol`: Multi-currency tracking (USD, ETH, BIRR, USDC)
   - `ProvenanceDataReceiver.sol`: Chainlink CRE data receiver
-  - `FinancingPool.sol`: ERC-4626 vault — LPs deposit USDC, cooperatives draw advances
+  - `FinancingPool.sol`: ERC-4626 vault - LPs deposit USDC, cooperatives draw advances
   - `TradeEscrow.sol`: Holds USDC per trade, disburses on delivery confirmation
   - `FeeDistributor.sol`: Fee splitting (treasury 70% / reserve 20% / LP bonus 10%)
 - **Solidity 0.8.20** + OpenZeppelin 5.0, compiled with Foundry (`--via-ir`)
@@ -76,12 +76,12 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
 - **Merkle Proofs**: Batch aggregation (75% gas reduction)
 
 ### DeFi Trade Finance
-Receivables factoring for coffee cooperatives — they draw USDC advances against confirmed buyer orders instead of waiting 60–90 days for payment:
+Receivables factoring for coffee cooperatives - they draw USDC advances against confirmed buyer orders instead of waiting 60–90 days for payment:
 
 1. **FinancingPool** (ERC-4626): Liquidity providers deposit USDC, earn yield from trade fees
 2. **TradeEscrow**: Holds buyer payment, disburses to cooperative on delivery confirmation
 3. **FeeDistributor**: Splits the spread between treasury, reserve fund, and LP bonus
-4. Atomic pull model — pool calls `safeTransferFrom(escrow)` for trustless principal return
+4. Atomic pull model - pool calls `safeTransferFrom(escrow)` for trustless principal return
 
 ### Chainlink CRE Integration
 - **Chainlink Runtime Environment**: Decentralized oracle computation for supply chain verification
@@ -711,14 +711,14 @@ GFW_API_KEY=...  # Global Forest Watch API
 - ✅ Production deployment on Railway (web + Celery worker + Redis)
 - ✅ Chainlink CRE workflow simulation + ProvenanceDataReceiver contract
 
-**v2.2 (Current — March 2026)** ✅
+**v2.2 (Current - March 2026)** ✅
 - ✅ DeFi trade finance: FinancingPool (ERC-4626), TradeEscrow, FeeDistributor
 - ✅ LSP integration: webhook dispatch, milestone ingestion → EPCIS events
 - ✅ Customs clearance: DPP API, EUDR Article 9 flat export, container-level compliance
 - ✅ Agent expanded to 37 tools across 10 domains (Container, Pool, Chainlink DON, Payment)
 - ✅ 7 verified smart contracts on Base Sepolia
 
-**v3.0 (Planned — Q2/Q3 2026)**
+**v3.0 (Planned - Q2/Q3 2026)**
 - [ ] Chainlink CRE DON deployment (pending CRE mainnet)
 - [ ] Payment integration (M-PESA, TeleBirr, Stripe)
 - [ ] Base mainnet deployment
@@ -732,9 +732,9 @@ GFW_API_KEY=...  # Global Forest Watch API
 
 Comprehensive guides in `/documentation`:
 - **Labs** (31 educational tutorials)
-  - Lab 28: Agentic AI — Tool-Calling Agent Architecture
-  - Lab 29: Chainlink CRE — Agent-to-Oracle Bridge
-  - Lab 30: CRE Demo — Hackathon Submission
+  - Lab 28: Agentic AI - Tool-Calling Agent Architecture
+  - Lab 29: Chainlink CRE - Agent-to-Oracle Bridge
+  - Lab 30: CRE Demo - Hackathon Submission
   - Lab 31: UNICEF Pitch Video Runbook
 - **Guides** (EUDR, ASR, marketplace, RAG, architecture)
 - **Deployment** (Railway, Neon, Docker, production, ChromaDB Cloud)
