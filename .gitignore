@@ -132,3 +132,4 @@ chainlink/workflow/node_modules/
 # TTS Audio Cache (keep directory structure, ignore generated files)
 voice/cache/tts/
 !voice/cache/tts/.gitkeep
+.commit_msg
