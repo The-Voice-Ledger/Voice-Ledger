@@ -883,6 +883,20 @@ class ToolRegistry:
             db.commit()
 
             total = a.quantity_accepted_kg * offer.price_per_kg
+
+            # Dispatch webhook to LSPs / customs brokers
+            try:
+                from voice.service.webhook_dispatcher import dispatch_webhook_sync
+                container = getattr(a, 'container_offering', None)
+                dispatch_webhook_sync("PREPARING_SHIPMENT", {
+                    "acceptance_number": a.acceptance_number,
+                    "container_sscc": getattr(container, 'container_sscc', None) if container else None,
+                    "total_amount_usd": total,
+                    "dpp_url": f"/api/dpp/batch/{a.acceptance_number}",
+                })
+            except Exception:
+                pass  # webhook delivery is best-effort
+
             return (
                 f"Receipt confirmed for acceptance {a.acceptance_number} "
                 f"(${total:,.2f}). Delivery status → PREPARING_SHIPMENT.",

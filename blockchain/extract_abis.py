@@ -20,7 +20,10 @@ def extract_abis():
     contracts = {
         "EPCISEventAnchor": "EPCISEventAnchor.sol/EPCISEventAnchor.json",
         "CoffeeBatchToken": "CoffeeBatchToken.sol/CoffeeBatchToken.json",
-        "SettlementContract": "SettlementContract.sol/SettlementContract.json"
+        "SettlementContract": "SettlementContract.sol/SettlementContract.json",
+        "FinancingPool": "FinancingPool.sol/FinancingPool.json",
+        "TradeEscrow": "TradeEscrow.sol/TradeEscrow.json",
+        "FeeDistributor": "FeeDistributor.sol/FeeDistributor.json",
     }
     
     print("Extracting ABIs from Foundry build artifacts...\n")

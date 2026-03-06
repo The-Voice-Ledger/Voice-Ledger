@@ -161,6 +161,31 @@ try:
 except ImportError as e:
     POOL_API_AVAILABLE = False
     print(f"ℹ️  Pool API module not available: {e}")
+
+# Import DeFi Financing Pool API router (receivables factoring)
+try:
+    from voice.service.financing_api import router as financing_api_router
+    FINANCING_API_AVAILABLE = True
+except ImportError as e:
+    FINANCING_API_AVAILABLE = False
+    print(f"ℹ️  Financing API module not available: {e}")
+
+# Import DPP & EUDR Compliance API router (Customs Clearance integration)
+try:
+    from voice.service.dpp_api import router as dpp_api_router
+    DPP_API_AVAILABLE = True
+except ImportError as e:
+    DPP_API_AVAILABLE = False
+    print(f"ℹ️  DPP/EUDR compliance API module not available: {e}")
+
+# Import Logistics & Webhook API router (LSP integration)
+try:
+    from voice.service.logistics_api import router as logistics_api_router
+    LOGISTICS_API_AVAILABLE = True
+except ImportError as e:
+    LOGISTICS_API_AVAILABLE = False
+    print(f"ℹ️  Logistics/webhook API module not available: {e}")
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
@@ -246,6 +271,21 @@ if AGENT_API_AVAILABLE:
 if POOL_API_AVAILABLE:
     app.include_router(pool_api_router)
     print("✅ Container pool endpoints registered at /api/pools, /api/pool/*, /api/my/*")
+
+# Include DeFi Financing Pool API router
+if FINANCING_API_AVAILABLE:
+    app.include_router(financing_api_router)
+    print("✅ Financing pool endpoints registered at /api/financing/*")
+
+# Include DPP & EUDR Compliance API router (Customs Clearance integration)
+if DPP_API_AVAILABLE:
+    app.include_router(dpp_api_router)
+    print("✅ DPP/EUDR compliance endpoints registered at /api/dpp/*, /api/eudr/*")
+
+# Include Logistics & Webhook API router (LSP integration)
+if LOGISTICS_API_AVAILABLE:
+    app.include_router(logistics_api_router)
+    print("✅ Logistics/webhook endpoints registered at /api/webhooks/*, /api/logistics/*")
 
 # CORS Configuration - Allow frontend origins
 # Development: localhost:3000 (local Next.js)

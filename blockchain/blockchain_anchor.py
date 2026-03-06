@@ -17,10 +17,13 @@ Updated: December 18, 2025
 import os
 import sys
 import json
+import logging
 from typing import Optional, Dict, Any
 from web3 import Web3
 from eth_account import Account
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Add parent to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -70,10 +73,8 @@ class BlockchainAnchor:
             abi=abi
         )
         
-        print(f"✓ BlockchainAnchor initialized")
-        print(f"  Chain ID: {self.w3.eth.chain_id}")
-        print(f"  Account: {self.account.address}")
-        print(f"  Contract: {self.contract_address}")
+        logger.info("BlockchainAnchor initialized  chain=%s  account=%s  contract=%s",
+                    self.w3.eth.chain_id, self.account.address, self.contract_address)
     
     def anchor_event(
         self,
@@ -115,7 +116,7 @@ class BlockchainAnchor:
             )
             
             # Build transaction
-            nonce = self.w3.eth.get_transaction_count(self.account.address)
+            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
             
             # Estimate gas
             gas_estimate = self.contract.functions.anchorEvent(
@@ -146,21 +147,20 @@ class BlockchainAnchor:
             # Send transaction
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             tx_hash_hex = tx_hash.hex()
-            
-            print(f"✓ Event anchored to blockchain")
-            print(f"  Batch: {batch_id}")
-            print(f"  Hash: {event_hash[:10]}...")
-            print(f"  Tx: {tx_hash_hex}")
-            
-            # Wait for confirmation (optional - can be done async)
-            # receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            # print(f"  Block: {receipt['blockNumber']}")
-            # print(f"  Gas Used: {receipt['gasUsed']}")
-            
+            logger.info("Anchor tx sent  batch=%s  hash=%s  tx=%s", batch_id, event_hash[:10], tx_hash_hex)
+
+            # Wait for on-chain confirmation
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+
+            if receipt['status'] != 1:
+                logger.error("Anchor tx reverted  tx=%s  batch=%s", tx_hash_hex, batch_id)
+                return None
+
+            logger.info("Anchor confirmed  block=%s  gas=%s", receipt['blockNumber'], receipt['gasUsed'])
             return tx_hash_hex
-            
+
         except Exception as e:
-            print(f"❌ Blockchain anchoring failed: {e}")
+            logger.exception("Blockchain anchoring failed  batch=%s", batch_id)
             return None
     
     def get_batch_info(self, batch_id: str) -> Optional[Dict[str, Any]]:
@@ -191,7 +191,7 @@ class BlockchainAnchor:
             }
             
         except Exception as e:
-            print(f"❌ Failed to query batch {batch_id}: {e}")
+            logger.exception("Failed to query batch %s", batch_id)
             return None
     
     def verify_event_hash(self, batch_id: str, event_hash: str) -> bool:
@@ -218,8 +218,20 @@ class BlockchainAnchor:
             return stored_hash.lower() == event_hash.lower()
             
         except Exception as e:
-            print(f"❌ Hash verification failed: {e}")
+            logger.exception("Hash verification failed  batch=%s", batch_id)
             return False
+
+
+# ── Singleton ────────────────────────────────────────────
+_anchor: Optional[BlockchainAnchor] = None
+
+
+def get_blockchain_anchor() -> BlockchainAnchor:
+    """Get or create the singleton BlockchainAnchor instance."""
+    global _anchor
+    if _anchor is None:
+        _anchor = BlockchainAnchor()
+    return _anchor
 
 
 def anchor_event_to_blockchain(
@@ -232,12 +244,13 @@ def anchor_event_to_blockchain(
 ) -> Optional[str]:
     """
     Convenience function to anchor event to blockchain.
-    
+    Uses the singleton BlockchainAnchor instance.
+
     Returns:
         Transaction hash or None
     """
     try:
-        anchor = BlockchainAnchor()
+        anchor = get_blockchain_anchor()
         return anchor.anchor_event(
             batch_id=batch_id,
             event_hash=event_hash,
@@ -247,7 +260,7 @@ def anchor_event_to_blockchain(
             submitter=submitter
         )
     except Exception as e:
-        print(f"❌ Anchoring failed: {e}")
+        logger.exception("Anchoring failed  batch=%s", batch_id)
         return None
 
 
