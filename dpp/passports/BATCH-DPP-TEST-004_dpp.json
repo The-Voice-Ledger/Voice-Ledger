@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-DPP-TEST-004",
   "batchId": "BATCH-DPP-TEST-004",
   "version": "3.0.0",
-  "issuedAt": "2026-03-04T15:37:02.146574+00:00",
+  "issuedAt": "2026-03-06T10:28:38.533306+00:00",
   "productInformation": {
     "productName": "Persistence Test Coffee",
     "quantity": 100.0,
@@ -37,7 +37,7 @@
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-03-04",
+      "assessmentDate": "2026-03-06",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
     }
@@ -66,7 +66,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-03-04",
+      "assessmentDate": "2026-03-06",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -79,7 +79,7 @@
       "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-03-04"
+      "nextReviewDate": "2027-03-06"
     }
   },
   "donAttestation": {

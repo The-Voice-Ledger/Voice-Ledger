@@ -180,13 +180,17 @@ contract FinancingPool is ERC4626 {
 
     /**
      * @notice Return principal + fee to the pool after buyer repayment.
-     * @dev    Only callable by the authorised TradeEscrow. The escrow must
-     *         have already transferred USDC to this contract before calling.
+     * @dev    Only callable by the authorised TradeEscrow. Pulls `principal`
+     *         USDC from the escrow via safeTransferFrom so the transfer and
+     *         accounting update are atomic (no trust gap).
      * @param  tradeId   Unique trade identifier
      * @param  principal Original advance amount
-     * @param  fee       Fee portion (already deducted from buyer payment by escrow)
+     * @param  fee       Fee portion (recorded for analytics; not transferred here)
      */
     function returnFunds(uint256 tradeId, uint256 principal, uint256 fee) external onlyEscrow {
+        // Pull principal from escrow — reverts if escrow didn't approve
+        IERC20(asset()).safeTransferFrom(msg.sender, address(this), principal);
+
         // Reduce outstanding advances
         totalAdvanced -= principal;
         cumulativeTradeFees += fee;

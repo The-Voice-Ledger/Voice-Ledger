@@ -20,10 +20,13 @@ Updated: December 21, 2025
 import os
 import sys
 import json
+import logging
 from typing import Optional, Dict, Any
 from web3 import Web3
 from eth_account import Account
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Add parent to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -78,10 +81,8 @@ class CoffeeBatchTokenManager:
             abi=abi
         )
         
-        print(f"✓ CoffeeBatchTokenManager initialized")
-        print(f"  Chain ID: {self.w3.eth.chain_id}")
-        print(f"  Cooperative wallet: {self.account.address}")
-        print(f"  Token contract: {self.contract_address}")
+        logger.info("CoffeeBatchTokenManager initialized  chain=%s  wallet=%s  contract=%s",
+                    self.w3.eth.chain_id, self.account.address, self.contract_address)
     
     def mint_batch(
         self,
@@ -147,45 +148,36 @@ class CoffeeBatchTokenManager:
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
-            print(f"  Transaction sent: {tx_hash.hex()}")
-            print(f"  Waiting for confirmation...")
+            logger.info("Mint tx sent: %s — waiting for confirmation", tx_hash.hex())
             
             # Wait for receipt (30 second timeout)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
             
             if receipt['status'] == 1:
-                # mintBatch returns the token ID - parse it from logs or call balanceOf
-                # Since we just minted, the token ID is the next sequential ID
-                # Get total supply or use a different method
-                print(f"✓ Batch token minted successfully!")
-                print(f"  Batch ID: {batch_id}")
-                print(f"  Quantity: {quantity_kg} kg")
-                print(f"  IPFS CID: {ipfs_cid}")
-                print(f"  TX hash: {tx_hash.hex()}")
+                logger.info("Batch token minted  batch=%s  qty=%skg  ipfs=%s  tx=%s",
+                            batch_id, quantity_kg, ipfs_cid, tx_hash.hex())
                 
                 # Query the token ID by batch_id (with retry for propagation delay)
                 import time
                 for attempt in range(3):
                     try:
                         token_id = self.contract.functions.getTokenIdByBatchId(batch_id).call()
-                        print(f"  Token ID: {token_id}")
+                        logger.info("Token ID resolved: %s", token_id)
                         return token_id
                     except Exception as e:
                         if attempt < 2:
-                            print(f"  Retrying token ID query (attempt {attempt + 2}/3)...")
+                            logger.debug("Retrying token ID query (attempt %d/3)", attempt + 2)
                             time.sleep(2)
                         else:
-                            print(f"⚠ Couldn't query token ID after {attempt + 1} attempts: {e}")
-                            print(f"  Token was minted successfully - check Base Sepolia explorer")
-                            print(f"  TX: https://sepolia.basescan.org/tx/{tx_hash.hex()}")
+                            logger.warning("Could not query token ID after 3 attempts: %s  tx=%s",
+                                           e, tx_hash.hex())
                             return None
             else:
-                print(f"❌ Token minting transaction failed")
-                print(f"  TX hash: {tx_hash.hex()}")
+                logger.error("Mint tx reverted  tx=%s", tx_hash.hex())
                 return None
                 
         except Exception as e:
-            print(f"❌ Failed to mint batch token: {e}")
+            logger.exception("Failed to mint batch token  batch=%s", batch_id)
             return None
     
     def mint_container(
@@ -265,51 +257,42 @@ class CoffeeBatchTokenManager:
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
-            print(f"  Container minting transaction sent: {tx_hash.hex()}")
-            print(f"  Burning {len(child_token_ids)} child tokens...")
+            logger.info("Container mint tx sent: %s — burning %d child tokens", tx_hash.hex(), len(child_token_ids))
             
             # Wait for receipt (60 second timeout for more complex tx)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
             
             if receipt['status'] == 1:
-                print(f"✓ Container token minted successfully!")
-                print(f"  Container ID: {container_id}")
-                print(f"  Total Quantity: {quantity_kg} kg")
-                print(f"  Child batches burned: {len(child_token_ids)}")
-                print(f"  IPFS CID: {ipfs_cid}")
-                print(f"  TX hash: {tx_hash.hex()}")
+                logger.info("Container token minted  id=%s  qty=%skg  children=%d  tx=%s",
+                            container_id, quantity_kg, len(child_token_ids), tx_hash.hex())
                 
                 # Query the container token ID by container_id (with retry)
                 import time
                 for attempt in range(3):
                     try:
                         token_id = self.contract.functions.getTokenIdByBatchId(container_id).call()
-                        print(f"  Container Token ID: {token_id}")
+                        logger.info("Container Token ID: %s", token_id)
                         
                         # Verify it's actually a container
                         is_container = self.contract.functions.isContainer(token_id).call()
                         if is_container:
-                            print(f"  ✓ Verified as container token")
+                            logger.debug("Verified as container token")
                         
                         return token_id
                     except Exception as e:
                         if attempt < 2:
-                            print(f"  Retrying token ID query (attempt {attempt + 2}/3)...")
+                            logger.debug("Retrying token ID query (attempt %d/3)", attempt + 2)
                             time.sleep(2)
                         else:
-                            print(f"⚠ Couldn't query token ID after {attempt + 1} attempts: {e}")
-                            print(f"  Container was minted successfully - check Base Sepolia explorer")
-                            print(f"  TX: https://sepolia.basescan.org/tx/{tx_hash.hex()}")
+                            logger.warning("Could not query container token ID after 3 attempts: %s  tx=%s",
+                                           e, tx_hash.hex())
                             return None
             else:
-                print(f"❌ Container minting transaction failed")
-                print(f"  TX hash: {tx_hash.hex()}")
+                logger.error("Container mint tx reverted  tx=%s", tx_hash.hex())
                 return None
                 
         except Exception as e:
-            print(f"❌ Failed to mint container token: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Failed to mint container token  id=%s", container_id)
             return None
     
     def get_batch_metadata(self, token_id: int) -> Optional[Dict[str, Any]]:
@@ -337,7 +320,7 @@ class CoffeeBatchTokenManager:
             }
             
         except Exception as e:
-            print(f"❌ Failed to query batch {token_id}: {e}")
+            logger.exception("Failed to query batch metadata  token_id=%s", token_id)
             return None
     
     def get_batch_balance(self, owner: str, token_id: int) -> int:
@@ -359,7 +342,7 @@ class CoffeeBatchTokenManager:
             return balance
             
         except Exception as e:
-            print(f"❌ Failed to query balance: {e}")
+            logger.exception("Failed to query balance  owner=%s  token_id=%s", owner, token_id)
             return 0
 
 # Global instance (singleton pattern)

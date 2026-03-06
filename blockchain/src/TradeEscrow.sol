@@ -367,8 +367,8 @@ contract TradeEscrow is ERC1155Holder {
         // ── Pull full agreed price from buyer ──
         usdc.safeTransferFrom(msg.sender, address(this), trade.agreedPrice);
 
-        // ── Return principal to pool ──
-        usdc.safeTransfer(address(financingPool), trade.advanceAmount);
+        // ── Return principal to pool (pool pulls via safeTransferFrom) ──
+        usdc.forceApprove(address(financingPool), trade.advanceAmount);
         financingPool.returnFunds(tradeId, trade.advanceAmount, trade.feeAmount);
 
         // ── Send fee to distributor ──
@@ -461,8 +461,8 @@ contract TradeEscrow is ERC1155Holder {
         // Seller must return the advance amount
         usdc.safeTransferFrom(trade.seller, address(this), trade.advanceAmount);
 
-        // Return principal to pool (no fee — it's a cancellation)
-        usdc.safeTransfer(address(financingPool), trade.advanceAmount);
+        // Return principal to pool (pool pulls via safeTransferFrom, no fee)
+        usdc.forceApprove(address(financingPool), trade.advanceAmount);
         financingPool.returnFunds(tradeId, trade.advanceAmount, 0);
 
         // Return token to seller
