@@ -1189,6 +1189,95 @@ CONFIRM_PAYMENT_RECEIVED = {
 }
 
 
+# ===========================================================================
+# DeFi Financing Pool tools (Agent #10)
+# ===========================================================================
+
+# Tool: check_financing_pool  (READ - pool stats)
+# ──────────────────────────────────────────────────────────────────────────────
+CHECK_FINANCING_POOL = {
+    "type": "function",
+    "function": {
+        "name": "check_financing_pool",
+        "description": (
+            "Check the DeFi financing pool status: total liquidity, amount "
+            "currently advanced, available balance for new advances, utilisation "
+            "percentage, cumulative fees, and current share price. Use when a "
+            "cooperative asks 'how much financing is available?', 'pool status', "
+            "'can I get an advance?', 'what is the pool balance?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
+# Tool: request_financing_advance  (WRITE - cooperative requests USDC advance)
+# ──────────────────────────────────────────────────────────────────────────────
+REQUEST_FINANCING_ADVANCE = {
+    "type": "function",
+    "function": {
+        "name": "request_financing_advance",
+        "description": (
+            "Request a USDC advance from the financing pool against a confirmed "
+            "buyer order. The cooperative's shipped container token (ERC-1155) is "
+            "locked as collateral in escrow. Use when a cooperative says "
+            "'I need an advance', 'finance my shipment', 'get early payment for "
+            "container X'. Requires a confirmed acceptance_number or trade details."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number (e.g. ACC-000001) of the confirmed trade",
+                },
+                "token_id": {
+                    "type": "integer",
+                    "description": "ERC-1155 container token ID (if known)",
+                },
+                "buyer_address": {
+                    "type": "string",
+                    "description": "Buyer's wallet address (if known)",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+# Tool: check_trade_financing  (READ - check advance/trade status)
+# ──────────────────────────────────────────────────────────────────────────────
+CHECK_TRADE_FINANCING = {
+    "type": "function",
+    "function": {
+        "name": "check_trade_financing",
+        "description": (
+            "Check the status of a financed trade: advance amount, settlement "
+            "status, fee breakdown, and deadline. Use when a cooperative asks "
+            "'has my advance been settled?', 'what is the status of trade 5?', "
+            "'check my financing', 'when does my trade expire?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "description": "On-chain trade ID from the escrow contract",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to look up associated trade",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Tool: request_don_attestation
@@ -1323,4 +1412,9 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_PAYMENT_STATUS,
     RECORD_COOPERATIVE_PAYOUT,
     CONFIRM_PAYMENT_RECEIVED,
+    # DeFi Financing Pool (Agent #10)
+    CHECK_FINANCING_POOL,
+    REQUEST_FINANCING_ADVANCE,
+    CHECK_TRADE_FINANCING,
 ]
+

@@ -89,6 +89,11 @@ class ToolRegistry:
         self._tools["record_cooperative_payout"] = self._record_cooperative_payout
         self._tools["confirm_payment_received"] = self._confirm_payment_received
 
+        # DeFi Financing Pool tools (Agent #10)
+        self._tools["check_financing_pool"] = self._check_financing_pool
+        self._tools["request_financing_advance"] = self._request_financing_advance
+        self._tools["check_trade_financing"] = self._check_trade_financing
+
     # ------------------------------------------------------------------
     # Container marketplace tool implementations (Agent #3b)
     # ------------------------------------------------------------------
@@ -913,6 +918,207 @@ class ToolRegistry:
             "Please provide a commitment_id or acceptance_number.",
             {"error": "missing_id"},
         )
+
+    # ------------------------------------------------------------------
+    # DeFi Financing Pool tool implementations (Agent #10)
+    # ------------------------------------------------------------------
+
+    def _check_financing_pool(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Return current financing pool stats."""
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+            stats = mgr.pool_stats()
+            msg = (
+                f"Financing pool status:\n"
+                f"  Total liquidity: ${stats['total_assets_usdc']:,.2f} USDC\n"
+                f"  Currently advanced: ${stats['total_advanced_usdc']:,.2f} USDC\n"
+                f"  Available for advances: ${stats['available_for_advance_usdc']:,.2f} USDC\n"
+                f"  Utilisation: {stats['utilisation_pct']:.1f}%\n"
+                f"  Share price: ${stats['share_price_usdc']:.4f}"
+            )
+            return (msg, stats)
+        except Exception as e:
+            logger.error("check_financing_pool failed: %s", e)
+            return (
+                f"Could not fetch pool stats: {e}",
+                {"error": str(e)},
+            )
+
+    def _request_financing_advance(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Request a USDC advance against a confirmed trade."""
+        from database.models import UserIdentity, RFQAcceptance, RFQOffer
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or user.role not in ("cooperative", "admin"):
+            return ("Only cooperatives can request financing advances.", {"error": "forbidden"})
+
+        acceptance_number = args.get("acceptance_number")
+        token_id = args.get("token_id")
+        buyer_address = args.get("buyer_address")
+
+        # Look up trade details from acceptance if provided
+        if acceptance_number:
+            acc = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number
+            ).first()
+            if not acc:
+                return (
+                    f"Acceptance {acceptance_number} not found.",
+                    {"error": "not_found"},
+                )
+            offer = db.query(RFQOffer).filter_by(id=acc.offer_id).first()
+            if not offer or user.organization_id != offer.cooperative_id:
+                return (
+                    "You are not the cooperative for this acceptance.",
+                    {"error": "forbidden"},
+                )
+            if acc.delivery_status not in ("PREPARING_SHIPMENT", "SHIPPED"):
+                return (
+                    f"Cannot finance acceptance in '{acc.delivery_status}' status. "
+                    "Shipment must be confirmed first.",
+                    {"error": "invalid_status"},
+                )
+
+            agreed_price = acc.quantity_accepted_kg * offer.price_per_kg
+            token_id = token_id or getattr(acc, "container_token_id", None)
+            if not token_id:
+                return (
+                    "No container token ID found for this acceptance. "
+                    "The container must be tokenised before requesting an advance.",
+                    {"error": "no_token"},
+                )
+        elif not token_id:
+            return (
+                "Please provide an acceptance_number or token_id.",
+                {"error": "missing_id"},
+            )
+        else:
+            agreed_price = None
+
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+
+            # Check available liquidity first
+            stats = mgr.pool_stats()
+            advance_estimate = (agreed_price * 0.80) if agreed_price else None
+            if advance_estimate and advance_estimate > stats["available_for_advance_usdc"]:
+                return (
+                    f"Insufficient pool liquidity. Available: "
+                    f"${stats['available_for_advance_usdc']:,.2f}, "
+                    f"estimated advance (80%): ${advance_estimate:,.2f}.",
+                    {"error": "insufficient_liquidity", **stats},
+                )
+
+            tx_hash = mgr.request_advance(
+                token_id=token_id,
+                token_amount=1,
+                buyer=buyer_address or "0x0000000000000000000000000000000000000000",
+                agreed_price_usdc=agreed_price or 0,
+                shipment_hash="0x" + "00" * 32,
+                farm_id=user_did or "",
+            )
+            if tx_hash:
+                return (
+                    f"Advance approved! USDC disbursed to your wallet.\n"
+                    f"  Trade amount: ${agreed_price:,.2f}\n"
+                    f"  Estimated advance (80%): ${advance_estimate:,.2f}\n"
+                    f"  TX: {tx_hash}"
+                    if agreed_price else
+                    f"Advance approved! TX: {tx_hash}",
+                    {
+                        "tx_hash": tx_hash,
+                        "token_id": token_id,
+                        "agreed_price_usdc": agreed_price,
+                        "advance_estimate_usdc": advance_estimate,
+                        "acceptance_number": acceptance_number,
+                    },
+                )
+            return (
+                "Advance request failed. Check that the container token is "
+                "approved to the escrow contract.",
+                {"error": "tx_failed"},
+            )
+        except Exception as e:
+            logger.error("request_financing_advance failed: %s", e)
+            return (
+                f"Financing advance failed: {e}",
+                {"error": str(e)},
+            )
+
+    def _check_trade_financing(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Check status of a financed trade."""
+        trade_id = args.get("trade_id")
+        acceptance_number = args.get("acceptance_number")
+
+        if not trade_id and not acceptance_number:
+            return (
+                "Please provide a trade_id or acceptance_number.",
+                {"error": "missing_id"},
+            )
+
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+
+            if trade_id:
+                trade = mgr.get_trade(trade_id)
+                if not trade:
+                    return (f"Trade {trade_id} not found.", {"error": "not_found"})
+            else:
+                # Try sequential trade IDs to find matching acceptance
+                # (In production, we'd store the mapping in the DB)
+                trade = None
+                for tid in range(1, 100):
+                    t = mgr.get_trade(tid)
+                    if not t:
+                        break
+                    if t.get("farm_id") and acceptance_number in str(t.get("farm_id", "")):
+                        trade = t
+                        break
+                if not trade:
+                    return (
+                        f"No financed trade found for acceptance {acceptance_number}.",
+                        {"error": "not_found"},
+                    )
+
+            status_emoji = {
+                "Active": "🟡",
+                "Settled": "✅",
+                "Defaulted": "❌",
+                "Cancelled": "⚪",
+            }.get(trade["status"], "❓")
+
+            from datetime import datetime
+            deadline_str = ""
+            if trade["deadline"] > 0:
+                deadline_dt = datetime.utcfromtimestamp(trade["deadline"])
+                deadline_str = f"\n  Deadline: {deadline_dt.strftime('%Y-%m-%d')}"
+
+            msg = (
+                f"{status_emoji} Trade #{trade['trade_id']} - {trade['status']}\n"
+                f"  Agreed price: ${trade['agreed_price_usdc']:,.2f}\n"
+                f"  Advance received: ${trade['advance_amount_usdc']:,.2f}\n"
+                f"  Fee: ${trade['fee_amount_usdc']:,.2f} ({trade['fee_bps']}bps)"
+                f"{deadline_str}"
+            )
+            return (msg, trade)
+        except Exception as e:
+            logger.error("check_trade_financing failed: %s", e)
+            return (
+                f"Could not check trade financing: {e}",
+                {"error": str(e)},
+            )
 
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""

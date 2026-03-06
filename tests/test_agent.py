@@ -40,9 +40,9 @@ class TestToolDefinitions:
             assert params["type"] == "object", f"Tool {func['name']} params not object"
     
     def test_tool_count(self):
-        """We should have 37 tools across all agents."""
+        """We should have 40 tools across all agents."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
-        assert len(SUPPLY_CHAIN_TOOLS) == 37
+        assert len(SUPPLY_CHAIN_TOOLS) == 40
     
     def test_tool_names_are_unique(self):
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
@@ -963,10 +963,10 @@ class TestAllToolsIntegration:
     """Verify all agents work together in the unified tool set."""
 
     def test_total_tool_count(self):
-        """We should have 37 tools total."""
+        """We should have 40 tools total."""
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
 
-        assert len(SUPPLY_CHAIN_TOOLS) == 37
+        assert len(SUPPLY_CHAIN_TOOLS) == 40
 
     def test_all_tool_names_unique(self):
         """No duplicate tool names across all agents."""
@@ -997,6 +997,7 @@ class TestAllToolsIntegration:
             "check_don_attestation", "get_don_provenance_metrics",
             "browse_containers", "browse_pools", "list_my_commitments",
             "check_payment_status",
+            "check_financing_pool", "check_trade_financing",
         }
         write_tools = {
             "record_commission", "record_shipment", "record_receipt",
@@ -1006,6 +1007,7 @@ class TestAllToolsIntegration:
             "purchase_container", "commit_to_pool",
             "confirm_payment", "record_cooperative_payout",
             "confirm_payment_received",
+            "request_financing_advance",
         }
         from voice.agent.tools import SUPPLY_CHAIN_TOOLS
 
