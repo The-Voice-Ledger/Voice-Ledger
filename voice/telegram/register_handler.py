@@ -1283,6 +1283,10 @@ async def complete_farmer_registration(user_id: int, skip_photo: bool = False, s
             user.preferred_language = conversation_states[user_id]['data'].get('preferred_language', 'en')
             user.role = 'FARMER'
             user.language_set_at = datetime.utcnow()
+            # Save phone number to UserIdentity
+            if 'phone_number' in conversation_states[user_id]['data']:
+                user.phone_number = conversation_states[user_id]['data']['phone_number']
+                logger.info(f"📞 Saved phone {user.phone_number} to UserIdentity for user {user_id}")
             # NOTE: is_approved set to True AFTER FarmerIdentity is created successfully
         
         # Create or update FarmerIdentity with GPS photo data
