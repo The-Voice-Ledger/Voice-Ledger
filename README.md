@@ -2,16 +2,16 @@
 
 **A Voice-first blockchain traceability System for coffee supply chains.** Farmers speak, the system records everything from harvest to export, anchored on-chain with IPFS storage. Built for smallholder farmers who shouldn't need a smartphone to prove their coffee's provenance.
 
-**Current:** v2.1 (Production) — Agentic AI with 25 tools, Telegram Mini Apps, RAG-enhanced conversations  
-**Status:** Deployed on Railway, Telegram bot live, Chainlink CRE integration in development
+**Current:** v2.2 (Production) — 37-tool AI agent, DeFi trade finance, LSP & customs integration  
+**Status:** Deployed on Railway + Base Sepolia · 7 verified smart contracts · Telegram bot live
 
 ---
 
 ## What It Does
 
-The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. An **AI agent powered by GPT-4o tool-calling** transcribes speech, reasons about intent, and autonomously selects from 25 tools across 7 domains — recording batches, managing marketplace offers, checking compliance, tracing provenance, and anchoring data on-chain. Full event data is stored on IPFS with cryptographic hashes anchored to Base Sepolia.
+The Voice Ledger converts spoken supply chain events into verifiable blockchain records. Farmers send voice messages via Telegram in Amharic or English. An **AI agent powered by GPT-4o tool-calling** transcribes speech, reasons about intent, and autonomously selects from 37 tools across 10 domains — recording batches, managing marketplace offers, arranging DeFi financing, checking EUDR compliance, tracing provenance, and anchoring data on-chain. Full event data is stored on IPFS with cryptographic hashes anchored to Base Sepolia.
 
-**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. The AI agent selects the right tool, validates the data, creates a tokenized batch (ERC-1155) with blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that buyers can scan for full supply chain history. All accessible through Telegram Mini Apps with voice-first interaction.
+**The pitch:** A smallholder farmer in Yirgacheffe records "50 kilograms washed Arabica from Manufam farm" via voice. The AI agent selects the right tool, validates the data, creates a tokenized batch (ERC-1155) with blockchain-verified provenance, GPS coordinates proving deforestation-free origin, and a QR code that any buyer or customs broker can scan for full supply chain history — including EUDR Article 9 compliance data ready for EU import filing. All accessible through Telegram Mini Apps with voice-first interaction.
 
 ---
 
@@ -31,16 +31,20 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
 - **Latency**: 5-15 seconds end-to-end (async Celery pipeline)
 - **IVR Ready**: Twilio integration for feature phones (planned)
 
-### Agentic AI (v2.1)
+### Agentic AI (37 Tools, 10 Domains)
 - **GPT-4o Tool-Calling Agent**: Replaces rigid NLU intent classification with autonomous reasoning
-- **25 Tools across 7 Domains**:
+- **37 Tools across 10 Domains**:
   - **Supply Chain** (7): record commission/shipment/receipt/transformation, pack/unpack/split batches
-  - **Query** (2): search batches, search knowledge base
   - **Marketplace** (5): create RFQ, browse RFQs, submit/accept/list offers
-  - **Compliance** (2): EUDR deforestation check, mass balance validation
+  - **Container** (2): browse containers, purchase container fractions
+  - **Pool** (3): browse pools, commit to pool, list commitments
   - **DPP** (4): get batch/container DPP, trace lineage, validate passport
+  - **Compliance** (2): EUDR deforestation check, mass balance validation
   - **Verification** (2): list pending verifications, verify batch
   - **Blockchain** (3): check anchor, get token info, verify hash
+  - **Chainlink DON** (3): request/check DON attestation, get provenance metrics
+  - **Payment** (4): confirm payment, check status, record payout, confirm receipt
+  - **Query** (2): search batches, search knowledge base
 - **Multi-Turn Conversations**: Redis-backed history (10-min TTL)
 - **Safety Rails**: Write-tool confirmation, bounded turn limits (max 6), 4-min timeout
 - **RAG Fallback**: ChromaDB Cloud + GPT-4 for documentation queries (3,539 docs indexed)
@@ -58,19 +62,33 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
 - **JSON-LD Canonicalization**: URDNA2015 for deterministic hashing
 - **Multi-Language Support**: Amharic and English transcripts → standardized EPCIS
 
-### Blockchain & Storage
-- **Smart Contracts** (Base Sepolia):
+### Blockchain & Smart Contracts
+- **7 Contracts on Base Sepolia** (all deployed & verified):
   - `EPCISEventAnchor.sol`: Hash anchoring with IPFS CID storage
-  - `CoffeeBatchToken.sol`: ERC-1155 semi-fungible tokens (50/50 tests passing)
+  - `CoffeeBatchToken.sol`: ERC-1155 semi-fungible tokens for batches & containers
   - `SettlementContract.sol`: Multi-currency tracking (USD, ETH, BIRR, USDC)
+  - `ProvenanceDataReceiver.sol`: Chainlink CRE data receiver
+  - `FinancingPool.sol`: ERC-4626 vault — LPs deposit USDC, cooperatives draw advances
+  - `TradeEscrow.sol`: Holds USDC per trade, disburses on delivery confirmation
+  - `FeeDistributor.sol`: Fee splitting (treasury 70% / reserve 20% / LP bonus 10%)
+- **Solidity 0.8.20** + OpenZeppelin 5.0, compiled with Foundry (`--via-ir`)
 - **IPFS Storage**: Full event data on Pinata (40% gas savings vs on-chain)
 - **Merkle Proofs**: Batch aggregation (75% gas reduction)
 
-### Chainlink CRE Integration (In Development)
+### DeFi Trade Finance
+Receivables factoring for coffee cooperatives — they draw USDC advances against confirmed buyer orders instead of waiting 60–90 days for payment:
+
+1. **FinancingPool** (ERC-4626): Liquidity providers deposit USDC, earn yield from trade fees
+2. **TradeEscrow**: Holds buyer payment, disburses to cooperative on delivery confirmation
+3. **FeeDistributor**: Splits the spread between treasury, reserve fund, and LP bonus
+4. Atomic pull model — pool calls `safeTransferFrom(escrow)` for trustless principal return
+
+### Chainlink CRE Integration
 - **Chainlink Runtime Environment**: Decentralized oracle computation for supply chain verification
 - **Off-Chain Verification Workflows**: EPCIS event hash validation, batch integrity checks, and compliance scoring executed on Chainlink's Decentralized Oracle Network (DON)
+- **ProvenanceDataReceiver**: On-chain contract receives DON-attested verification results
 - **Bridge Architecture**: AI agent tool results feed into CRE workflows for trustless verification
-- **Status**: Workflow definitions and simulation mode complete on `chainlink-cre` branch; DON deployment pending Chainlink CRE mainnet availability
+- **Status**: Workflow definitions + simulation complete; DON deployment pending CRE mainnet
 
 ### EU Deforestation Regulation (EUDR) Compliance
 - **GPS Photo Verification**: Extract geolocation from farmer photo EXIF
@@ -89,6 +107,15 @@ The Voice Ledger converts spoken supply chain events into verifiable blockchain 
 - **PIN Authentication**: 4-digit PIN for web UI access (bcrypt, 5-attempt lockout)
 - **Redis Session Persistence**: Session survival across server reloads
 - **Registration Flow**: Multi-language, role-specific, with photo upload
+
+### LSP & Customs Clearance Integration
+API surface for logistics service providers and EU customs brokers:
+
+- **Digital Product Passport API** (`/api/dpp/*`): Full/summary/QR DPP per batch or container
+- **EUDR Article 9 API** (`/api/eudr/*`): Flat compliance export for customs filing; container-level weakest-link rollup
+- **Webhook System** (`/api/webhooks/*`): Register URLs, subscribe to events (`PREPARING_SHIPMENT`, `SHIPPED`, `DELIVERED`, etc.), HMAC-SHA256 signed payloads, 3x exponential retry
+- **LSP Milestone Ingestion** (`/api/logistics/*`): Accept tracking milestones (PICKUP → PORT_ARRIVAL → CUSTOMS_CLEARED → DELIVERED), auto-generate EPCIS events
+- **Delivery State Machine**: `PENDING` → `PREPARING_SHIPMENT` → `SHIPPED` → `DELIVERED` with webhook dispatch on each transition
 
 ### Telegram Mini Apps Suite (v2.0)
 Five voice-first web applications accessible via Telegram:
@@ -152,7 +179,7 @@ Five voice-first web applications accessible via Telegram:
 **Voice Processing & AI**
 - OpenAI Whisper API (English ASR)
 - `b1n1yam/shook-medium-amharic-2k` (local Amharic ASR, HuggingFace)
-- OpenAI GPT-4o (agentic AI with 25-tool function-calling)
+- OpenAI GPT-4o (agentic AI with 37-tool function-calling)
 - AddisAI API (Amharic conversational AI)
 - ChromaDB Cloud (vector database, 3,539 docs)
   - OpenAI text-embedding-3-small (1536 dimensions)
@@ -385,23 +412,25 @@ Voice Input (Telegram/IVR/Mini Apps)
     ↓
 Language Detection → [Amharic Model] or [Whisper API]
     ↓
-Transcript → AI Agent (GPT-4o Tool-Calling)
+Transcript → AI Agent (GPT-4o, 37 tools)
     ↓
 ┌─── Agent Reasoning Loop (max 6 turns) ───┐
 │  Reason → Select Tool → Execute → Observe │
 │  ├─→ Supply Chain tools (7)               │
 │  ├─→ Marketplace tools (5)                │
-│  ├─→ Query tools (2)                      │
-│  ├─→ Compliance tools (2)                 │
-│  ├─→ DPP / Traceability tools (4)         │
+│  ├─→ Container / Pool tools (5)           │
+│  ├─→ DPP / Compliance tools (6)           │
 │  ├─→ Verification tools (2)               │
-│  └─→ Blockchain tools (3)                 │
+│  ├─→ Blockchain / Chainlink tools (6)     │
+│  ├─→ Payment tools (4)                    │
+│  └─→ Query / RAG tools (2)                │
 └──────────────────────────────────────────┘
     ↓
 Tool Execution Results
     ├─→ EPCIS Event Builder → IPFS + Blockchain Anchor
     ├─→ Database Updates (PostgreSQL)
-    └─→ Blockchain Queries (Base Sepolia)
+    ├─→ Smart Contracts (Base Sepolia, 7 contracts)
+    └─→ Webhook dispatch (LSP / customs broker)
     ↓
 ┌─────────────┴──────────────┐
 ↓                            ↓
@@ -417,7 +446,7 @@ Dual Response (Text + TTS Voice Note)
 1. Farmer speaks (Amharic/English) via Telegram or Mini App
 2. ASR transcribes based on user language preference
 3. AI agent receives transcript + conversation history (Redis-backed)
-4. Agent reasons about intent and selects from 25 tools (GPT-4o function-calling)
+4. Agent reasons about intent and selects from 37 tools (GPT-4o function-calling)
 5. Tool executes: create EPCIS event, query data, check compliance, etc.
 6. Agent may chain multiple tool calls in one turn (multi-step reasoning)
 7. EPCIS event → JSON-LD canonicalization → SHA-256 hash
@@ -433,13 +462,15 @@ User Voice/Text
 ASR → Transcript
     ↓
 Agent Executor (GPT-4o)
-    ├─→ Tool Registry (25 tools, 7 domains)
+    ├─→ Tool Registry (37 tools, 10 domains)
     │     ├─→ Supply Chain handlers
     │     ├─→ Marketplace handlers
+    │     ├─→ Container / Pool handlers
     │     ├─→ Compliance handlers
     │     ├─→ DPP / Traceability handlers
     │     ├─→ Verification handlers
-    │     └─→ Blockchain handlers
+    │     ├─→ Blockchain / Chainlink handlers
+    │     └─→ Payment handlers
     ├─→ RAG Fallback (ChromaDB, 3,539 docs)
     └─→ Redis History (multi-turn context)
     ↓
@@ -451,37 +482,18 @@ Natural language response → TTS → Dual Delivery
 ## Testing
 
 ```bash
-# Run all tests (90+ tests)
+# Run all tests
 pytest
 
-# Voice processing
-pytest tests/test_voice_api.py
+# Targeted test runs
+pytest tests/test_lsp_customs_integration.py   # LSP & customs
+pytest tests/test_eudr_compliance.py            # EUDR compliance
+pytest tests/test_voice_api.py                  # Voice processing
+pytest tests/test_rag_integration.py            # RAG system
+pytest tests/test_anchor_flow.py                # Blockchain anchoring
 
-# RAG system (Lab 18)
-pytest tests/test_rag_integration.py
-
-# Conversational AI
-pytest tests/test_english_conversation.py
-pytest tests/test_amharic_conversation.py
-
-# Blockchain integration
-pytest tests/test_anchor_flow.py
-pytest tests/test_ipfs_blockchain_integration.py
-
-# EUDR compliance
-pytest tests/test_eudr_compliance.py  # 42/42 passing
-
-# Smart contracts
-cd blockchain && forge test  # 50/50 passing
-
-# PIN setup (Phase 3)
-pytest tests/test_pin_setup.py  # 6/6 passing
-
-# Mini Apps (integration testing via Telegram)
-# 1. Open @voice_ledger_bot
-# 2. Navigate to each Mini App
-# 3. Test voice recording on each screen
-# 4. Verify context-aware responses
+# Solidity tests
+cd blockchain && forge test
 ```
 
 ---
@@ -511,14 +523,20 @@ with get_session() as db:
 "
 ```
 
-**Schema (7 core tables):**
+**Schema (23 tables):**
 - `user_identities`: DIDs, keys, language preferences, PINs
+- `organizations`: Cooperatives, exporters, buyer companies
+- `farmer_identities`: Farm details, GPS coordinates, photos
 - `coffee_batches`: GTIN, token IDs, quantities, origins
 - `epcis_events`: Event hashes, IPFS CIDs, blockchain TXs
 - `verifiable_credentials`: Certifications, quality grades
 - `pending_registrations`: Multi-step registration state
-- `rfqs`: Request for Quotations (marketplace)
-- `offers`: Offers on RFQs (marketplace)
+- `rfqs` / `rfq_offers` / `rfq_acceptances`: Marketplace lifecycle
+- `container_offerings`: Fractional container sale listings
+- `container_pools` / `buyer_commitments`: Shared buying pools
+- `aggregation_relationships`: Parent-child SSCC/batch links
+- `verification_photos`: EUDR GPS photo evidence
+- `exporters` / `buyers`: Role-specific organization details
 
 ---
 
@@ -527,9 +545,9 @@ with get_session() as db:
 ```
 Voice-Ledger/
 ├── voice/                    # Voice processing pipeline
-│   ├── agent/                # AI agent (GPT-4o tool-calling, 25 tools)
+│   ├── agent/                # AI agent (GPT-4o tool-calling, 37 tools)
 │   │   ├── executor.py       # Agent loop with bounded turns
-│   │   ├── registry.py       # Tool registry (7 domains)
+│   │   ├── registry.py       # Tool registry (10 domains)
 │   │   └── schemas.py        # OpenAI function definitions
 │   ├── asr/                  # Automatic speech recognition
 │   ├── nlu/                  # Natural language understanding (legacy)
@@ -540,6 +558,11 @@ Voice-Ledger/
 │   ├── admin/                # Admin approval workflows
 │   ├── verification/         # GPS + deforestation checking
 │   └── service/              # FastAPI main service
+│       ├── api.py            # Main app (19 routers)
+│       ├── financing_api.py  # DeFi trade finance
+│       ├── dpp_api.py        # DPP + EUDR compliance
+│       ├── logistics_api.py  # LSP + webhook endpoints
+│       └── webhook_dispatcher.py # Async webhook dispatch
 ├── miniapps/                 # Telegram Mini Apps (5 apps)
 │   ├── index.html            # Main menu hub
 │   ├── batch_browser.html    # Batch management
@@ -551,15 +574,15 @@ Voice-Ledger/
 │       ├── voice.js          # Voice recording library (882 lines)
 │       └── icons.html        # SVG icon library
 ├── blockchain/               # Smart contracts (Solidity)
-│   ├── src/                  # EPCISEventAnchor, CoffeeBatchToken, Settlement
-│   └── test/                 # Foundry tests (50/50 passing)
+│   ├── src/                  # 7 contracts (ERC-1155, ERC-4626, escrow, etc.)
+│   └── test/                 # Foundry tests
 ├── epcis/                    # EPCIS 2.0 event generation
 ├── ssi/                      # DIDs + Verifiable Credentials
 ├── database/                 # PostgreSQL models + migrations
 ├── ipfs/                     # IPFS storage (Pinata)
 ├── dpp/                      # Digital Product Passport
 ├── gs1/                      # GS1 identifier generation
-└── tests/                    # 90+ integration tests
+└── tests/                    # Integration tests
 ```
 
 ---
@@ -590,6 +613,13 @@ CHROMA_COLLECTION=voice_ledger_docs_v2
 # Blockchain
 BLOCKCHAIN_RPC_URL=https://sepolia.base.org
 PRIVATE_KEY=0x...
+EPCIS_EVENT_ANCHOR_ADDRESS=0xfda9...
+COFFEE_BATCH_TOKEN_ADDRESS=0x2ff4...
+SETTLEMENT_CONTRACT_ADDRESS=0x739b...
+FINANCING_POOL_ADDRESS=0x1A2f...
+TRADE_ESCROW_ADDRESS=0x32Af...
+FEE_DISTRIBUTOR_ADDRESS=0xb763...
+USDC_ADDRESS=0x036C...
 
 # IPFS
 PINATA_JWT=...
@@ -617,6 +647,7 @@ GFW_API_KEY=...  # Global Forest Watch API
 - **W3C Verifiable Credentials** (v1.1)
 - **GS1 Identifiers** (GTIN-13, GLN, SSCC)
 - **ERC-1155** (Multi Token Standard)
+- **ERC-4626** (Tokenized Vault Standard)
 - **EU Deforestation Regulation** (EUDR, Articles 9, 10, 33)
 
 ---
@@ -630,7 +661,7 @@ GFW_API_KEY=...  # Global Forest Watch API
 
 **AI Agent (v2.1):**
 - Model: GPT-4o with function-calling
-- Tools: 25 across 7 domains
+- Tools: 37 across 10 domains
 - Max Turns: 6 (bounded reasoning loop)
 - Timeout: 4 minutes (soft), 5 minutes (hard)
 - Fallback: RAG pipeline for documentation queries
@@ -672,47 +703,49 @@ GFW_API_KEY=...  # Global Forest Watch API
 - ✅ EUDR GPS + deforestation detection
 - ✅ 90+ passing tests
 
-**v2.1 (Current - February 2026)** ✅
-- ✅ Agentic AI: GPT-4o tool-calling agent with 25 tools across 7 domains
+**v2.1 (February 2026)** ✅
+- ✅ Agentic AI: GPT-4o tool-calling agent (25 initial tools, 7 domains)
 - ✅ Multi-turn conversation with Redis-backed history
 - ✅ Safety rails: write-tool gating, bounded turns, timeout handling
 - ✅ Dual delivery: text + TTS voice note on every response
 - ✅ Production deployment on Railway (web + Celery worker + Redis)
-- ✅ Chainlink CRE workflow simulation (`chainlink-cre` branch)
+- ✅ Chainlink CRE workflow simulation + ProvenanceDataReceiver contract
 
-**v2.2 (Planned - Q2 2026)**
+**v2.2 (Current — March 2026)** ✅
+- ✅ DeFi trade finance: FinancingPool (ERC-4626), TradeEscrow, FeeDistributor
+- ✅ LSP integration: webhook dispatch, milestone ingestion → EPCIS events
+- ✅ Customs clearance: DPP API, EUDR Article 9 flat export, container-level compliance
+- ✅ Agent expanded to 37 tools across 10 domains (Container, Pool, Chainlink DON, Payment)
+- ✅ 7 verified smart contracts on Base Sepolia
+
+**v3.0 (Planned — Q2/Q3 2026)**
 - [ ] Chainlink CRE DON deployment (pending CRE mainnet)
+- [ ] Payment integration (M-PESA, TeleBirr, Stripe)
+- [ ] Base mainnet deployment
+- [ ] Multi-origin expansion (Ethiopia → Colombia, Kenya, Vietnam)
 - [ ] Realtime voice UI (<1s latency, WebSocket)
-- [ ] Payment integration (Stripe, M-PESA, TeleBirr)
-- [ ] Advanced analytics dashboard
-- [ ] Mobile app (offline-capable, React Native)
-
-**v3.0 (Planned - Q3 2026)**
 - [ ] 5 languages (add Afan Oromo, Tigrinya, Spanish)
-- [ ] Edge inference (quantized models, on-device ASR)
-- [ ] Mainnet deployment (Base L2)
-- [ ] Integration with external coffee platforms (ICO, ECX)
-- [ ] Advanced traceability maps (GPS visualization)
 
 ---
 
 ## Documentation
 
 Comprehensive guides in `/documentation`:
-- **Labs** (29 educational tutorials, gitignored)
+- **Labs** (31 educational tutorials)
   - Lab 28: Agentic AI — Tool-Calling Agent Architecture
   - Lab 29: Chainlink CRE — Agent-to-Oracle Bridge
+  - Lab 30: CRE Demo — Hackathon Submission
+  - Lab 31: UNICEF Pitch Video Runbook
 - **Guides** (EUDR, ASR, marketplace, RAG, architecture)
 - **Deployment** (Railway, Neon, Docker, production, ChromaDB Cloud)
-- **Business** (pitch deck, grant proposals)
-- **Mini Apps** (COMPLETION_SUMMARY.md, IMPLEMENTATION_PLAN.md)
+- **Business** (pitch deck, grant proposals, partnership strategies)
 
 **Key Resources:**
 - `voice/agent/` - AI agent implementation (executor, registry, schemas)
-- `miniapps/COMPLETION_SUMMARY.md` - Complete Mini Apps implementation guide
+- `documentation/business-docs/DEFI_TRADE_FINANCE.md` - Receivables factoring design
+- `documentation/business-docs/LOGISTICS_SERVICE_PROVIDER_INTEGRATION.md` - LSP strategy
+- `documentation/business-docs/EUROPEAN_CUSTOMS_CLEARANCE_PARTNER.md` - Customs broker integration
 - `documentation/guides/CHROMADB_CLOUD_SETUP.md` - RAG vector database setup
-- `documentation/guides/CONVERSATIONAL_AI.md` - Conversational AI architecture
-- `voice/rag/README.md` - RAG system documentation
 
 ---
 
@@ -724,6 +757,6 @@ MIT
 
 ---
 
-**Version:** 2.1 (Production)  
-**Last Updated:** February 15, 2026  
-**Major Features:** Agentic AI (25-tool GPT-4o agent), Telegram Mini Apps, Chainlink CRE (in development)
+**Version:** 2.2 (Production)  
+**Last Updated:** March 6, 2026  
+**Major Features:** 37-tool AI agent, DeFi trade finance (ERC-4626), LSP & customs integration, 7 smart contracts on Base Sepolia
