@@ -12,13 +12,25 @@ import useAuthStore from '../stores/authStore'
 
 function StatCard({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-1 hover:shadow-md transition">
+    <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-1 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
       <div className="flex items-center gap-2 text-xs text-stone-400 uppercase tracking-wider">
         <Icon className={`w-4 h-4 ${accent || 'text-stone-400'}`} />
         {label}
       </div>
       <p className="text-2xl font-bold text-stone-900">{value}</p>
       {sub && <p className="text-xs text-stone-500">{sub}</p>}
+    </div>
+  )
+}
+
+/* ── Skeleton loader ────────────────────────────────────────────── */
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 p-5 animate-pulse">
+      <div className="h-3 w-24 bg-stone-200 rounded mb-3" />
+      <div className="h-7 w-32 bg-stone-200 rounded mb-2" />
+      <div className="h-3 w-20 bg-stone-100 rounded" />
     </div>
   )
 }
@@ -43,6 +55,7 @@ function TradeStatusBadge({ status }) {
 /* ── Trade lookup card ──────────────────────────────────────────── */
 
 function TradeLookup() {
+  const { t } = useTranslation()
   const [tradeId, setTradeId] = useState('')
   const [trade, setTrade] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -67,7 +80,7 @@ function TradeLookup() {
   return (
     <div className="bg-white rounded-xl border border-stone-200 p-6">
       <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2 mb-3">
-        <LuChartBar className="w-4 h-4 text-stone-500" /> Trade Lookup
+        <LuChartBar className="w-4 h-4 text-stone-500" /> {t('fin_trade_lookup')}
       </h3>
 
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -76,19 +89,19 @@ function TradeLookup() {
           min="0"
           value={tradeId}
           onChange={(e) => setTradeId(e.target.value)}
-          placeholder="Enter trade ID"
+          placeholder={t('fin_trade_placeholder')}
           className="flex-1 rounded-lg border border-stone-300 px-4 py-2.5 text-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-200 transition"
         />
         <button
           type="submit"
           disabled={!tradeId.trim() || loading}
-          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
+          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
         >
-          {loading ? 'Loading...' : 'Look Up'}
+          {loading ? t('fin_loading') : t('fin_look_up')}
         </button>
       </form>
 
-      {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-3">{error}</div>}
+      {error && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-3">{error}</div>}
 
       {trade && (
         <div className="space-y-3">
@@ -209,11 +222,13 @@ export default function Financing() {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{error}</div>
+        <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-4">{error}</div>
       )}
 
       {loading && (
-        <div className="text-center text-stone-400 py-16 text-sm">Loading financing data...</div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
       )}
 
       {/* Pool stats grid */}
@@ -281,19 +296,21 @@ export default function Financing() {
       </div>
 
       {/* How it works */}
-      <div className="bg-stone-50 rounded-xl p-6 border border-stone-200">
+      <div className="bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
         <h3 className="text-sm font-bold text-stone-900 mb-3 flex items-center gap-2">
           <LuShieldCheck className="w-4 h-4" /> {t('fin_how_title')}
         </h3>
-        <div className="grid sm:grid-cols-4 gap-4 text-center">
+        <div className="relative grid sm:grid-cols-4 gap-4 text-center">
+          {/* Connecting line */}
+          <div className="hidden sm:block absolute top-4 left-[calc(12.5%+16px)] right-[calc(12.5%+16px)] h-0.5 bg-stone-300" />
           {[
             { step: '1', label: t('fin_step1_label'), desc: t('fin_step1_desc') },
             { step: '2', label: t('fin_step2_label'), desc: t('fin_step2_desc') },
             { step: '3', label: t('fin_step3_label'), desc: t('fin_step3_desc') },
             { step: '4', label: t('fin_step4_label'), desc: t('fin_step4_desc') },
           ].map((s) => (
-            <div key={s.step} className="flex flex-col items-center gap-1">
-              <span className="w-8 h-8 rounded-full bg-stone-900 text-white text-sm font-bold flex items-center justify-center">{s.step}</span>
+            <div key={s.step} className="relative flex flex-col items-center gap-1">
+              <span className="w-8 h-8 rounded-full bg-stone-900 text-white text-sm font-bold flex items-center justify-center z-10">{s.step}</span>
               <p className="text-xs font-semibold text-stone-700">{s.label}</p>
               <p className="text-xs text-stone-500">{s.desc}</p>
             </div>
@@ -302,7 +319,7 @@ export default function Financing() {
         <div className="text-center mt-4">
           <Link
             to="/assistant"
-            className="inline-flex items-center gap-2 bg-stone-900 text-white font-semibold rounded-full px-6 py-2.5 hover:bg-stone-800 transition text-sm"
+            className="inline-flex items-center gap-2 bg-stone-900 text-white font-semibold rounded-full px-6 py-2.5 hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all text-sm"
           >
             <LuMessageCircle className="w-4 h-4" /> {t('fin_ask_assistant')} <LuArrowRight className="w-4 h-4" />
           </Link>

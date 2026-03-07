@@ -7,6 +7,32 @@ import {
 } from 'react-icons/lu'
 import { getShipmentStatus } from '../api/logistics'
 
+/* ── Shimmer skeleton ───────────────────────────────────────────── */
+
+function TrackingSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="bg-white rounded-xl border border-stone-200 p-5">
+        <div className="h-3 w-48 bg-stone-200 rounded mb-3" />
+        <div className="h-5 w-28 bg-stone-200 rounded mb-2" />
+        <div className="h-3 w-32 bg-stone-100 rounded" />
+      </div>
+      <div className="bg-white rounded-xl border border-stone-200 p-6">
+        <div className="h-4 w-40 bg-stone-200 rounded mb-5" />
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="flex gap-3 mb-5">
+            <div className="w-7 h-7 rounded-full bg-stone-200 shrink-0" />
+            <div className="flex-1">
+              <div className="h-4 w-32 bg-stone-200 rounded mb-2" />
+              <div className="h-3 w-48 bg-stone-100 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ── Milestone icon / colour mapping ────────────────────────────── */
 
 const MILESTONE_META = {
@@ -40,6 +66,7 @@ function DeliveryBadge({ status }) {
 /* ── Timeline component ────────────────────────────────────────── */
 
 function Timeline({ milestones, events }) {
+  const { t } = useTranslation()
   // Combine milestones and events, sort by time
   const allEvents = [
     ...(milestones || []).map((m) => ({
@@ -59,7 +86,7 @@ function Timeline({ milestones, events }) {
   if (allEvents.length === 0) {
     return (
       <div className="text-center text-stone-400 py-8 text-sm">
-        No tracking events recorded yet.
+        {t('track_no_events')}
       </div>
     )
   }
@@ -100,13 +127,13 @@ function Timeline({ milestones, events }) {
 
                 {/* Extra details for milestones */}
                 {evt.carrier && (
-                  <p className="text-xs text-stone-400 mt-0.5">Carrier: {evt.carrier}</p>
+                  <p className="text-xs text-stone-400 mt-0.5">{t('track_carrier')}: {evt.carrier}</p>
                 )}
                 {evt.vessel_imo && (
-                  <p className="text-xs text-stone-400">Vessel IMO: {evt.vessel_imo}</p>
+                  <p className="text-xs text-stone-400">{t('track_vessel_imo')}: {evt.vessel_imo}</p>
                 )}
                 {evt.tracking_reference && (
-                  <p className="text-xs text-stone-400">Tracking: {evt.tracking_reference}</p>
+                  <p className="text-xs text-stone-400">{t('track_tracking_ref')}: {evt.tracking_reference}</p>
                 )}
 
                 {/* Blockchain proof */}
@@ -178,21 +205,24 @@ export default function Tracking() {
         <button
           type="submit"
           disabled={!sscc.trim() || loading}
-          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
+          className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
         >
           {loading ? t('track_searching') : t('track_search')}
         </button>
       </form>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{error}</div>
+        <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-4">{error}</div>
       )}
+
+      {/* Loading skeleton */}
+      {loading && !shipment && <TrackingSkeleton />}
 
       {/* Shipment result */}
       {shipment && (
         <div className="space-y-6">
           {/* Status header */}
-          <div className="bg-white rounded-xl border border-stone-200 p-5">
+          <div className="bg-white rounded-xl border border-stone-200 p-5 hover:shadow-md transition-shadow">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-stone-400 font-mono mb-1">{shipment.container_sscc}</p>
@@ -226,7 +256,7 @@ export default function Tracking() {
               to={`/compliance?sscc=${encodeURIComponent(shipment.container_sscc)}`}
               className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-800 transition"
             >
-              <LuCheckCircle2 className="w-4 h-4" /> {t('track_view_compliance')}
+              <LuCircleCheck className="w-4 h-4" /> {t('track_view_compliance')}
             </Link>
           </div>
         </div>
@@ -235,11 +265,13 @@ export default function Tracking() {
       {/* Empty state */}
       {!shipment && !loading && !error && (
         <div className="text-center text-stone-400 py-16">
-          <LuShip className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-100 via-stone-100 to-teal-100 flex items-center justify-center">
+            <LuShip className="w-10 h-10 text-stone-400" />
+          </div>
           <p className="text-sm mb-4">{t('track_empty')}</p>
           <Link
             to="/assistant"
-            className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700"
+            className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700 hover:scale-105 active:scale-95 transition-all"
           >
             <LuMessageCircle className="w-4 h-4" /> {t('track_ask_assistant')}
           </Link>
@@ -247,7 +279,7 @@ export default function Tracking() {
       )}
 
       {/* Explainer */}
-      <div className="mt-12 bg-stone-50 rounded-xl p-6 border border-stone-100">
+      <div className="mt-12 bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
         <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
           <LuInfo className="w-5 h-5" /> {t('track_about_title')}
         </h2>

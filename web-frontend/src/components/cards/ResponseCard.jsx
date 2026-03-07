@@ -359,7 +359,7 @@ export function OfferListCard({ data }) {
         <div key={o.id || i} className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
           <div className="flex justify-between">
             <span className="font-semibold text-stone-900">
-              {o.coffee_type || o.origin || 'Coffee'} — {o.quantity_kg ? `${o.quantity_kg} kg` : ''}
+              {o.coffee_type || o.origin || 'Coffee'} - {o.quantity_kg ? `${o.quantity_kg} kg` : ''}
             </span>
             <span className={`text-xs ${o.status === 'accepted' ? 'text-green-600' : 'text-stone-500'}`}>{o.status || 'pending'}</span>
           </div>
@@ -463,7 +463,7 @@ export function CommitmentListCard({ data }) {
         <div key={c.id || i} className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
           <div className="flex justify-between">
             <span className="font-semibold text-stone-900">
-              {c.cooperative_name || c.cooperative || 'Pool'} — {c.quantity_kg} kg
+              {c.cooperative_name || c.cooperative || 'Pool'} - {c.quantity_kg} kg
             </span>
             <span className={`text-xs font-medium ${
               c.status === 'CONFIRMED' ? 'text-green-600' : 'text-stone-500'

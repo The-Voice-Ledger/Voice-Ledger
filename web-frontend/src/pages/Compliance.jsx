@@ -28,6 +28,7 @@ function LevelBadge({ level }) {
 /* ── Article 9 detail card ──────────────────────────────────────── */
 
 function Article9Card({ data }) {
+  const { t } = useTranslation()
   if (!data) return null
 
   const fields = [
@@ -59,7 +60,7 @@ function Article9Card({ data }) {
   ]
 
   return (
-    <div className="bg-white rounded-xl border border-stone-200 p-6 space-y-4">
+    <div className="bg-white rounded-xl border border-stone-200 p-6 space-y-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-stone-900">
           {data.batch_id}
@@ -81,7 +82,7 @@ function Article9Card({ data }) {
       {/* Proof links */}
       {(data.geolocation_proof_ipfs_cid || data.geolocation_proof_blockchain_tx) && (
         <div className="border-t border-stone-100 pt-3 space-y-1">
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Verification Proofs</p>
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider">{t('comp_verification_proofs')}</p>
           {data.geolocation_proof_ipfs_cid && (
             <p className="text-xs text-stone-600">IPFS: <code className="text-[10px] font-mono">{data.geolocation_proof_ipfs_cid}</code></p>
           )}
@@ -96,7 +97,7 @@ function Article9Card({ data }) {
           to={`/dpp?batch=${encodeURIComponent(data.batch_id)}`}
           className="inline-block text-sm text-forest-600 hover:underline"
         >
-          View Digital Product Passport
+          {t('comp_view_dpp')}
         </Link>
       )}
     </div>
@@ -199,8 +200,7 @@ export default function Compliance() {
         <LuShieldCheck className="w-6 h-6" /> {t('nav_compliance')}
       </h1>
       <p className="text-sm text-stone-500 mb-6">
-        Run EUDR 2023/1115 compliance checks on coffee batches and containers. Validates GPS coordinates, deforestation risk,
-        and audit-readiness for EU imports.
+        {t('comp_subtitle')}
       </p>
 
       {/* Tabs */}
@@ -245,7 +245,7 @@ export default function Compliance() {
         <>
           <form onSubmit={handleCheck} className="mb-8">
             <label className="block text-sm font-medium text-stone-700 mb-1.5">
-              Batch IDs (comma or space separated)
+              {t('comp_batch_label')}
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
@@ -258,15 +258,15 @@ export default function Compliance() {
               <button
                 type="submit"
                 disabled={!batchInput.trim() || loading}
-                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
+                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
               >
-                {loading ? 'Checking...' : 'Run Check'}
+                {loading ? t('comp_checking') : t('comp_run_check')}
               </button>
             </div>
           </form>
 
           {error && (
-            <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{error}</div>
+            <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-4">{error}</div>
           )}
 
           {/* Results */}
@@ -283,7 +283,7 @@ export default function Compliance() {
                 >
                   <div className={`flex items-center gap-2 text-lg font-bold ${compliant ? 'text-forest-700' : 'text-red-700'}`}>
                     {compliant ? <LuCircleCheck className="w-6 h-6" /> : <LuCircleX className="w-6 h-6" />}
-                    {compliant ? 'EUDR Compliant' : 'Not EUDR Compliant'}
+                    {compliant ? t('comp_eudr_compliant') : t('comp_eudr_not_compliant')}
                   </div>
 
                   {/* Check details */}
@@ -304,7 +304,7 @@ export default function Compliance() {
 
                   {data?.deforestation_risk != null && (
                     <div className="mt-3 text-sm text-stone-600">
-                      Deforestation risk score: <strong>{(data.deforestation_risk * 100).toFixed(1)}%</strong>
+                      {t('comp_deforestation_risk')}: <strong>{(data.deforestation_risk * 100).toFixed(1)}%</strong>
                     </div>
                   )}
                 </div>
@@ -323,15 +323,15 @@ export default function Compliance() {
                   <table className="w-full text-sm min-w-[500px]">
                     <thead className="bg-stone-50 text-left text-xs text-stone-500 uppercase tracking-wider">
                       <tr>
-                        <th className="px-4 py-3">Batch</th>
-                        <th className="px-4 py-3">GPS</th>
-                        <th className="px-4 py-3">Deforestation</th>
-                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">{t('comp_col_batch')}</th>
+                        <th className="px-4 py-3">{t('comp_col_gps')}</th>
+                        <th className="px-4 py-3">{t('comp_col_deforestation')}</th>
+                        <th className="px-4 py-3">{t('comp_col_status')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
                       {data.batch_results.map((b, i) => (
-                        <tr key={b.batch_id || i} className="hover:bg-stone-50">
+                        <tr key={b.batch_id || i} className={`hover:bg-stone-50 ${i % 2 === 1 ? 'bg-stone-50/30' : ''}`}>
                           <td className="px-4 py-3 font-medium text-stone-700">{b.batch_id}</td>
                           <td className="px-4 py-3">
                             {b.has_gps ? (
@@ -347,9 +347,9 @@ export default function Compliance() {
                           </td>
                           <td className="px-4 py-3">
                             {b.compliant ? (
-                              <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2 py-0.5">Pass</span>
+                              <span className="text-xs font-medium bg-green-100 text-green-700 rounded-full px-2 py-0.5">{t('comp_pass')}</span>
                             ) : (
-                              <span className="text-xs font-medium bg-red-100 text-red-700 rounded-full px-2 py-0.5">Fail</span>
+                              <span className="text-xs font-medium bg-red-100 text-red-700 rounded-full px-2 py-0.5">{t('comp_fail')}</span>
                             )}
                           </td>
                         </tr>
@@ -364,13 +364,15 @@ export default function Compliance() {
           {/* Empty state */}
           {!result && !loading && (
             <div className="text-center text-stone-400 py-16">
-              <LuShieldCheck className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p className="text-sm mb-4">Enter batch IDs above to run an EUDR compliance check.</p>
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-100 via-stone-100 to-amber-100 flex items-center justify-center">
+                <LuShieldCheck className="w-10 h-10 text-stone-400" />
+              </div>
+              <p className="text-sm mb-4">{t('comp_batch_empty')}</p>
               <Link
                 to="/assistant"
-                className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700"
+                className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700 hover:scale-105 active:scale-95 transition-all"
               >
-                <LuMessageCircle className="w-4 h-4" /> Or ask the assistant
+                <LuMessageCircle className="w-4 h-4" /> {t('comp_or_ask_assistant')}
               </Link>
             </div>
           )}
@@ -398,22 +400,24 @@ export default function Compliance() {
               <button
                 type="submit"
                 disabled={!a9BatchId.trim() || a9Loading}
-                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
+                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
               >
-                {a9Loading ? 'Loading...' : t('comp_a9_fetch')}
+                {a9Loading ? t('fin_loading') : t('comp_a9_fetch')}
               </button>
             </div>
           </form>
 
           {a9Error && (
-            <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{a9Error}</div>
+            <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-4">{a9Error}</div>
           )}
 
           {a9Data && <Article9Card data={a9Data} />}
 
           {!a9Data && !a9Loading && !a9Error && (
             <div className="text-center text-stone-400 py-16">
-              <LuFileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-100 via-stone-100 to-green-100 flex items-center justify-center">
+                <LuFileText className="w-10 h-10 text-stone-400" />
+              </div>
               <p className="text-sm mb-1">{t('comp_a9_empty')}</p>
               <p className="text-xs text-stone-400">{t('comp_a9_empty_sub')}</p>
             </div>
@@ -442,15 +446,15 @@ export default function Compliance() {
               <button
                 type="submit"
                 disabled={!containerSscc.trim() || containerLoading}
-                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 transition disabled:opacity-50 shrink-0"
+                className="bg-stone-900 text-white font-medium rounded-lg px-6 py-2.5 text-sm hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shrink-0"
               >
-                {containerLoading ? 'Loading...' : t('comp_container_fetch')}
+                {containerLoading ? t('fin_loading') : t('comp_container_fetch')}
               </button>
             </div>
           </form>
 
           {containerError && (
-            <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{containerError}</div>
+            <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3 mb-4">{containerError}</div>
           )}
 
           {containerData && (
@@ -478,7 +482,7 @@ export default function Compliance() {
 
               {containerData.batches?.length === 0 && (
                 <div className="text-center text-stone-400 py-8 text-sm">
-                  No batches found in this container.
+                  {t('comp_no_batches')}
                 </div>
               )}
 
@@ -496,7 +500,9 @@ export default function Compliance() {
 
           {!containerData && !containerLoading && !containerError && (
             <div className="text-center text-stone-400 py-16">
-              <LuPackage className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-100 via-stone-100 to-amber-100 flex items-center justify-center">
+                <LuPackage className="w-10 h-10 text-stone-400" />
+              </div>
               <p className="text-sm mb-1">{t('comp_container_empty')}</p>
               <p className="text-xs text-stone-400">{t('comp_container_empty_sub')}</p>
             </div>
@@ -505,23 +511,12 @@ export default function Compliance() {
       )}
 
       {/* Explainer */}
-      <div className="mt-12 bg-stone-50 rounded-xl p-6 border border-stone-100">
-        <h2 className="text-lg font-bold text-stone-800 mb-3">About EUDR Compliance</h2>
+      <div className="mt-12 bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
+        <h2 className="text-lg font-bold text-stone-800 mb-3">{t('comp_about_title')}</h2>
         <div className="text-sm text-stone-600 space-y-2 leading-relaxed">
-          <p>
-            The EU Deforestation Regulation (2023/1115) requires importers to demonstrate that commodities
-            including coffee were not produced on land deforested after December 31, 2020.
-          </p>
-          <p>
-            WAGA Coffee automatically validates: GPS coordinates for all contributing farms,
-            deforestation risk assessment via Global Forest Watch satellite data,
-            and complete supply chain traceability from farmer to port.
-          </p>
-          <p>
-            The <strong>Article 9</strong> tab shows the exact flat-format fields required for customs due diligence
-            statements. The <strong>Container</strong> tab shows compliance for an entire shipment container and all
-            its child batches (weakest-link principle).
-          </p>
+          <p>{t('comp_about_p1')}</p>
+          <p>{t('comp_about_p2')}</p>
+          <p>{t('comp_about_p3')}</p>
         </div>
       </div>
     </div>

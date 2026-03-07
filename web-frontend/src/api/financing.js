@@ -33,7 +33,7 @@ export function getFeeStats() {
   return getJSON('/api/financing/fees/stats')
 }
 
-// ── Write (require API key header — routed through backend) ─────
+// ── Write (require API key header - routed through backend) ─────
 
 /** Seller requests an advance against a shipped container. */
 export function requestAdvance(body) {

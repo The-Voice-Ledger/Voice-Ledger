@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom'
 import {
   LuCoffee, LuShieldCheck, LuHandshake, LuSprout, LuLink, LuMic,
   LuMessageCircle, LuRadioTower, LuLandmark, LuShip, LuFileText,
-  LuBox, LuScale, LuStore, LuCpu,
+  LuBox, LuScale, LuStore, LuCpu, LuChevronDown,
+  LuUsers, LuPackage, LuGlobe,
 } from 'react-icons/lu'
 
 /* ── Category definitions ───────────────────────────────────────── */
@@ -19,7 +20,7 @@ const CATEGORIES = [
 /* ── Feature card (single) ──────────────────────────────────────── */
 
 function FeatureCard({ f, index, total, expanded }) {
-  // 3D stack offsets — when collapsed, cards stack behind the front card
+  // 3D stack offsets - when collapsed, cards stack behind the front card
   const stackOffset = expanded ? 0 : index * 6
   const stackScale = expanded ? 1 : 1 - index * 0.03
   const stackRotate = expanded ? 0 : index * -1.5
@@ -167,36 +168,102 @@ export default function Landing() {
     <div className="min-h-screen">
       {/* Hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 text-white">
-        <div className="absolute inset-0 opacity-10 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnYtMmgtNHY2aDR2LTJ6bTAtMTZ2Mmg0di02aC00djRoLTJ2Mmgyem0tOCA4aDJ2NmgtMnYyaDR2LTZoMnYtMmgtNHYtMnptMC0ydi0ySDI0djJoMnYyaDJ2LTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')]" />
+        {/* Animated floating gradient orbs */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-500/15 blur-3xl animate-float-slow" />
+          <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-500/10 blur-3xl animate-float-slower" />
+          <div className="absolute -bottom-16 left-1/3 w-72 h-72 rounded-full bg-amber-400/8 blur-3xl animate-float-slow" style={{ animationDelay: '3s' }} />
+        </div>
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnYtMmgtNHY2aDR2LTJ6bTAtMTZ2Mmg0di02aC00djRoLTJ2Mmgyem0tOCA4aDJ2NmgtMnYyaDR2LTZoMnYtMmgtNHYtMnptMC0ydi0ySDI0djJoMnYyaDJ2LTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')]" />
+
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-amber-300/90 border border-amber-400/30 bg-amber-400/10 rounded-full px-3 py-1 mb-6 backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Testnet – Base Sepolia
+            {t('hero_badge')}
           </span>
           <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight">
             {t('tagline')}
           </h1>
-          <p className="mt-6 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
+          <a href="https://the-voice-ledger.vercel.app/" target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-sm text-stone-400 hover:text-white transition-colors">{t('powered_by')}</a>
+          <p className="mt-5 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
             {t('hero_subtitle')}
           </p>
           <div className="mt-10 flex flex-wrap justify-center gap-4">
             <Link
               to="/assistant"
-              className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-full px-6 py-3 hover:bg-stone-50 transition shadow-lg"
+              className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-full px-6 py-3 hover:bg-stone-50 hover:scale-105 active:scale-95 transition-all shadow-lg"
             >
               <LuMessageCircle className="w-5 h-5" /> {t('cta_chat')}
             </Link>
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 border-2 border-white/40 text-white font-semibold rounded-full px-6 py-3 hover:bg-white/10 transition"
+              className="inline-flex items-center gap-2 border-2 border-white/40 text-white font-semibold rounded-full px-6 py-3 hover:bg-white/10 hover:scale-105 active:scale-95 transition-all"
             >
               {t('cta_login')}
             </Link>
           </div>
+
+          {/* Trust badges */}
+          <div className="mt-12 flex flex-wrap justify-center items-center gap-3">
+            {[
+              { label: 'Base (Ethereum L2)', color: 'text-blue-300/80 border-blue-400/20 bg-blue-400/5' },
+              { label: 'Chainlink CRE', color: 'text-blue-200/80 border-blue-300/20 bg-blue-300/5' },
+              { label: 'GS1 Standard', color: 'text-emerald-300/80 border-emerald-400/20 bg-emerald-400/5' },
+              { label: 'IPFS / Pinata', color: 'text-teal-300/80 border-teal-400/20 bg-teal-400/5' },
+              { label: 'ERC-4626 Vault', color: 'text-purple-300/80 border-purple-400/20 bg-purple-400/5' },
+            ].map((b) => (
+              <span
+                key={b.label}
+                className={`text-[10px] font-medium tracking-wide border rounded-full px-2.5 py-1 backdrop-blur-sm ${b.color}`}
+              >
+                {b.label}
+              </span>
+            ))}
+          </div>
+
+          {/* Partner logos */}
+          <div className="mt-8 flex items-center justify-center gap-6">
+            <a href="https://www.addisai.ch/" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 opacity-70 hover:opacity-100 transition-opacity" title="Addis AI - Amharic voice partner">
+              <img
+                src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafkreic4dyhikkdfn3npwap7l624ocsrfndtiw6vmzappr4b2jcjkafq7q"
+                alt="Addis AI"
+                className="h-10 w-auto rounded"
+              />
+              <span className="text-xs text-stone-400 font-medium">{t('partner_addis_ai')}</span>
+            </a>
+          </div>
+
+          {/* Scroll hint */}
+          <div className="mt-14 animate-bounce">
+            <LuChevronDown className="w-5 h-5 text-stone-500" />
+          </div>
         </div>
       </section>
 
-      {/* Features — tabbed categories + 3D stacked decks */}
+      {/* Year 1 roadmap targets band */}
+      <section className="bg-stone-900 border-t border-stone-800">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
+          <p className="text-center text-[10px] text-stone-500 uppercase tracking-widest mb-4">{t('stat_heading')}</p>
+          <div className="flex flex-wrap justify-center gap-8 sm:gap-14">
+            {[
+              { icon: LuUsers,   value: '1,200', label: t('stat_farmers') },
+              { icon: LuPackage, value: '50',    label: t('stat_containers') },
+              { icon: LuGlobe,   value: '5',     label: t('stat_countries') },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center gap-2.5 text-white">
+                <s.icon className="w-5 h-5 text-stone-500" />
+                <div>
+                  <p className="text-lg font-bold leading-tight">{s.value}</p>
+                  <p className="text-[10px] text-stone-500 uppercase tracking-wider">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features - tabbed categories + 3D stacked decks */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
         <h2 className="text-2xl md:text-3xl font-bold text-center text-stone-900 mb-10">
           {t('features_heading')}
@@ -245,15 +312,18 @@ export default function Landing() {
       </section>
 
       {/* CTA band */}
-      <section className="bg-forest-600 text-white py-12 sm:py-16">
-        <div className="max-w-3xl mx-auto text-center px-4 sm:px-6">
+      <section className="relative overflow-hidden bg-gradient-to-br from-forest-600 via-forest-700 to-forest-800 text-white py-12 sm:py-16">
+        {/* Subtle decorative orbs */}
+        <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-forest-400/10 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-forest-400/10 blur-3xl pointer-events-none" />
+        <div className="max-w-3xl mx-auto text-center px-4 sm:px-6 relative z-10">
           <h2 className="text-2xl md:text-3xl font-bold">{t('cta_ready')}</h2>
           <p className="mt-3 text-forest-100">
             {t('cta_ready_desc')}
           </p>
           <Link
             to="/assistant"
-            className="mt-8 inline-flex items-center gap-2 bg-white text-forest-700 font-semibold rounded-full px-8 py-3.5 hover:bg-forest-50 transition shadow-lg"
+            className="mt-8 inline-flex items-center gap-2 bg-white text-forest-700 font-semibold rounded-full px-8 py-3.5 hover:bg-forest-50 hover:scale-105 active:scale-95 transition-all shadow-lg"
           >
             <LuMessageCircle className="w-5 h-5" /> {t('cta_start_chat')}
           </Link>
