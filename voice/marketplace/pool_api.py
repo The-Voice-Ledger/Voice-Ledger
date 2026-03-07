@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from database.connection import get_db
+from database.connection import SessionLocal
 from database.models import (
     ContainerPool, BuyerCommitment, ContainerOffering,
     UserIdentity, Organization, Buyer, REGION_PORT_MAP,
@@ -28,6 +28,15 @@ from database.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Database dependency for FastAPI
+def get_db():
+    """Database session dependency for FastAPI"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 router = APIRouter(prefix="/api", tags=["container-pools"])
 
