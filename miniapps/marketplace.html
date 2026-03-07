@@ -13,14 +13,26 @@
       display:flex;justify-content:space-between;align-items:center;
     }
     .page-header h1{font-size:20px;font-weight:700;color:var(--stone-800)}
-    .seg-tabs{display:flex;gap:4px;padding:12px 16px;background:var(--stone-50);border-bottom:1px solid var(--border)}
+
+    /* 3-tab switcher */
+    .seg-tabs{display:flex;gap:4px;padding:10px 16px;background:var(--stone-50);border-bottom:1px solid var(--border);overflow-x:auto}
     .seg-tab{
-      flex:1;padding:8px;border-radius:var(--r-md);border:1px solid var(--border);
-      background:white;text-align:center;font-size:13px;font-weight:600;
-      color:var(--stone-500);cursor:pointer;transition:all .15s;
+      flex:1;min-width:0;padding:8px 4px;border-radius:var(--r-md);border:1px solid var(--border);
+      background:white;text-align:center;font-size:12px;font-weight:600;
+      color:var(--stone-500);cursor:pointer;transition:all .15s;white-space:nowrap;
     }
     .seg-tab.active{background:var(--stone-800);color:white;border-color:var(--stone-800)}
+    .seg-tab .tab-count{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-width:18px;height:18px;border-radius:99px;font-size:10px;font-weight:700;
+      margin-left:4px;padding:0 4px;
+      background:var(--stone-100);color:var(--stone-500);
+    }
+    .seg-tab.active .tab-count{background:rgba(255,255,255,.2);color:white}
+
     .card-list{padding:12px 16px}
+
+    /* RFQ cards */
     .rfq-card{
       background:white;border:1px solid var(--border);border-radius:var(--r-lg);
       padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s;
@@ -37,6 +49,49 @@
     .status-open{background:#dcfce7;color:#166534}
     .status-closed{background:var(--stone-100);color:var(--stone-500)}
     .status-awarded{background:#dbeafe;color:#1e40af}
+    .status-pending{background:#fef3c7;color:#92400e}
+
+    /* Container cards */
+    .container-card{
+      background:white;border:1px solid var(--border);border-radius:var(--r-lg);
+      padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s;
+    }
+    .container-card:active{transform:scale(.99);background:var(--stone-50)}
+    .container-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+    .container-sscc{font-size:11px;font-family:monospace;color:var(--stone-400)}
+    .container-variety{font-size:14px;font-weight:700;color:var(--stone-800)}
+    .container-details{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-bottom:10px}
+    .container-detail{font-size:12px;color:var(--stone-500)}
+    .container-detail strong{color:var(--stone-700)}
+
+    /* Fill bar */
+    .fill-bar-wrap{margin-top:8px}
+    .fill-bar-header{display:flex;justify-content:space-between;font-size:11px;color:var(--stone-500);margin-bottom:4px}
+    .fill-bar-header .pct{font-weight:700;color:var(--stone-700)}
+    .fill-bar{height:8px;background:var(--stone-100);border-radius:99px;overflow:hidden}
+    .fill-bar-inner{height:100%;border-radius:99px;transition:width .7s ease-out}
+    .fill-bar-inner.low{background:#3b82f6}
+    .fill-bar-inner.mid{background:#eab308}
+    .fill-bar-inner.high{background:#22c55e}
+
+    .buyers-badge{
+      display:inline-flex;align-items:center;gap:3px;
+      font-size:11px;color:var(--stone-400);margin-top:6px;
+    }
+    .buyers-badge svg{width:13px;height:13px}
+
+    .regions-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+    .region-chip{font-size:10px;padding:2px 7px;border-radius:99px;background:#ede9fe;color:#6d28d9;font-weight:500}
+
+    /* Status badges */
+    .status-badge{padding:3px 8px;border-radius:99px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    .status-AVAILABLE{background:#dcfce7;color:#166534}
+    .status-PARTIALLY_SOLD{background:#fef3c7;color:#92400e}
+    .status-FULLY_RESERVED{background:var(--stone-100);color:var(--stone-500)}
+    .status-SOLD_OUT{background:var(--stone-100);color:var(--stone-500)}
+    .status-EXPIRED{background:#fee2e2;color:#991b1b}
+
+    /* Detail overlay */
     .detail-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding-bottom:40px;display:none}
     .detail-overlay.show{display:block}
     .detail-header{display:flex;align-items:center;gap:12px;padding:16px;background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
@@ -59,7 +114,7 @@
     }
     .form-group textarea{resize:vertical;min-height:60px}
     .form-group input:focus,.form-group textarea:focus{border-color:var(--stone-800)}
-    .empty-state{text-align:center;padding:48px 16px;color:var(--stone-400);font-size:14px}
+    .empty-state{text-align:center;padding:48px 16px;color:var(--stone-400);font-size:14px;line-height:1.6}
     .loading-state{text-align:center;padding:48px;color:var(--stone-400)}
   </style>
 </head>
@@ -69,14 +124,17 @@
     <div class="vl-lang-toggle"><button data-lang="en">EN</button><button data-lang="am">&#4771;&#4635;</button></div>
   </div>
   <div class="seg-tabs">
-    <div class="seg-tab active" data-tab="open" data-i18n="market_open">Open RFQs</div>
-    <div class="seg-tab" data-tab="my">My Offers</div>
+    <div class="seg-tab active" data-tab="rfqs"><span data-i18n="market_tab_rfqs">Open RFQs</span><span class="tab-count" id="rfqCount">0</span></div>
+    <div class="seg-tab" data-tab="containers"><span data-i18n="market_tab_containers">My Containers</span><span class="tab-count" id="containerCount">0</span></div>
+    <div class="seg-tab" data-tab="offers"><span data-i18n="market_tab_offers">My Offers</span><span class="tab-count" id="offerCount">0</span></div>
   </div>
   <div class="card-list" id="cardList"><div class="loading-state" data-i18n="loading">Loading...</div></div>
+
+  <!-- Detail overlay -->
   <div class="detail-overlay" id="detailOverlay">
     <div class="detail-header">
       <div class="back-btn" id="detailBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></div>
-      <h2 id="detailTitle" style="font-size:18px;font-weight:700;color:var(--stone-800)">RFQ Details</h2>
+      <h2 id="detailTitle" style="font-size:18px;font-weight:700;color:var(--stone-800)">Details</h2>
     </div>
     <div class="detail-body" id="detailBody"></div>
   </div>
@@ -91,10 +149,11 @@
     const user = tg.initDataUnsafe.user;
     if (user && user.language_code === 'am' && !localStorage.getItem('vl_lang')) vlI18n.setLang('am');
 
-    let allRfqs = [];
-    let myOffers = [];
-    let activeTab = 'open';
+    const headers = { 'X-Telegram-User-Id': String(user?.id || 0) };
+    let allRfqs = [], myContainers = [], myOffers = [];
+    let activeTab = 'rfqs';
 
+    /* ── Tab switching ────────────────────────────────────── */
     document.querySelectorAll('.seg-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.seg-tab').forEach(t => t.classList.remove('active'));
@@ -104,14 +163,20 @@
       });
     });
 
+    /* ── Data loading ─────────────────────────────────────── */
     async function loadData() {
       try {
-        const [rfqRes, offRes] = await Promise.all([
-          fetch('/api/marketplace/rfqs', { headers: { 'X-Telegram-User-Id': user?.id || 0 } }),
-          fetch('/api/marketplace/my-offers', { headers: { 'X-Telegram-User-Id': user?.id || 0 } }).catch(() => ({ ok: false })),
+        const [rfqRes, contRes, offRes] = await Promise.all([
+          fetch('/api/marketplace/rfqs', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/marketplace/my-containers', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/marketplace/my-offers', { headers }).catch(() => ({ ok: false })),
         ]);
-        if (rfqRes.ok) { const d = await rfqRes.json(); allRfqs = d.rfqs || d || []; }
-        if (offRes.ok) { const d = await offRes.json(); myOffers = d.offers || d || []; }
+        if (rfqRes.ok) { const d = await rfqRes.json(); allRfqs = d.rfqs || []; }
+        if (contRes.ok) { const d = await contRes.json(); myContainers = d.containers || []; }
+        if (offRes.ok) { const d = await offRes.json(); myOffers = d.offers || []; }
+        document.getElementById('rfqCount').textContent = allRfqs.length;
+        document.getElementById('containerCount').textContent = myContainers.length;
+        document.getElementById('offerCount').textContent = myOffers.length;
         renderList();
       } catch (e) {
         console.error(e);
@@ -119,75 +184,169 @@
       }
     }
 
+    /* ── Render router ────────────────────────────────────── */
     function renderList() {
       const el = document.getElementById('cardList');
-      if (activeTab === 'my') {
-        if (!myOffers.length) { el.innerHTML = '<div class="empty-state">No offers yet</div>'; return; }
-        el.innerHTML = myOffers.map(o =>
-          '<div class="rfq-card"><div class="rfq-top"><div><div class="rfq-title">' + (o.rfq_title||'Offer #'+o.id) + '</div>' +
-          '<div class="rfq-buyer">Your price: $' + (o.price||'') + '/kg</div></div>' +
-          '<span class="rfq-tag status-' + (o.status||'open') + '">' + (o.status||'pending') + '</span></div></div>'
-        ).join('');
-        return;
-      }
+      if (activeTab === 'rfqs') return renderRfqs(el);
+      if (activeTab === 'containers') return renderContainers(el);
+      if (activeTab === 'offers') return renderOffers(el);
+    }
+
+    /* ---------- RFQs ---------- */
+    function renderRfqs(el) {
       if (!allRfqs.length) { el.innerHTML = '<div class="empty-state">' + vlI18n.t('market_empty') + '</div>'; return; }
       el.innerHTML = allRfqs.map(r => {
         const st = (r.status||'open').toLowerCase();
         return '<div class="rfq-card" onclick="showRfqDetail(' + (r.id||0) + ')">' +
-          '<div class="rfq-top"><div><div class="rfq-title">' + (r.title||r.coffee_type||'RFQ #'+r.id) + '</div>' +
-          '<div class="rfq-buyer">' + (r.buyer_name||r.buyer||'') + '</div></div>' +
+          '<div class="rfq-top"><div><div class="rfq-title">' + esc(r.title||r.coffee_type||'RFQ #'+r.id) + '</div>' +
+          '<div class="rfq-buyer">' + esc(r.buyer_name||r.buyer||'') + '</div></div>' +
           '<span class="rfq-tag status-' + st + '">' + st + '</span></div>' +
           '<div class="rfq-meta">' +
           (r.quantity ? '<span class="rfq-tag qty">' + r.quantity + ' kg</span>' : '') +
           (r.target_price ? '<span class="rfq-tag price">$' + r.target_price + '/kg</span>' : '') +
-          (r.deadline ? '<span class="rfq-tag deadline">' + r.deadline + '</span>' : '') +
+          (r.deadline ? '<span class="rfq-tag deadline">' + fmtDate(r.deadline) + '</span>' : '') +
           '</div></div>';
       }).join('');
     }
 
-    async function showRfqDetail(id) {
+    /* ---------- My Containers ---------- */
+    function renderContainers(el) {
+      if (!myContainers.length) {
+        el.innerHTML = '<div class="empty-state">' + vlI18n.t('market_no_containers') +
+          '<br><span style="font-size:12px;color:var(--stone-400)">' + vlI18n.t('market_no_containers_hint') + '</span></div>';
+        return;
+      }
+      el.innerHTML = myContainers.map(c => {
+        const pct = c.fill_percentage || 0;
+        const barCls = pct >= 80 ? 'high' : pct >= 50 ? 'mid' : 'low';
+        const statusCls = 'status-' + (c.status||'AVAILABLE');
+        return '<div class="container-card" onclick="showContainerDetail(' + c.id + ')">' +
+          '<div class="container-header"><div>' +
+          '<div class="container-sscc">' + esc(c.container_sscc) + '</div>' +
+          '<div class="container-variety">' + esc(c.variety || 'Coffee') + (c.grade ? ' &middot; ' + esc(c.grade) : '') + '</div>' +
+          '</div><span class="status-badge ' + statusCls + '">' + (c.status||'').replace(/_/g,' ') + '</span></div>' +
+          '<div class="container-details">' +
+          '<div class="container-detail">' + vlI18n.t('market_price') + ': <strong>$' + c.price_per_kg + '/kg</strong></div>' +
+          '<div class="container-detail">' + vlI18n.t('market_total') + ': <strong>' + fmt(c.total_quantity_kg) + ' kg</strong></div>' +
+          '<div class="container-detail">' + vlI18n.t('market_sold') + ': <strong>' + fmt(c.sold_quantity_kg||0) + ' kg</strong></div>' +
+          '<div class="container-detail">' + vlI18n.t('market_available_qty') + ': <strong>' + fmt(c.available_quantity_kg) + ' kg</strong></div>' +
+          '</div>' +
+          '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + pct + '%</span></div>' +
+          '<div class="fill-bar"><div class="fill-bar-inner ' + barCls + '" style="width:' + Math.min(pct,100) + '%"></div></div></div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">' +
+          '<span class="buyers-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> ' +
+          (c.buyer_count||0) + ' ' + vlI18n.t('market_buyers') + '</span>' +
+          (c.pool_count ? '<span class="buyers-badge">' + c.pool_count + ' ' + vlI18n.t('market_pools') + '</span>' : '') +
+          '</div>' +
+          (c.pool_regions && c.pool_regions.length ? '<div class="regions-row">' + c.pool_regions.map(r => '<span class="region-chip">' + esc(r) + '</span>').join('') + '</div>' : '') +
+          '</div>';
+      }).join('');
+    }
+
+    /* ---------- My Offers ---------- */
+    function renderOffers(el) {
+      if (!myOffers.length) { el.innerHTML = '<div class="empty-state">' + vlI18n.t('market_no_offers') + '</div>'; return; }
+      el.innerHTML = myOffers.map(o =>
+        '<div class="rfq-card"><div class="rfq-top"><div><div class="rfq-title">' + esc(o.rfq_title||'Offer #'+o.id) + '</div>' +
+        '<div class="rfq-buyer">' + vlI18n.t('market_your_price') + ': $' + (o.price||'') + '/kg</div></div>' +
+        '<span class="rfq-tag status-' + (o.status||'pending') + '">' + (o.status||'pending') + '</span></div>' +
+        (o.quantity ? '<div class="rfq-meta"><span class="rfq-tag qty">' + o.quantity + ' kg</span></div>' : '') +
+        '</div>'
+      ).join('');
+    }
+
+    /* ── RFQ Detail overlay ───────────────────────────────── */
+    function showRfqDetail(id) {
       const overlay = document.getElementById('detailOverlay');
       overlay.classList.add('show');
       document.getElementById('detailBody').innerHTML = '<div class="loading-state">Loading...</div>';
       const r = allRfqs.find(x => x.id === id);
       if (!r) { overlay.classList.remove('show'); return; }
       document.getElementById('detailTitle').textContent = r.title || 'RFQ #' + r.id;
-      const t = vlI18n.t.bind(vlI18n);
-      let html = '<div class="detail-section"><h3>RFQ Details</h3>';
-      html += infoRow(t('market_buyer'), r.buyer_name||r.buyer||'');
-      html += infoRow('Coffee Type', r.coffee_type||'');
-      html += infoRow(t('market_quantity'), r.quantity ? r.quantity+' kg' : '');
-      html += infoRow('Target Price', r.target_price ? '$'+r.target_price+'/kg' : '');
-      html += infoRow(t('market_deadline'), r.deadline||'');
-      html += infoRow('Status', r.status||'');
-      if (r.notes||r.description) html += '<div style="margin-top:12px;font-size:13px;color:var(--stone-600);line-height:1.5">' + (r.notes||r.description) + '</div>';
+      let html = '<div class="detail-section"><h3>' + vlI18n.t('market_rfq_details') + '</h3>';
+      html += infoRow(vlI18n.t('market_buyer'), r.buyer_name||r.buyer||'');
+      html += infoRow(vlI18n.t('market_coffee_type'), r.coffee_type||'');
+      html += infoRow(vlI18n.t('market_quantity'), r.quantity ? r.quantity+' kg' : '');
+      html += infoRow(vlI18n.t('market_target_price'), r.target_price ? '$'+r.target_price+'/kg' : '');
+      html += infoRow(vlI18n.t('market_deadline'), r.deadline ? fmtDate(r.deadline) : '');
+      html += infoRow(vlI18n.t('market_status'), r.status||'');
+      if (r.notes||r.description) html += '<div style="margin-top:12px;font-size:13px;color:var(--stone-600);line-height:1.5">' + esc(r.notes||r.description) + '</div>';
       html += '</div>';
-      html += '<div class="offer-form"><h3>' + t('market_submit_offer') + '</h3>' +
-        '<div class="form-group"><label>' + t('market_price') + '</label><input type="number" id="offerPrice" step="0.01" placeholder="e.g. 4.50"></div>' +
-        '<div class="form-group"><label>' + t('market_quantity') + '</label><input type="number" id="offerQty" placeholder="e.g. 500"></div>' +
-        '<div class="form-group"><label>' + t('market_notes') + '</label><textarea id="offerNotes" placeholder="Optional notes..."></textarea></div>' +
-        '<button class="vl-btn-primary" style="width:100%" onclick="submitOffer(' + id + ')">' + t('market_submit') + '</button></div>';
+      html += '<div class="offer-form"><h3>' + vlI18n.t('market_submit_offer') + '</h3>' +
+        '<div class="form-group"><label>' + vlI18n.t('market_price') + '</label><input type="number" id="offerPrice" step="0.01" placeholder="e.g. 4.50"></div>' +
+        '<div class="form-group"><label>' + vlI18n.t('market_quantity') + '</label><input type="number" id="offerQty" placeholder="e.g. 500"></div>' +
+        '<div class="form-group"><label>' + vlI18n.t('market_notes') + '</label><textarea id="offerNotes" placeholder="' + vlI18n.t('market_notes_placeholder') + '"></textarea></div>' +
+        '<button class="vl-btn-primary" style="width:100%" onclick="submitOffer(' + id + ')">' + vlI18n.t('market_submit') + '</button></div>';
       document.getElementById('detailBody').innerHTML = html;
     }
 
+    /* ── Container Detail overlay ─────────────────────────── */
+    function showContainerDetail(id) {
+      const overlay = document.getElementById('detailOverlay');
+      overlay.classList.add('show');
+      const c = myContainers.find(x => x.id === id);
+      if (!c) { overlay.classList.remove('show'); return; }
+      document.getElementById('detailTitle').textContent = c.variety || 'Container';
+      const pct = c.fill_percentage || 0;
+      const barCls = pct >= 80 ? 'high' : pct >= 50 ? 'mid' : 'low';
+      let html = '<div class="detail-section"><h3>' + vlI18n.t('market_container_info') + '</h3>';
+      html += infoRow('SSCC', c.container_sscc);
+      html += infoRow(vlI18n.t('market_coffee_type'), c.variety || '');
+      html += infoRow(vlI18n.t('market_grade'), c.grade || '');
+      html += infoRow(vlI18n.t('market_processing'), c.processing_method || '');
+      html += infoRow(vlI18n.t('market_price'), '$' + c.price_per_kg + '/kg');
+      html += infoRow(vlI18n.t('market_total'), fmt(c.total_quantity_kg) + ' kg');
+      html += infoRow(vlI18n.t('market_available_qty'), fmt(c.available_quantity_kg) + ' kg');
+      html += infoRow(vlI18n.t('market_sold'), fmt(c.sold_quantity_kg||0) + ' kg');
+      html += infoRow(vlI18n.t('market_status'), (c.status||'').replace(/_/g, ' '));
+      if (c.created_at) html += infoRow(vlI18n.t('market_listed'), fmtDate(c.created_at));
+      if (c.expires_at) html += infoRow(vlI18n.t('market_expires'), fmtDate(c.expires_at));
+      html += '</div>';
+
+      /* Fill progress section */
+      html += '<div class="detail-section"><h3>' + vlI18n.t('market_fill_progress') + '</h3>';
+      html += '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + pct + '%</span></div>';
+      html += '<div class="fill-bar"><div class="fill-bar-inner ' + barCls + '" style="width:' + Math.min(pct,100) + '%"></div></div></div>';
+      html += '<div style="margin-top:12px">';
+      html += infoRow(vlI18n.t('market_buyers'), (c.buyer_count||0) + '');
+      html += infoRow(vlI18n.t('market_pools'), (c.pool_count||0) + '');
+      if (c.pool_regions && c.pool_regions.length) {
+        html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:10px">';
+        c.pool_regions.forEach(r => { html += '<span class="region-chip">' + esc(r) + '</span>'; });
+        html += '</div>';
+      }
+      html += '</div></div>';
+
+      if (c.description) {
+        html += '<div class="detail-section"><h3>' + vlI18n.t('market_notes') + '</h3>';
+        html += '<p style="font-size:13px;color:var(--stone-600);line-height:1.5">' + esc(c.description) + '</p></div>';
+      }
+
+      document.getElementById('detailBody').innerHTML = html;
+    }
+
+    /* ── Helpers ───────────────────────────────────────────── */
+    function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+    function fmt(n) { return n != null ? Number(n).toLocaleString() : '0'; }
+    function fmtDate(d) { try { return new Date(d).toLocaleDateString(); } catch(e) { return d; } }
     function infoRow(l,v) { return '<div class="info-row"><div class="info-label">' + l + '</div><div class="info-value">' + (v||'&mdash;') + '</div></div>'; }
 
     async function submitOffer(rfqId) {
       const price = document.getElementById('offerPrice').value;
       const qty = document.getElementById('offerQty').value;
       const notes = document.getElementById('offerNotes').value;
-      if (!price) { tg.showAlert('Price is required'); return; }
+      if (!price) { tg.showAlert(vlI18n.t('market_price_required')); return; }
       try {
         const res = await fetch('/api/marketplace/offers', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Telegram-User-Id': user?.id || 0 },
+          headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ rfq_id: rfqId, price: parseFloat(price), quantity: qty ? parseFloat(qty) : null, notes }),
         });
         if (!res.ok) throw new Error('Server ' + res.status);
         tg.showAlert(vlI18n.t('market_success'));
         document.getElementById('detailOverlay').classList.remove('show');
         loadData();
-      } catch (e) { console.error(e); tg.showAlert('Failed to submit offer'); }
+      } catch (e) { console.error(e); tg.showAlert(vlI18n.t('market_offer_failed')); }
     }
 
     document.getElementById('detailBack').addEventListener('click', () => { document.getElementById('detailOverlay').classList.remove('show'); });

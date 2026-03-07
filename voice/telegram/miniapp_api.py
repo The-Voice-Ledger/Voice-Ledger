@@ -14,7 +14,8 @@ from pathlib import Path
 from database import get_db
 from database.models import (
     CoffeeBatch, EPCISEvent, UserIdentity, VerificationEvidence,
-    RFQ, RFQOffer, RFQAcceptance, Organization
+    RFQ, RFQOffer, RFQAcceptance, Organization,
+    ContainerOffering, ContainerPool,
 )
 from sqlalchemy.orm import joinedload, subqueryload
 from sqlalchemy import func
@@ -516,6 +517,67 @@ async def marketplace_submit_offer(
     except Exception as e:
         logger.error(f"marketplace_submit_offer error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@marketplace_router.get("/my-containers")
+async def marketplace_my_containers(
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """List containers + pool fill-progress for the current user's cooperative."""
+    try:
+        with get_db() as db:
+            user = _get_user_by_telegram(db, x_telegram_user_id)
+            if not user or not user.organization_id:
+                return {"containers": [], "count": 0}
+
+            offerings = (
+                db.query(ContainerOffering)
+                .filter(ContainerOffering.cooperative_id == user.organization_id)
+                .order_by(ContainerOffering.created_at.desc())
+                .limit(50)
+                .all()
+            )
+
+            results = []
+            for o in offerings:
+                # Get pools for this offering
+                pools = (
+                    db.query(ContainerPool)
+                    .filter(ContainerPool.container_offering_id == o.id)
+                    .all()
+                )
+                total_committed = sum(p.filled_kg for p in pools)
+                buyer_count = sum(p.buyer_count for p in pools)
+                pool_regions = list({p.destination_region for p in pools})
+
+                results.append({
+                    "id": o.id,
+                    "container_sscc": o.container_sscc,
+                    "variety": o.variety,
+                    "grade": o.grade,
+                    "processing_method": o.processing_method,
+                    "total_quantity_kg": o.total_quantity_kg,
+                    "available_quantity_kg": o.available_quantity_kg,
+                    "sold_quantity_kg": o.sold_quantity_kg,
+                    "fill_percentage": o.fill_percentage,
+                    "price_per_kg": o.price_per_kg,
+                    "currency": o.currency,
+                    "status": o.status,
+                    "buyer_count": buyer_count,
+                    "pool_count": len(pools),
+                    "pool_regions": pool_regions,
+                    "total_committed_kg": total_committed,
+                    "delivery_location": o.delivery_location,
+                    "description": o.description,
+                    "dpp_url": o.dpp_url,
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                    "expires_at": o.expires_at.isoformat() if o.expires_at else None,
+                })
+
+            return {"containers": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"marketplace_my_containers error: {e}", exc_info=True)
+        return {"containers": [], "count": 0}
 
 
 # ═══════════════════════════════════════════════════════════════
