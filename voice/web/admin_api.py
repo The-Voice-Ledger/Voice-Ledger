@@ -95,6 +95,8 @@ def login(request: LoginRequest):
             token=token,
             user={
                 "id": user.id,
+                "phone_number": user.phone_number,
+                "full_name": f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
                 "name": f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
                 "role": user.role,
                 "preferred_language": user.preferred_language,
