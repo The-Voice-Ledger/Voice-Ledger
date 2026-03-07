@@ -97,3 +97,9 @@ body {
 .animate-float-slower {
   animation: float-slower 18s ease-in-out infinite;
 }
+
+/* Ken Burns slow zoom for carousel slides */
+@keyframes ken-burns {
+  0%   { transform: scale(1);    }
+  100% { transform: scale(1.06); }
+}
