@@ -1,686 +1,228 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Batches - The Voice Ledger</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/css/theme.css">
-    <style>
-        body {
-            padding-top: 20px;
-            padding-bottom: 72px;
-            min-height: 100vh;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 24px;
-        }
-
-        h1 {
-            color: var(--primary-blue-dark);
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .subtitle {
-            color: #64748b;
-            font-size: 14px;
-        }
-
-        .search-bar {
-            width: 100%;
-            padding: 12px 16px 12px 44px;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            font-size: 16px;
-            margin-bottom: 16px;
-            background: white url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%2364748b" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') no-repeat 12px center;
-            transition: border-color 0.3s ease;
-        }
-
-        .search-bar:focus {
-            outline: none;
-            border-color: var(--primary-blue);
-        }
-
-        .filter-chips {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            margin-bottom: 20px;
-            padding-bottom: 8px;
-        }
-
-        .filter-chips::-webkit-scrollbar {
-            display: none;
-        }
-
-        .chip {
-            padding: 8px 16px;
-            border-radius: 20px;
-            background: white;
-            color: #64748b;
-            border: 2px solid #e5e7eb;
-            font-size: 14px;
-            font-weight: 500;
-            white-space: nowrap;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .chip.active {
-            background: var(--primary-blue);
-            color: white;
-            border-color: var(--primary-blue);
-        }
-
-        .batch-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .batch-card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: var(--shadow-md);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            border: 2px solid transparent;
-        }
-
-        .batch-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 50%;
-            background: var(--gradient-glossy);
-            pointer-events: none;
-        }
-
-        .batch-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-            border-color: var(--primary-blue-light);
-        }
-
-        .batch-card:active {
-            transform: translateY(0);
-        }
-
-        .batch-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .batch-id {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-        }
-
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .status-active {
-            background: #10b981;
-            color: white;
-        }
-
-        .status-shipped {
-            background: #3b82f6;
-            color: white;
-        }
-
-        .status-verified {
-            background: #8b5cf6;
-            color: white;
-        }
-
-        .batch-info {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .batch-info-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .batch-info-label {
-            font-size: 12px;
-            color: #64748b;
-            margin-bottom: 2px;
-        }
-
-        .batch-info-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-        }
-
-        .loading, .error, .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-        }
-
-        .loading {
-            color: #64748b;
-        }
-
-        .error {
-            color: #ef4444;
-        }
-
-        .empty-state {
-            color: #64748b;
-        }
-
-        .empty-icon {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 16px;
-            color: #cbd5e1;
-        }
-
-        /* Detail View */
-        .detail-view {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-            z-index: 999;
-            overflow-y: auto;
-            padding: 20px;
-        }
-
-        .detail-view.active {
-            display: block;
-        }
-
-        .detail-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-
-        .detail-back {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: white;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            margin-right: 12px;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .detail-back svg {
-            width: 24px;
-            height: 24px;
-            color: var(--primary-blue);
-        }
-
-        .detail-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--primary-blue-dark);
-        }
-
-        .detail-section {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .detail-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 50%;
-            background: var(--gradient-glossy);
-            pointer-events: none;
-        }
-
-        .section-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 16px;
-        }
-
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .detail-row:last-child {
-            border-bottom: none;
-        }
-
-        .detail-label {
-            font-size: 14px;
-            color: #64748b;
-        }
-
-        .detail-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-            text-align: right;
-        }
-
-        .timeline-item {
-            display: flex;
-            gap: 12px;
-            padding: 12px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
-
-        .timeline-item:last-child {
-            border-bottom: none;
-        }
-
-        .timeline-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--primary-blue-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .timeline-icon svg {
-            width: 20px;
-            height: 20px;
-            color: white;
-        }
-
-        .timeline-content {
-            flex: 1;
-        }
-
-        .timeline-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-            margin-bottom: 4px;
-        }
-
-        .timeline-date {
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .tab-bar { display: flex; justify-content: space-around; align-items: center; background: white; border-top: 1px solid #e5e7eb; padding: 6px 0 env(safe-area-inset-bottom, 6px); position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
-        .tab-bar a { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; padding: 4px 8px; color: #94a3b8; font-size: 10px; font-weight: 500; }
-        .tab-bar a.active { color: var(--primary-blue); }
-        .tab-bar a svg { width: 22px; height: 22px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Ledger &ndash; Batches</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/miniapps/shared/theme.css">
+  <style>
+    body{padding:0 0 80px;background:var(--bg)}
+    .page-header{padding:20px 16px 14px;background:white;border-bottom:1px solid var(--border)}
+    .page-header h1{font-size:20px;font-weight:700;color:var(--stone-800);margin-bottom:10px}
+    .filter-row{display:flex;gap:8px;padding:12px 16px;background:var(--stone-50);border-bottom:1px solid var(--border)}
+    .search-wrap{flex:1;position:relative}
+    .search-wrap input{
+      width:100%;padding:9px 12px 9px 34px;border:1px solid var(--border);
+      border-radius:var(--r-md);font-size:13px;background:white;outline:none;
+    }
+    .search-wrap input:focus{border-color:var(--stone-800)}
+    .search-wrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--stone-400)}
+    .filter-btn{
+      padding:9px 14px;border:1px solid var(--border);border-radius:var(--r-md);
+      background:white;font-size:12px;font-weight:600;color:var(--stone-600);
+      cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;
+    }
+    .filter-btn.active{background:var(--stone-800);color:white;border-color:var(--stone-800)}
+    .filter-chips{display:none;flex-wrap:wrap;gap:6px;padding:8px 16px 12px;background:var(--stone-50);border-bottom:1px solid var(--border)}
+    .filter-chips.show{display:flex}
+    .chip{
+      padding:6px 12px;border-radius:99px;border:1px solid var(--border);
+      background:white;font-size:12px;color:var(--stone-600);cursor:pointer;transition:all .15s;
+    }
+    .chip.active{background:var(--stone-800);color:white;border-color:var(--stone-800)}
+    .stats-row{display:flex;gap:8px;padding:12px 16px;overflow-x:auto}
+    .mini-stat{
+      flex:0 0 auto;padding:8px 14px;background:white;
+      border:1px solid var(--border);border-radius:var(--r-md);text-align:center;min-width:80px;
+    }
+    .mini-stat .val{font-size:18px;font-weight:700;color:var(--stone-800)}
+    .mini-stat .lbl{font-size:10px;color:var(--stone-400);text-transform:uppercase;letter-spacing:.04em}
+    .batch-list{padding:0 16px}
+    .batch-card{
+      background:white;border:1px solid var(--border);border-radius:var(--r-lg);
+      padding:14px;margin-bottom:10px;cursor:pointer;transition:all .15s;
+    }
+    .batch-card:active{transform:scale(.99);background:var(--stone-50)}
+    .batch-row{display:flex;justify-content:space-between;align-items:center}
+    .batch-id{font-size:14px;font-weight:700;color:var(--stone-800)}
+    .batch-origin{font-size:12px;color:var(--stone-400);margin-top:2px}
+    .batch-meta{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .batch-tag{font-size:11px;padding:3px 8px;border-radius:99px;font-weight:500}
+    .tag-grade{background:var(--stone-100);color:var(--stone-600)}
+    .tag-weight{background:var(--stone-100);color:var(--stone-600)}
+    .tag-status{font-weight:600}
+    .status-harvested{background:#dcfce7;color:#166534}
+    .status-processed,.status-processing{background:#dbeafe;color:#1e40af}
+    .status-exported,.status-export{background:#fef3c7;color:#92400e}
+    .status-received,.status-shipped{background:#e0e7ff;color:#3730a3}
+    .status-delivered{background:#dcfce7;color:#166534}
+    .detail-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding:0 0 40px;display:none}
+    .detail-overlay.show{display:block}
+    .detail-header{display:flex;align-items:center;gap:12px;padding:16px;background:white;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+    .detail-header .back-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer}
+    .detail-header .back-btn svg{width:18px;height:18px;color:var(--stone-600)}
+    .detail-header h2{font-size:18px;font-weight:700;color:var(--stone-800)}
+    .detail-body{padding:16px}
+    .detail-section{background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px}
+    .detail-section h3{font-size:12px;font-weight:700;color:var(--stone-400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+    .empty-state{text-align:center;padding:48px 16px;color:var(--stone-400)}
+    .empty-state svg{width:48px;height:48px;margin-bottom:12px;color:var(--stone-300)}
+    .loading-state{text-align:center;padding:48px;color:var(--stone-400)}
+    .info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--stone-100)}
+    .info-row:last-child{border-bottom:none}
+    .info-label{font-size:13px;color:var(--stone-400)}
+    .info-value{font-size:13px;font-weight:600;color:var(--stone-800)}
+  </style>
 </head>
 <body>
-    <!-- SVG Icons -->
-    <svg style="display: none;">
-        <symbol id="icon-microphone" viewBox="0 0 24 24">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="12" y1="19" x2="12" y2="23"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8" y1="23" x2="16" y2="23"/>
-        </symbol>
-        <symbol id="icon-box" viewBox="0 0 24 24">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 8v13H3V8"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M1 3h22v5H1z"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="10" y1="12" x2="14" y2="12"/>
-        </symbol>
-        <symbol id="icon-arrow-left" viewBox="0 0 24 24">
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="19" y1="12" x2="5" y2="12"/>
-            <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 19 5 12 12 5"/>
-        </symbol>
-        <symbol id="icon-check" viewBox="0 0 24 24">
-            <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="20 6 9 17 4 12"/>
-        </symbol>
-        <symbol id="icon-truck" viewBox="0 0 24 24">
-            <rect fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" x="1" y="3" width="15" height="13"/>
-            <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="5.5" cy="18.5" r="2.5"/>
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="18.5" cy="18.5" r="2.5"/>
-        </symbol>
-    </svg>
-
-    <!-- List View -->
-    <div id="listView">
-        <div class="header">
-            <h1>My Coffee Batches</h1>
-            <p class="subtitle">Track and manage your production</p>
-        </div>
-
-        <input type="text" id="searchInput" class="search-bar" placeholder="Search by batch ID, GTIN...">
-
-        <div class="filter-chips">
-            <div class="chip active" data-filter="all">All</div>
-            <div class="chip" data-filter="active">Active</div>
-            <div class="chip" data-filter="verified">Verified</div>
-            <div class="chip" data-filter="shipped">Shipped</div>
-        </div>
-
-        <div id="batchList" class="batch-list">
-            <div class="loading">Loading batches...</div>
-        </div>
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h1 data-i18n="batch_title">Coffee Batches</h1>
+      <div class="vl-lang-toggle"><button data-lang="en">EN</button><button data-lang="am">&#4771;&#4635;</button></div>
     </div>
-
-    <!-- Detail View -->
-    <div id="detailView" class="detail-view">
-        <div class="detail-header">
-            <button class="detail-back" onclick="closeDetail()">
-                <svg><use href="#icon-arrow-left"/></svg>
-            </button>
-            <div class="detail-title">Batch Details</div>
-        </div>
-        <div id="detailContent"></div>
+  </div>
+  <div class="filter-row">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Search batches...">
     </div>
+    <button class="filter-btn" id="filterToggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+      <span data-i18n="batch_all">Filter</span>
+    </button>
+  </div>
+  <div class="filter-chips" id="filterChips">
+    <div class="chip active" data-status="all" data-i18n="batch_all">All</div>
+    <div class="chip" data-status="harvested">Harvested</div>
+    <div class="chip" data-status="processed" data-i18n="batch_processed">Processed</div>
+    <div class="chip" data-status="exported">Exported</div>
+    <div class="chip" data-status="shipped" data-i18n="batch_shipped">Shipped</div>
+  </div>
+  <div class="stats-row" id="statsRow"></div>
+  <div class="batch-list" id="batchList"><div class="loading-state" data-i18n="loading">Loading...</div></div>
+  <div class="detail-overlay" id="detailOverlay">
+    <div class="detail-header">
+      <div class="back-btn" id="detailBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></div>
+      <h2 id="detailTitle">Batch Details</h2>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+  <script src="/miniapps/shared/i18n.js"></script>
+  <script src="/miniapps/shared/tab-bar.js"></script>
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand(); tg.ready();
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => { window.location.href = '/miniapps/index.html'; });
+    const user = tg.initDataUnsafe.user;
+    if (user && user.language_code === 'am' && !localStorage.getItem('vl_lang')) vlI18n.setLang('am');
 
-        // Show Telegram back button
-        tg.BackButton.show();
-        tg.BackButton.onClick(() => {
-            if (document.getElementById('detailView').classList.contains('active')) {
-                closeDetail();
-            } else {
-                window.location.href = '/miniapps/index';
-            }
-        });
+    let allBatches = [];
+    let activeFilter = 'all';
 
-        const userId = tg.initDataUnsafe.user?.id || 12345;
-        let allBatches = [];
-        let currentFilter = 'all';
-        let currentBatchId = null; // Track currently viewed batch
-        
+    async function loadBatches() {
+      try {
+        const res = await fetch('/api/miniapp/batches?user_id=' + (user?.id || 0), { headers: { 'X-Telegram-User-Id': String(user?.id || 0) } });
+        if (!res.ok) throw new Error('Server ' + res.status);
+        const data = await res.json();
+        allBatches = data.batches || data || [];
+        renderStats();
+        renderList();
+      } catch (e) {
+        console.error('Load error:', e);
+        document.getElementById('batchList').innerHTML = '<div class="empty-state">' + vlI18n.t('error') + '</div>';
+      }
+    }
 
+    function renderStats() {
+      const total = allBatches.length;
+      const harvested = allBatches.filter(b => norm(b) === 'harvested').length;
+      const processed = allBatches.filter(b => ['processed','processing'].includes(norm(b))).length;
+      const exported  = allBatches.filter(b => ['exported','export','shipped'].includes(norm(b))).length;
+      document.getElementById('statsRow').innerHTML =
+        mini(total, 'Total') + mini(harvested, 'Harvested') + mini(processed, 'Processed') + mini(exported, 'Exported');
+    }
+    function mini(v, l) { return '<div class="mini-stat"><div class="val">' + v + '</div><div class="lbl">' + l + '</div></div>'; }
+    function norm(b) { return (b.display_status || b.status || '').toLowerCase().replace(/[^a-z]/g, ''); }
 
-        async function loadBatches() {
-            const listElement = document.getElementById('batchList');
-            try {
-                const response = await fetch(`/api/miniapp/batches?user_id=${userId}`);
-                
-                if (!response.ok) {
-                    throw new Error('Failed to load batches');
-                }
-                
-                const data = await response.json();
-                allBatches = data.batches || [];
-                
-                if (allBatches.length === 0) {
-                    listElement.innerHTML = `
-                        <div class="empty-state">
-                            <svg class="empty-icon"><use href="#icon-box"/></svg>
-                            <p>No batches found</p>
-                            <p style="font-size: 14px; margin-top: 8px;">Create your first batch using voice commands</p>
-                        </div>
-                    `;
-                } else {
-                    renderBatches(allBatches);
-                }
-            } catch (error) {
-                console.error('Error loading batches:', error);
-                listElement.innerHTML = `<div class="error">Error loading batches: ${error.message}</div>`;
-            }
+    function renderList() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      let list = allBatches;
+      if (activeFilter !== 'all') list = list.filter(b => norm(b).includes(activeFilter));
+      if (q) list = list.filter(b => (b.batch_id||'').toLowerCase().includes(q) || (b.origin||'').toLowerCase().includes(q) || (b.producer||'').toLowerCase().includes(q));
+      if (!list.length) {
+        document.getElementById('batchList').innerHTML = '<div class="empty-state">' + vlI18n.t('batch_empty') + '</div>';
+        return;
+      }
+      document.getElementById('batchList').innerHTML = list.map(b => {
+        const st = norm(b);
+        return '<div class="batch-card" onclick="showDetail(\'' + (b.batch_id||b.id) + '\')">' +
+          '<div class="batch-row"><div class="batch-id">' + (b.batch_id||b.id||'') + '</div>' +
+          '<span class="batch-tag tag-status status-' + st + '">' + (b.display_status||b.status||'') + '</span></div>' +
+          '<div class="batch-origin">' + (b.origin||b.producer||'') + '</div>' +
+          '<div class="batch-meta">' +
+          (b.grade ? '<span class="batch-tag tag-grade">' + b.grade + '</span>' : '') +
+          (b.weight ? '<span class="batch-tag tag-weight">' + b.weight + ' kg</span>' : '') +
+          '</div></div>';
+      }).join('');
+    }
+
+    async function showDetail(id) {
+      const overlay = document.getElementById('detailOverlay');
+      document.getElementById('detailTitle').textContent = id;
+      document.getElementById('detailBody').innerHTML = '<div class="loading-state">Loading...</div>';
+      overlay.classList.add('show');
+      try {
+        const res = await fetch('/api/miniapp/batch/' + encodeURIComponent(id) + '?user_id=' + (user?.id || 0), { headers: { 'X-Telegram-User-Id': String(user?.id || 0) } });
+        if (!res.ok) throw new Error('Server ' + res.status);
+        const b = await res.json();
+        let html = '<div class="detail-section"><h3>' + vlI18n.t('batch_info') + '</h3>';
+        html += infoRow('Batch ID', b.batch_id || b.id);
+        html += infoRow(vlI18n.t('batch_status'), b.display_status || b.status);
+        html += infoRow(vlI18n.t('batch_origin'), b.origin || '');
+        html += infoRow(vlI18n.t('batch_grade'), b.grade || '');
+        html += infoRow(vlI18n.t('batch_quantity'), b.weight ? b.weight + ' kg' : '');
+        html += infoRow(vlI18n.t('batch_variety'), b.variety || '');
+        html += '</div>';
+        if (b.events && b.events.length) {
+          html += '<div class="detail-section"><h3>' + vlI18n.t('batch_timeline') + '</h3>';
+          b.events.forEach(ev => {
+            html += '<div style="padding:8px 0;border-bottom:1px solid var(--stone-100)"><div style="font-weight:600;font-size:13px;color:var(--stone-800)">' + (ev.event_type||ev.type||'') + '</div><div style="font-size:11px;color:var(--stone-400)">' + (ev.timestamp||ev.created_at||'') + '</div></div>';
+          });
+          html += '</div>';
         }
-
-        function renderBatches(batches) {
-            const listElement = document.getElementById('batchList');
-            
-            if (batches.length === 0) {
-                listElement.innerHTML = `
-                    <div class="empty-state">
-                        <svg class="empty-icon"><use href="#icon-box"/></svg>
-                        <p>No batches match your filter</p>
-                    </div>
-                `;
-                return;
-            }
-
-            listElement.innerHTML = batches.map(batch => `
-                <div class="batch-card" onclick="showDetail('${batch.gtin || batch.batch_id}')">
-                    <div class="batch-header">
-                        <div class="batch-id">${batch.batch_id || batch.gtin}</div>
-                        <span class="status-badge status-${batch.display_status || batch.status || 'pending'}">
-                            ${(batch.display_status || batch.status || 'pending').toUpperCase()}
-                        </span>
-                    </div>
-                    <div class="batch-info">
-                        <div class="batch-info-item">
-                            <span class="batch-info-label">Quantity</span>
-                            <span class="batch-info-value">${batch.quantity_kg || 0} kg</span>
-                        </div>
-                        <div class="batch-info-item">
-                            <span class="batch-info-label">Variety</span>
-                            <span class="batch-info-value">${batch.variety || 'Arabica'}</span>
-                        </div>
-                        <div class="batch-info-item">
-                            <span class="batch-info-label">Origin</span>
-                            <span class="batch-info-value">${batch.origin || batch.origin_region || 'Unknown'}</span>
-                        </div>
-                        <div class="batch-info-item">
-                            <span class="batch-info-label">Created</span>
-                            <span class="batch-info-value">${formatDate(batch.created_at)}</span>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+        if (b.blockchain_hash || (b.blockchain && b.blockchain.transaction_hash)) {
+          html += '<div class="detail-section"><h3>Blockchain</h3>';
+          html += infoRow('Tx Hash', '<span class="mono" style="font-size:11px;word-break:break-all">' + (b.blockchain_hash || b.blockchain.transaction_hash || '') + '</span>');
+          html += '</div>';
         }
+        document.getElementById('detailBody').innerHTML = html;
+      } catch (e) {
+        document.getElementById('detailBody').innerHTML = '<div class="empty-state">Failed to load batch details</div>';
+      }
+    }
 
-        async function showDetail(batchId) {
-            currentBatchId = batchId; // Track current batch
-            
-            document.getElementById('listView').style.display = 'none';
-            document.getElementById('detailView').classList.add('active');
+    function infoRow(l, v) { return '<div class="info-row"><div class="info-label">' + l + '</div><div class="info-value">' + (v||'&mdash;') + '</div></div>'; }
 
-            const detailContent = document.getElementById('detailContent');
-            detailContent.innerHTML = '<div class="loading">Loading details...</div>';
+    document.getElementById('detailBack').addEventListener('click', () => { document.getElementById('detailOverlay').classList.remove('show'); });
+    document.getElementById('filterToggle').addEventListener('click', () => {
+      document.getElementById('filterChips').classList.toggle('show');
+      document.getElementById('filterToggle').classList.toggle('active');
+    });
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        activeFilter = chip.dataset.status;
+        renderList();
+      });
+    });
+    document.getElementById('searchInput').addEventListener('input', renderList);
 
-            try {
-                const response = await fetch(`/api/miniapp/batch/${batchId}?user_id=${userId}`);
-                
-                if (!response.ok) {
-                    throw new Error('Failed to load batch details');
-                }
-                
-                const data = await response.json();
-                renderDetail(data);
-            } catch (error) {
-                console.error('Error loading batch details:', error);
-                detailContent.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-            }
-        }
-
-        function renderDetail(data) {
-            const batch = data.batch;
-            const events = data.events || [];
-
-            let html = `
-                <div class="detail-section">
-                    <div class="section-title">Batch Information</div>
-                    <div class="detail-row">
-                        <span class="detail-label">Batch ID</span>
-                        <span class="detail-value">${batch.batch_id || 'N/A'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">GTIN</span>
-                        <span class="detail-value">${batch.gtin || 'N/A'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Quantity</span>
-                        <span class="detail-value">${batch.quantity_kg || 0} kg</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Variety</span>
-                        <span class="detail-value">${batch.variety || 'Arabica'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Origin</span>
-                        <span class="detail-value">${batch.origin || batch.origin_region || 'Unknown'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Processing</span>
-                        <span class="detail-value">${batch.processing_method || 'N/A'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Grade</span>
-                        <span class="detail-value">${batch.quality_grade || 'N/A'}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Status</span>
-                        <span class="status-badge status-${batch.display_status || batch.status || 'pending'}">${(batch.display_status || batch.status || 'pending').toUpperCase()}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Created</span>
-                        <span class="detail-value">${formatDate(batch.created_at)}</span>
-                    </div>
-                    ${batch.verified_at ? `
-                    <div class="detail-row">
-                        <span class="detail-label">Verified</span>
-                        <span class="detail-value">${formatDate(batch.verified_at)}</span>
-                    </div>` : ''}
-                </div>
-            `;
-
-            if (events.length > 0) {
-                html += `
-                    <div class="detail-section">
-                        <div class="section-title">Timeline (${events.length} Events)</div>
-                        ${events.map(event => `
-                            <div class="timeline-item">
-                                <div class="timeline-icon">
-                                    <svg><use href="#icon-${getEventIcon(event.biz_step)}"/></svg>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="timeline-title">${formatEventType(event.biz_step)}</div>
-                                    <div class="timeline-date">${formatDate(event.event_time)}</div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-
-            if (batch.blockchain_hash) {
-                html += `
-                    <div class="detail-section">
-                        <div class="section-title">Blockchain</div>
-                        <div class="detail-row">
-                            <span class="detail-label">Hash</span>
-                            <span class="detail-value" style="font-size: 12px; word-break: break-all;">${batch.blockchain_hash.substring(0, 32)}...</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            document.getElementById('detailContent').innerHTML = html;
-        }
-
-        function closeDetail() {
-            currentBatchId = null; // Clear current batch
-            
-            document.getElementById('detailView').classList.remove('active');
-            document.getElementById('listView').style.display = 'block';
-        }
-
-        function formatDate(dateString) {
-            if (!dateString) return 'N/A';
-            const date = new Date(dateString);
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
-
-        function getEventIcon(bizStep) {
-            if (bizStep?.includes('shipping')) return 'truck';
-            if (bizStep?.includes('commissioning')) return 'check';
-            return 'box';
-        }
-
-        function formatEventType(bizStep) {
-            if (!bizStep) return 'Event';
-            return bizStep.replace('urn:epcglobal:cbv:bizstep:', '')
-                .replace(/_/g, ' ')
-                .split(' ')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-        }
-
-        // Search
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const filtered = allBatches.filter(batch => 
-                (batch.batch_id && batch.batch_id.toLowerCase().includes(query)) ||
-                (batch.gtin && batch.gtin.toLowerCase().includes(query)) ||
-                (batch.coffee_type && batch.coffee_type.toLowerCase().includes(query))
-            );
-            renderBatches(applyFilter(filtered));
-        });
-
-        // Filter chips
-        document.querySelectorAll('.chip').forEach(chip => {
-            chip.addEventListener('click', () => {
-                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
-                currentFilter = chip.dataset.filter;
-                renderBatches(applyFilter(allBatches));
-            });
-        });
-
-        function applyFilter(batches) {
-            if (currentFilter === 'all') return batches;
-            return batches.filter(batch => batch.status === currentFilter);
-        }
-        
-
-
-        loadBatches();
-    </script>
-
-<nav class="tab-bar">
-    <a href="/miniapps/index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
-    <a href="/miniapps/batch_browser.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Batches</a>
-    <a href="/miniapps/assistant.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Assistant</a>
-    <a href="/miniapps/marketplace.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Market</a>
-    <a href="/miniapps/profile.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile</a>
-</nav>
+    vlTabBar('batches');
+    loadBatches();
+  </script>
 </body>
 </html>

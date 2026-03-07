@@ -140,7 +140,7 @@ except ImportError as e:
     print(f"ℹ️  Web voice module not available: {e}")
 # Import Mini App API router (Lab 22 - Telegram Mini Apps)
 try:
-    from voice.telegram.miniapp_api import router as miniapp_router, mini_app_router
+    from voice.telegram.miniapp_api import router as miniapp_router, mini_app_router, marketplace_router as miniapp_marketplace_router, admin_miniapp_router
     MINIAPP_AVAILABLE = True
 except ImportError as e:
     MINIAPP_AVAILABLE = False
@@ -252,7 +252,9 @@ if VOICE_WEB_AVAILABLE:
 if MINIAPP_AVAILABLE:
     app.include_router(miniapp_router)
     app.include_router(mini_app_router)
-    print("✅ Mini app endpoints registered at /api/miniapp/* and /miniapps/*")
+    app.include_router(miniapp_marketplace_router)
+    app.include_router(admin_miniapp_router)
+    print("✅ Mini app endpoints registered at /api/miniapp/*, /miniapps/*, /api/marketplace/*, /api/admin/*")
 
 # Include CRE Provenance API router (Lab 29 — Chainlink DON data endpoints)
 try:
@@ -923,16 +925,17 @@ if spa_dir.exists():
 else:
     print(f"ℹ️  SPA frontend not found at {spa_dir} (run: cd web-frontend && npm run build)")
 
+# Mount miniapps directory for shared resources (independent of old frontend)
+miniapps_dir = Path(__file__).parent.parent.parent / "miniapps"
+if miniapps_dir.exists():
+    app.mount("/miniapps", StaticFiles(directory=str(miniapps_dir)), name="miniapps")
+    print(f"✅ Mini apps static files served from {miniapps_dir}")
+
 frontend_dir = Path(__file__).parent.parent.parent / "frontend"
 if frontend_dir.exists():
     # Mount static asset directories
     app.mount("/css", StaticFiles(directory=str(frontend_dir / "css")), name="css")
     app.mount("/js", StaticFiles(directory=str(frontend_dir / "js")), name="js")
-    
-    # Mount miniapps directory for shared resources
-    miniapps_dir = Path(__file__).parent.parent.parent / "miniapps"
-    if miniapps_dir.exists():
-        app.mount("/miniapps", StaticFiles(directory=str(miniapps_dir)), name="miniapps")
     
     # Serve HTML pages as specific routes (skip / if SPA already handles it)
     if not spa_dir.exists():

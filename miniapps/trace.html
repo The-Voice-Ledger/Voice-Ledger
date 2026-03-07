@@ -1,925 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Trace Coffee</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/css/theme.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            padding-bottom: 72px;
-        }
-
-        /* SVG Icons */
-        .icon {
-            width: 24px;
-            height: 24px;
-            fill: currentColor;
-        }
-
-        .icon-sm {
-            width: 18px;
-            height: 18px;
-        }
-
-        .icon-lg {
-            width: 32px;
-            height: 32px;
-        }
-
-        .icon-xl {
-            width: 48px;
-            height: 48px;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-            color: white;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .header-title {
-            font-size: 28px;
-            font-weight: 700;
-        }
-
-        /* Search Bar */
-        .search-bar {
-            background: white;
-            border-radius: 16px;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-        }
-
-        .search-bar::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%);
-            pointer-events: none;
-        }
-
-        .search-bar input {
-            flex: 1;
-            border: none;
-            outline: none;
-            font-size: 16px;
-            background: transparent;
-            position: relative;
-            z-index: 1;
-        }
-
-        .search-bar input::placeholder {
-            color: #999;
-        }
-
-        .search-icon {
-            color: #667eea;
-            position: relative;
-            z-index: 1;
-        }
-
-        /* Batch Selector */
-        .batch-selector {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 24px;
-        }
-
-        .batch-selector::-webkit-scrollbar {
-            display: none;
-        }
-
-        .batch-chip {
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 24px;
-            padding: 10px 20px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            white-space: nowrap;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .batch-chip:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-        }
-
-        .batch-chip.active {
-            background: white;
-            color: #667eea;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        /* Cards */
-        .card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow-lg);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 120px;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-            border-radius: 16px 16px 0 0;
-            pointer-events: none;
-        }
-
-        .card-content {
-            position: relative;
-            z-index: 1;
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .card-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-        }
-
-        .card-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #1a1a1a;
-        }
-
-        /* Batch Metadata */
-        .metadata-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }
-
-        .metadata-item {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 14px;
-        }
-
-        .metadata-label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-
-        .metadata-value {
-            font-size: 16px;
-            color: #1a1a1a;
-            font-weight: 600;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-            color: white;
-        }
-
-        /* Timeline */
-        .timeline {
-            position: relative;
-            padding-left: 40px;
-        }
-
-        .timeline::before {
-            content: '';
-            position: absolute;
-            left: 16px;
-            top: 30px;
-            bottom: 30px;
-            width: 2px;
-            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .timeline-item {
-            position: relative;
-            margin-bottom: 24px;
-        }
-
-        .timeline-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .timeline-icon {
-            position: absolute;
-            left: -40px;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            z-index: 2;
-        }
-
-        .timeline-icon.commissioning {
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-            color: white;
-        }
-
-        .timeline-icon.shipping {
-            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-            color: white;
-        }
-
-        .timeline-icon.receiving {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            color: white;
-        }
-
-        .timeline-icon.transformation {
-            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-            color: white;
-        }
-
-        .timeline-icon.aggregation {
-            background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%);
-            color: white;
-        }
-
-        .timeline-icon.observation {
-            background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
-            color: white;
-        }
-
-        .timeline-content {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 16px;
-        }
-
-        .timeline-event-type {
-            font-size: 16px;
-            font-weight: 700;
-            color: #1a1a1a;
-            margin-bottom: 8px;
-            text-transform: capitalize;
-        }
-
-        .timeline-details {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 4px;
-        }
-
-        .timeline-timestamp {
-            font-size: 12px;
-            color: #999;
-            margin-top: 8px;
-        }
-
-        /* Map Placeholder */
-        .map-placeholder {
-            height: 200px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            margin-top: 16px;
-        }
-
-        .map-placeholder .icon {
-            color: #667eea;
-            margin-bottom: 8px;
-        }
-
-        /* Blockchain Section */
-        .blockchain-hash {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            border-radius: 12px;
-            padding: 16px;
-            margin-top: 16px;
-            color: white;
-        }
-
-        .blockchain-label {
-            font-size: 12px;
-            color: #94a3b8;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-
-        .blockchain-value {
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            word-break: break-all;
-            color: #4ade80;
-        }
-
-        .verified-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 700;
-            margin-top: 12px;
-        }
-
-        /* Loading & Empty States */
-        .loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 60px 20px;
-            color: white;
-        }
-
-        .spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid rgba(255, 255, 255, 0.2);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 16px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: white;
-        }
-
-        .empty-state .icon {
-            margin-bottom: 16px;
-            opacity: 0.6;
-        }
-
-        .empty-state h3 {
-            font-size: 20px;
-            margin-bottom: 8px;
-        }
-
-        .empty-state p {
-            font-size: 14px;
-            opacity: 0.8;
-        }
-
-        /* Hidden */
-        .hidden {
-            display: none !important;
-        }
-
-        .tab-bar { display: flex; justify-content: space-around; align-items: center; background: white; border-top: 1px solid #e5e7eb; padding: 6px 0 env(safe-area-inset-bottom, 6px); position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
-        .tab-bar a { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; padding: 4px 8px; color: #94a3b8; font-size: 10px; font-weight: 500; }
-        .tab-bar a.active { color: var(--primary-blue); }
-        .tab-bar a svg { width: 22px; height: 22px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Ledger &ndash; Trace</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/miniapps/shared/theme.css">
+  <style>
+    body{padding:0 0 80px;background:var(--bg)}
+    .page-header{padding:20px 16px 14px;background:white;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .page-header h1{font-size:20px;font-weight:700;color:var(--stone-800)}
+    .search-section{padding:16px}
+    .search-box{display:flex;gap:8px}
+    .search-box input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-md);font-size:13px;background:white;outline:none}
+    .search-box input:focus{border-color:var(--stone-800)}
+    .search-box button{padding:10px 16px;border-radius:var(--r-md);border:none;background:var(--stone-800);color:white;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+    .search-box button:active{opacity:.85}
+    .recent-list{padding:0 16px}
+    .recent-title{font-size:12px;font-weight:700;color:var(--stone-400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+    .recent-chip{display:inline-block;padding:6px 14px;border-radius:99px;background:white;border:1px solid var(--border);font-size:12px;color:var(--stone-600);cursor:pointer;margin:0 6px 8px 0;transition:all .15s}
+    .recent-chip:active{background:var(--stone-100)}
+    .journey-container{padding:16px;display:none}
+    .journey-container.show{display:block}
+    .journey-header{background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:16px}
+    .journey-batch-id{font-size:16px;font-weight:700;color:var(--stone-800)}
+    .journey-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .jm-tag{padding:3px 8px;border-radius:99px;font-size:11px;font-weight:500;background:var(--stone-100);color:var(--stone-600)}
+    .timeline{padding-left:20px;position:relative}
+    .timeline::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--stone-200)}
+    .tl-item{position:relative;padding-bottom:24px}
+    .tl-item:last-child{padding-bottom:0}
+    .tl-dot{position:absolute;left:-20px;top:3px;width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 2px var(--stone-300);display:flex;align-items:center;justify-content:center}
+    .tl-dot.active{box-shadow:0 0 0 2px var(--emerald-500)}
+    .tl-dot-inner{width:8px;height:8px;border-radius:50%;background:var(--stone-400)}
+    .tl-dot.active .tl-dot-inner{background:var(--emerald-500)}
+    .tl-card{background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;margin-left:8px}
+    .tl-type{font-size:13px;font-weight:700;color:var(--stone-800);margin-bottom:2px}
+    .tl-time{font-size:11px;color:var(--stone-400);margin-bottom:6px}
+    .tl-detail{font-size:12px;color:var(--stone-500);line-height:1.5}
+    .tl-hash{margin-top:8px;padding:6px 10px;background:var(--stone-50);border-radius:var(--r-sm);font-size:10px;font-family:monospace;color:var(--stone-500);word-break:break-all}
+    .bc-section{background:white;border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-top:16px}
+    .bc-section h3{font-size:12px;font-weight:700;color:var(--stone-400);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+    .bc-section h3 svg{width:14px;height:14px;color:var(--emerald-500)}
+    .info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--stone-100)}
+    .info-row:last-child{border-bottom:none}
+    .info-label{font-size:12px;color:var(--stone-400)}
+    .info-value{font-size:12px;font-weight:600;color:var(--stone-800);max-width:60%;text-align:right;word-break:break-all}
+    .empty-state{text-align:center;padding:48px 16px;color:var(--stone-400)}
+    .loading-state{text-align:center;padding:48px;color:var(--stone-400)}
+  </style>
 </head>
 <body>
-    <!-- SVG Sprite Definitions -->
-    <svg style="display: none;">
-        <defs>
-            <!-- Microphone Icon -->
-            <symbol id="icon-microphone" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </symbol>
-
-            <!-- Trace Icon (3 connected circles) -->
-            <symbol id="icon-trace" viewBox="0 0 24 24">
-                <circle cx="6" cy="12" r="3" fill="currentColor"/>
-                <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                <circle cx="18" cy="12" r="3" fill="currentColor"/>
-                <line x1="9" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2"/>
-                <line x1="15" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2"/>
-            </symbol>
-
-            <!-- Search Icon -->
-            <symbol id="icon-search" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </symbol>
-
-            <!-- Box Icon -->
-            <symbol id="icon-box" viewBox="0 0 24 24">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" fill="none" stroke="currentColor" stroke-width="2"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96" fill="none" stroke="currentColor" stroke-width="2"/>
-                <line x1="12" y1="22.08" x2="12" y2="12" stroke="currentColor" stroke-width="2"/>
-            </symbol>
-
-            <!-- Coffee Icon -->
-            <symbol id="icon-coffee" viewBox="0 0 24 24">
-                <path d="M18 8h1a4 4 0 0 1 0 8h-1" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="none" stroke="currentColor" stroke-width="2"/>
-                <line x1="6" y1="1" x2="6" y2="4" stroke="currentColor" stroke-width="2"/>
-                <line x1="10" y1="1" x2="10" y2="4" stroke="currentColor" stroke-width="2"/>
-                <line x1="14" y1="1" x2="14" y2="4" stroke="currentColor" stroke-width="2"/>
-            </symbol>
-
-            <!-- Map Pin Icon -->
-            <symbol id="icon-map-pin" viewBox="0 0 24 24">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" fill="none" stroke="currentColor" stroke-width="2"/>
-                <circle cx="12" cy="10" r="3" fill="currentColor"/>
-            </symbol>
-
-            <!-- Check Icon -->
-            <symbol id="icon-check" viewBox="0 0 24 24">
-                <polyline points="20 6 9 17 4 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </symbol>
-
-            <!-- Truck Icon -->
-            <symbol id="icon-truck" viewBox="0 0 24 24">
-                <rect x="1" y="3" width="15" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M16 8h5l3 3v5h-2" fill="none" stroke="currentColor" stroke-width="2"/>
-                <circle cx="5.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
-                <circle cx="18.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
-            </symbol>
-
-            <!-- Refresh Icon -->
-            <symbol id="icon-refresh" viewBox="0 0 24 24">
-                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </symbol>
-
-            <!-- Link Icon -->
-            <symbol id="icon-link" viewBox="0 0 24 24">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </symbol>
-
-            <!-- Globe Icon -->
-            <symbol id="icon-globe" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-                <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="currentColor" stroke-width="2"/>
-            </symbol>
-        </defs>
-    </svg>
-
-    <!-- Header -->
-    <div class="header">
-        <div class="header-left">
-            <svg class="icon icon-lg">
-                <use href="#icon-trace"/>
-            </svg>
-            <h1 class="header-title">Trace Coffee</h1>
-        </div>
+  <div class="page-header">
+    <h1 data-i18n="trace_title">Trace &amp; Verify</h1>
+    <div class="vl-lang-toggle"><button data-lang="en">EN</button><button data-lang="am">&#4771;&#4635;</button></div>
+  </div>
+  <div class="search-section">
+    <div class="search-box">
+      <input type="text" id="traceInput" placeholder="Enter Batch ID...">
+      <button id="traceBtn" data-i18n="trace_title">Trace</button>
     </div>
+  </div>
+  <div class="recent-list" id="recentSection">
+    <div class="recent-title">Recent Batches</div>
+    <div id="recentChips"></div>
+  </div>
+  <div class="journey-container" id="journeyContainer">
+    <div class="journey-header" id="journeyHeader"></div>
+    <div class="timeline" id="timeline"></div>
+    <div class="bc-section" id="bcSection" style="display:none"></div>
+  </div>
 
-    <!-- Search Bar -->
-    <div class="search-bar">
-        <svg class="icon search-icon">
-            <use href="#icon-search"/>
-        </svg>
-        <input type="text" id="searchInput" placeholder="Search batch ID or lot number...">
-    </div>
+  <script src="/miniapps/shared/i18n.js"></script>
+  <script src="/miniapps/shared/tab-bar.js"></script>
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand(); tg.ready();
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => { window.location.href = '/miniapps/index.html'; });
+    const user = tg.initDataUnsafe.user;
+    if (user && user.language_code === 'am' && !localStorage.getItem('vl_lang')) vlI18n.setLang('am');
 
-    <!-- Batch Selector -->
-    <div class="batch-selector" id="batchSelector">
-        <!-- Chips will be dynamically added here -->
-    </div>
+    function getRecent() { try { return JSON.parse(localStorage.getItem('vl_trace_recent')||'[]'); } catch { return []; } }
+    function addRecent(id) {
+      let list = getRecent().filter(x => x !== id);
+      list.unshift(id);
+      if (list.length > 8) list = list.slice(0, 8);
+      localStorage.setItem('vl_trace_recent', JSON.stringify(list));
+      renderRecent();
+    }
+    function renderRecent() {
+      const list = getRecent();
+      const el = document.getElementById('recentChips');
+      if (!list.length) { document.getElementById('recentSection').style.display = 'none'; return; }
+      document.getElementById('recentSection').style.display = '';
+      el.innerHTML = list.map(id => '<span class="recent-chip" onclick="traceBatch(\'' + id + '\')">' + id + '</span>').join('');
+    }
 
-    <!-- Loading State -->
-    <div class="loading hidden" id="loadingState">
-        <div class="spinner"></div>
-        <p>Loading trace data...</p>
-    </div>
-
-    <!-- Empty State -->
-    <div class="empty-state hidden" id="emptyState">
-        <svg class="icon icon-xl">
-            <use href="#icon-box"/>
-        </svg>
-        <h3>No Batch Selected</h3>
-        <p>Select a batch from above or search to view trace information</p>
-    </div>
-
-    <!-- Main Content -->
-    <div id="mainContent" class="hidden">
-        <!-- Batch Metadata Card -->
-        <div class="card">
-            <div class="card-content">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <svg class="icon">
-                            <use href="#icon-coffee"/>
-                        </svg>
-                    </div>
-                    <h2 class="card-title">Batch Details</h2>
-                </div>
-                <div class="metadata-grid" id="batchMetadata">
-                    <!-- Metadata items will be added here -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Timeline Card -->
-        <div class="card">
-            <div class="card-content">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <svg class="icon">
-                            <use href="#icon-trace"/>
-                        </svg>
-                    </div>
-                    <h2 class="card-title">Journey Timeline</h2>
-                </div>
-                <div class="timeline" id="timeline">
-                    <!-- Timeline items will be added here -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Map Card -->
-        <div class="card">
-            <div class="card-content">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <svg class="icon">
-                            <use href="#icon-map-pin"/>
-                        </svg>
-                    </div>
-                    <h2 class="card-title">Location Trail</h2>
-                </div>
-                <div class="map-placeholder">
-                    <svg class="icon icon-xl">
-                        <use href="#icon-map-pin"/>
-                    </svg>
-                    <p>Map visualization coming soon</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Blockchain Card -->
-        <div class="card">
-            <div class="card-content">
-                <div class="card-header">
-                    <div class="card-icon">
-                        <svg class="icon">
-                            <use href="#icon-link"/>
-                        </svg>
-                    </div>
-                    <h2 class="card-title">Blockchain Verification</h2>
-                </div>
-                <div class="blockchain-hash">
-                    <div class="blockchain-label">Transaction Hash</div>
-                    <div class="blockchain-value" id="blockchainHash">
-                        Loading...
-                    </div>
-                </div>
-                <div class="verified-badge">
-                    <svg class="icon icon-sm">
-                        <use href="#icon-check"/>
-                    </svg>
-                    Verified on Blockchain
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Initialize Telegram WebApp
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-
-        // Show back button
-        tg.BackButton.show();
-        tg.BackButton.onClick(() => {
-            window.location.href = '/miniapps/index';
-        });
-
-        // Get user ID
-        const userId = tg.initDataUnsafe?.user?.id || 'demo_user';
-
-        // State
-        let userBatches = [];
-        let currentBatch = null;
-        let isRecording = false;
-        let recordingTimeout = null;
-
-        // DOM Elements
-        const searchInput = document.getElementById('searchInput');
-        const batchSelector = document.getElementById('batchSelector');
-        const loadingState = document.getElementById('loadingState');
-        const emptyState = document.getElementById('emptyState');
-        const mainContent = document.getElementById('mainContent');
-        const batchMetadata = document.getElementById('batchMetadata');
-        const timeline = document.getElementById('timeline');
-        const blockchainHash = document.getElementById('blockchainHash');
-
-        // Event type to icon mapping
-        const eventIconMap = {
-            'commissioning': 'check',
-            'commission': 'check',
-            'shipping': 'truck',
-            'ship': 'truck',
-            'receiving': 'box',
-            'receive': 'box',
-            'transformation': 'refresh',
-            'transform': 'refresh',
-            'aggregation': 'link',
-            'aggregate': 'link',
-            'observation': 'globe',
-            'observe': 'globe'
-        };
-
-        // Initialize
-        async function init() {
-            await loadUserBatches();
-            setupEventListeners();
-            
-            // Show empty state initially
-            emptyState.classList.remove('hidden');
+    async function loadUserBatches() {
+      try {
+        const res = await fetch('/api/miniapp/batches?user_id=' + (user?.id || 0), { headers: { 'X-Telegram-User-Id': String(user?.id || 0) } });
+        if (!res.ok) return;
+        const data = await res.json();
+        const batches = data.batches || data || [];
+        if (batches.length && !getRecent().length) {
+          batches.slice(0, 5).forEach(b => { const id = b.batch_id || b.id; if (id) addRecent(id); });
         }
+      } catch {}
+    }
 
-        // Load user's batches for selector
-        async function loadUserBatches() {
-            try {
-                const response = await fetch(`/api/miniapp/batches?user_id=${userId}`);
-                const data = await response.json();
-                
-                if (data.success && data.batches) {
-                    userBatches = data.batches;
-                    renderBatchSelector();
-                }
-            } catch (error) {
-                console.error('Error loading batches:', error);
-                // Add default batch for demo
-                userBatches = [{ identifier: 'DEMO-001', name: 'Demo Batch' }];
-                renderBatchSelector();
-            }
+    async function traceBatch(id) {
+      if (!id) return;
+      document.getElementById('traceInput').value = id;
+      addRecent(id);
+      const container = document.getElementById('journeyContainer');
+      const timeline = document.getElementById('timeline');
+      const header = document.getElementById('journeyHeader');
+      const bcEl = document.getElementById('bcSection');
+      container.classList.add('show');
+      timeline.innerHTML = '<div class="loading-state">Loading...</div>';
+      bcEl.style.display = 'none';
+      try {
+        const res = await fetch('/api/miniapp/trace/' + encodeURIComponent(id) + '?user_id=' + (user?.id || 0), { headers: { 'X-Telegram-User-Id': String(user?.id || 0) } });
+        if (!res.ok) throw new Error('Server ' + res.status);
+        const data = await res.json();
+        const batch = data.batch || data;
+        header.innerHTML = '<div class="journey-batch-id">' + (batch.batch_id||id) + '</div><div class="journey-meta">' +
+          (batch.origin ? '<span class="jm-tag">' + batch.origin + '</span>' : '') +
+          (batch.grade ? '<span class="jm-tag">' + batch.grade + '</span>' : '') +
+          (batch.weight ? '<span class="jm-tag">' + batch.weight + ' kg</span>' : '') +
+          ((batch.display_status||batch.status) ? '<span class="jm-tag" style="background:#dcfce7;color:#166534">' + (batch.display_status||batch.status) + '</span>' : '') +
+          '</div>';
+        const events = data.events || data.timeline || batch.events || [];
+        if (!events.length) {
+          timeline.innerHTML = '<div class="empty-state">No events recorded yet</div>';
+        } else {
+          timeline.innerHTML = events.map((ev, i) => {
+            const isLast = i === events.length - 1;
+            const type = ev.event_type||ev.type||ev.action||'Event';
+            const time = ev.timestamp||ev.created_at||ev.date||'';
+            const loc = ev.location||ev.biz_location||'';
+            const actor = ev.actor||ev.recorded_by||'';
+            const hash = ev.blockchain_hash||ev.tx_hash||(ev.blockchain&&ev.blockchain.transaction_hash)||'';
+            let parts = [];
+            if (loc) parts.push(loc);
+            if (actor) parts.push(actor);
+            if (ev.notes) parts.push(ev.notes);
+            return '<div class="tl-item"><div class="tl-dot ' + (isLast?'active':'') + '"><div class="tl-dot-inner"></div></div>' +
+              '<div class="tl-card"><div class="tl-type">' + type + '</div><div class="tl-time">' + formatTime(time) + '</div>' +
+              (parts.length ? '<div class="tl-detail">' + parts.join(' &middot; ') + '</div>' : '') +
+              (hash ? '<div class="tl-hash">tx: ' + hash + '</div>' : '') +
+              '</div></div>';
+          }).join('');
         }
-
-        // Render batch selector chips
-        function renderBatchSelector() {
-            batchSelector.innerHTML = userBatches.map(batch => `
-                <div class="batch-chip" data-batch="${batch.batch_id || batch.gtin}">
-                    <svg class="icon icon-sm">
-                        <use href="#icon-box"/>
-                    </svg>
-                    ${batch.batch_id || batch.gtin}
-                </div>
-            `).join('');
-
-            // Add click listeners
-            document.querySelectorAll('.batch-chip').forEach(chip => {
-                chip.addEventListener('click', () => {
-                    tg.HapticFeedback.impactOccurred('light');
-                    selectBatch(chip.dataset.batch);
-                });
-            });
+        const bc = data.blockchain||batch.blockchain||{};
+        const txHash = bc.transaction_hash||batch.blockchain_hash||'';
+        if (txHash) {
+          bcEl.style.display = '';
+          bcEl.innerHTML = '<h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> ' + vlI18n.t('trace_blockchain') + '</h3>' +
+            '<div class="info-row"><div class="info-label">Tx Hash</div><div class="info-value" style="font-family:monospace;font-size:10px">' + txHash + '</div></div>' +
+            (bc.block_number ? '<div class="info-row"><div class="info-label">Block</div><div class="info-value">' + bc.block_number + '</div></div>' : '') +
+            (bc.network ? '<div class="info-row"><div class="info-label">Network</div><div class="info-value">' + bc.network + '</div></div>' : '') +
+            (bc.token_id ? '<div class="info-row"><div class="info-label">Token ID</div><div class="info-value">' + bc.token_id + '</div></div>' : '');
         }
+      } catch (e) {
+        console.error('Trace error:', e);
+        timeline.innerHTML = '<div class="empty-state">Failed to load trace data</div>';
+      }
+    }
 
-        // Select and load batch
-        async function selectBatch(batchId) {
-            // Update active state
-            document.querySelectorAll('.batch-chip').forEach(chip => {
-                chip.classList.toggle('active', chip.dataset.batch === batchId);
-            });
+    function formatTime(t) {
+      if (!t) return '';
+      try { return new Date(t).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+      catch { return t; }
+    }
 
-            // Show loading
-            loadingState.classList.remove('hidden');
-            emptyState.classList.add('hidden');
-            mainContent.classList.add('hidden');
+    document.getElementById('traceBtn').addEventListener('click', () => { traceBatch(document.getElementById('traceInput').value.trim()); });
+    document.getElementById('traceInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') traceBatch(e.target.value.trim()); });
 
-            try {
-                const response = await fetch(`/api/miniapp/trace/${batchId}?user_id=${userId}`);
-                const data = await response.json();
+    const urlParams = new URLSearchParams(window.location.search);
+    const batchParam = urlParams.get('batch') || urlParams.get('id');
 
-                if (data.success) {
-                    currentBatch = data.batch;
-                    renderBatchData(data);
-                    
-                    // Show content
-                    loadingState.classList.add('hidden');
-                    mainContent.classList.remove('hidden');
-                    tg.HapticFeedback.notificationOccurred('success');
-                } else {
-                    throw new Error(data.error || 'Failed to load batch');
-                }
-            } catch (error) {
-                console.error('Error loading batch trace:', error);
-                tg.showAlert('Failed to load batch trace data');
-                tg.HapticFeedback.notificationOccurred('error');
-                
-                loadingState.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-            }
-        }
-
-        // Render batch data
-        function renderBatchData(data) {
-            const { batch, events, blockchain_hash } = data;
-
-            // Render metadata
-            batchMetadata.innerHTML = `
-                <div class="metadata-item">
-                    <div class="metadata-label">Batch ID</div>
-                    <div class="metadata-value">${batch.batch_id || 'N/A'}</div>
-                </div>
-                <div class="metadata-item">
-                    <div class="metadata-label">Quantity</div>
-                    <div class="metadata-value">${batch.quantity_kg || '0'} kg</div>
-                </div>
-                <div class="metadata-item">
-                    <div class="metadata-label">Variety</div>
-                    <div class="metadata-value">${batch.variety || 'Arabica'}</div>
-                </div>
-                <div class="metadata-item">
-                    <div class="metadata-label">Status</div>
-                    <div class="metadata-value">
-                        <span class="status-badge">${batch.display_status || batch.status || 'pending'}</span>
-                    </div>
-                </div>
-                <div class="metadata-item">
-                    <div class="metadata-label">Origin</div>
-                    <div class="metadata-value">${batch.origin || batch.origin_region || 'Ethiopia'}</div>
-                </div>
-                <div class="metadata-item">
-                    <div class="metadata-label">Grade</div>
-                    <div class="metadata-value">${batch.quality_grade || 'N/A'}</div>
-                </div>
-            `;
-
-            // Render timeline
-            if (events && events.length > 0) {
-                timeline.innerHTML = events.map(event => {
-                    const eventType = (event.event_type || event.biz_step || '').toLowerCase();
-                    const iconType = getEventIcon(eventType);
-                    const timestamp = formatTimestamp(event.event_time);
-
-                    return `
-                        <div class="timeline-item">
-                            <div class="timeline-icon ${eventType}">
-                                <svg class="icon icon-sm">
-                                    <use href="#icon-${iconType}"/>
-                                </svg>
-                            </div>
-                            <div class="timeline-content">
-                                <div class="timeline-event-type">${event.event_type || event.biz_step || 'Event'}</div>
-                                <div class="timeline-details">
-                                    ${event.biz_location ? `Location: ${event.biz_location}` : ''}
-                                    ${event.biz_step ? `<br>Step: ${event.biz_step}` : ''}
-                                    ${event.blockchain_tx_hash ? `<br>Blockchain: ${event.blockchain_tx_hash.substring(0, 16)}...` : ''}
-                                </div>
-                                <div class="timeline-timestamp">${timestamp}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            } else {
-                timeline.innerHTML = '<p style="color: #666;">No events recorded yet</p>';
-            }
-
-            // Render blockchain hash
-            if (blockchain_hash) {
-                blockchainHash.textContent = blockchain_hash;
-            } else {
-                blockchainHash.textContent = 'Not yet anchored';
-            }
-        }
-
-        // Get icon for event type
-        function getEventIcon(eventType) {
-            for (const [key, icon] of Object.entries(eventIconMap)) {
-                if (eventType.includes(key)) {
-                    return icon;
-                }
-            }
-            return 'check'; // default
-        }
-
-        // Format timestamp
-        function formatTimestamp(timestamp) {
-            if (!timestamp) return 'Unknown';
-            
-            try {
-                const date = new Date(timestamp);
-                const now = new Date();
-                const diffMs = now - date;
-                const diffMins = Math.floor(diffMs / 60000);
-                const diffHours = Math.floor(diffMs / 3600000);
-                const diffDays = Math.floor(diffMs / 86400000);
-
-                if (diffMins < 1) return 'Just now';
-                if (diffMins < 60) return `${diffMins} min ago`;
-                if (diffHours < 24) return `${diffHours} hours ago`;
-                if (diffDays < 7) return `${diffDays} days ago`;
-                
-                return date.toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                });
-            } catch (error) {
-                return timestamp;
-            }
-        }
-
-        // Search functionality
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            
-            // Filter batch chips
-            document.querySelectorAll('.batch-chip').forEach(chip => {
-                const batchId = chip.dataset.batch.toLowerCase();
-                chip.style.display = batchId.includes(query) ? 'flex' : 'none';
-            });
-        });
-
-        searchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const query = e.target.value.trim();
-                if (query) {
-                    // Try to load the batch directly
-                    selectBatch(query);
-                }
-            }
-        });
-
-        // Setup event listeners
-        function setupEventListeners() {
-            // Theme
-            if (tg.colorScheme === 'dark') {
-                document.body.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #581c87 100%)';
-            }
-        }
-
-        // Start the app
-        init();
-    </script>
-<nav class="tab-bar">
-    <a href="/miniapps/index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
-    <a href="/miniapps/batch_browser.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Batches</a>
-    <a href="/miniapps/assistant.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Assistant</a>
-    <a href="/miniapps/marketplace.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Market</a>
-    <a href="/miniapps/profile.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile</a>
-</nav>
+    vlTabBar('home');
+    renderRecent();
+    loadUserBatches();
+    if (batchParam) traceBatch(batchParam);
+  </script>
 </body>
 </html>

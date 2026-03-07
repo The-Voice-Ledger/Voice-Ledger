@@ -413,7 +413,7 @@ class VoiceInterface {
         
         return new Promise(resolve => {
             this.tg.showPopup({
-                title: '🔄 Retrying...',
+                title: 'Retrying...',
                 message: `Attempt ${attemptNumber} of ${maxAttempts}\n\nRetrying in ${delaySec} seconds...`,
                 buttons: [
                     { id: 'cancel', type: 'cancel', text: 'Cancel' }
@@ -432,7 +432,7 @@ class VoiceInterface {
      * Priority 4: Enhanced Error Handling with VoiceError categorization
      */
     async handleUploadError(error, audioBlob, voiceButton) {
-        let errorTitle = '❌ Error';
+        let errorTitle = 'Error';
         let errorMessage = error.message || 'An unexpected error occurred';
         let showRetry = false;
         
@@ -440,32 +440,32 @@ class VoiceInterface {
         if (error instanceof VoiceError) {
             switch (error.category) {
                 case VoiceError.CATEGORIES.NETWORK:
-                    errorTitle = '📡 Network Error';
+                    errorTitle = 'Network Error';
                     errorMessage = 'Could not reach the server. Please check your internet connection.';
                     showRetry = false; // Already retried with exponential backoff
                     break;
                 case VoiceError.CATEGORIES.TIMEOUT:
-                    errorTitle = '⏱️ Timeout';
+                    errorTitle = 'Timeout';
                     errorMessage = 'The server took too long to respond. The request has been retried automatically.';
                     showRetry = false; // Already retried
                     break;
                 case VoiceError.CATEGORIES.VALIDATION:
-                    errorTitle = '⚠️ Validation Error';
+                    errorTitle = 'Validation Error';
                     errorMessage = error.message;
                     showRetry = false; // Validation errors are not retryable
                     break;
                 case VoiceError.CATEGORIES.SERVER:
-                    errorTitle = '🔧 Server Error';
+                    errorTitle = 'Server Error';
                     errorMessage = 'Server error occurred. The request has been retried automatically.';
                     showRetry = false; // Already retried
                     break;
                 case VoiceError.CATEGORIES.PERMISSION:
-                    errorTitle = '🔒 Permission Error';
+                    errorTitle = 'Permission Error';
                     errorMessage = error.message;
                     showRetry = false;
                     break;
                 default:
-                    errorTitle = '❌ Error';
+                    errorTitle = 'Error';
                     errorMessage = error.message;
             }
             
@@ -474,10 +474,10 @@ class VoiceInterface {
         } else {
             // Fallback for non-VoiceError errors
             if (!navigator.onLine || error.message.includes('network')) {
-                errorTitle = '📡 Network Error';
+                errorTitle = 'Network Error';
                 errorMessage = 'Could not reach the server. Please check your internet connection.';
             } else if (error.message.includes('timeout')) {
-                errorTitle = '⏱️ Timeout';
+                errorTitle = 'Timeout';
                 errorMessage = 'The server is taking too long to respond.';
             }
         }
@@ -485,10 +485,10 @@ class VoiceInterface {
         const buttons = [];
         
         if (showRetry && audioBlob) {
-            buttons.push({ id: 'retry', type: 'default', text: '🔄 Retry' });
+            buttons.push({ id: 'retry', type: 'default', text: 'Retry' });
         }
         
-        buttons.push({ id: 'record_again', type: 'default', text: '🎤 Record Again' });
+        buttons.push({ id: 'record_again', type: 'default', text: 'Record Again' });
         buttons.push({ id: 'close', type: 'cancel' });
         
         return new Promise(resolve => {
@@ -582,13 +582,13 @@ class VoiceInterface {
         }
         
         // Show transcript and response
-        const message = `🎙️ You said: "${result.transcript || 'N/A'}"\n\n` +
-                       `🤖 Response: ${result.message || 'No response'}`;
+        const message = `You said: "${result.transcript || 'N/A'}"\n\n` +
+                       `Response: ${result.message || 'No response'}`;
         
         const buttons = [];
         
         if (result.audio_url) {
-            buttons.push({ id: 'play', type: 'default', text: '🔊 Play Audio' });
+            buttons.push({ id: 'play', type: 'default', text: 'Play Audio' });
         }
         
         buttons.push({ id: 'close', type: 'close' });
@@ -618,7 +618,7 @@ class VoiceInterface {
             this.isPlayingAudio = true;
             
             // Show initial playing state
-            this.tg.MainButton.setText('🔊 Playing...');
+            this.tg.MainButton.setText('Playing...');
             this.tg.MainButton.show();
             this.tg.MainButton.showProgress(false);
             
@@ -638,7 +638,7 @@ class VoiceInterface {
                     const progress = (this.currentAudio.currentTime / this.currentAudio.duration) * 100;
                     const elapsed = Math.floor(this.currentAudio.currentTime);
                     const total = Math.floor(this.currentAudio.duration);
-                    this.tg.MainButton.setText(`🔊 Playing... ${elapsed}s / ${total}s`);
+                    this.tg.MainButton.setText(`Playing... ${elapsed}s / ${total}s`);
                 }
             });
             
@@ -681,7 +681,7 @@ class VoiceInterface {
     pauseAudio() {
         if (this.currentAudio && !this.currentAudio.paused) {
             this.currentAudio.pause();
-            this.tg.MainButton.setText('⏸️ Paused - Tap to Resume');
+            this.tg.MainButton.setText('Paused - Tap to Resume');
             this.tg.HapticFeedback.impactOccurred('light');
             console.log('Audio paused');
         }
@@ -693,7 +693,7 @@ class VoiceInterface {
     resumeAudio() {
         if (this.currentAudio && this.currentAudio.paused) {
             this.currentAudio.play();
-            this.tg.MainButton.setText('🔊 Playing...');
+            this.tg.MainButton.setText('Playing...');
             this.tg.HapticFeedback.impactOccurred('light');
             console.log('Audio resumed');
         }

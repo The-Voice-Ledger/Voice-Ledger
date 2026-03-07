@@ -1,0 +1,222 @@
+/**
+ * Voice Ledger Mini-App — Unified Theme
+ * Matches the web-frontend stone/amber/emerald palette.
+ * Date: March 7, 2026
+ */
+
+/* ── Reset & base ─────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  /* Stone palette (warm neutral) */
+  --stone-50:#fafaf9;--stone-100:#f5f5f4;--stone-200:#e7e5e4;
+  --stone-300:#d6d3d1;--stone-400:#a8a29e;--stone-500:#78716c;
+  --stone-600:#57534e;--stone-700:#44403c;--stone-800:#292524;
+  --stone-900:#1c1917;
+
+  /* Emerald (success/primary) */
+  --emerald-50:#ecfdf5;--emerald-100:#d1fae5;--emerald-400:#34d399;
+  --emerald-500:#10b981;--emerald-600:#059669;--emerald-700:#047857;
+
+  /* Amber (accent/warning) */
+  --amber-50:#fffbeb;--amber-100:#fef3c7;--amber-400:#fbbf24;
+  --amber-500:#f59e0b;--amber-600:#d97706;
+
+  /* Blue (links/info) */
+  --blue-50:#eff6ff;--blue-100:#dbeafe;--blue-400:#60a5fa;
+  --blue-500:#3b82f6;--blue-600:#2563eb;
+
+  /* Red (error) */
+  --red-50:#fef2f2;--red-100:#fee2e2;--red-400:#f87171;--red-500:#ef4444;
+
+  /* Semantic aliases */
+  --bg:var(--stone-50);
+  --card:white;
+  --border:var(--stone-200);
+  --text:var(--stone-800);
+  --text-secondary:var(--stone-500);
+  --primary:var(--stone-800);
+  --primary-hover:var(--stone-700);
+  --accent:var(--emerald-500);
+
+  /* Shadows */
+  --shadow-sm:0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 2px 8px rgba(0,0,0,.06);
+  --shadow-lg:0 4px 16px rgba(0,0,0,.08);
+
+  /* Radius */
+  --r-sm:8px;--r-md:12px;--r-lg:16px;--r-xl:20px;--r-full:9999px;
+
+  /* Font */
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+}
+
+html{font-size:16px;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:var(--font);color:var(--text);background:var(--bg);
+  line-height:1.5;min-height:100vh;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Typography ───────────────────────────────────────────── */
+h1{font-size:22px;font-weight:700;color:var(--stone-900);letter-spacing:-0.02em}
+h2{font-size:18px;font-weight:700;color:var(--stone-800);letter-spacing:-0.01em}
+h3{font-size:15px;font-weight:600;color:var(--stone-700)}
+p{color:var(--text-secondary);font-size:14px}
+small{font-size:12px;color:var(--stone-400)}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.vl-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:16px;
+  box-shadow:var(--shadow-sm);transition:box-shadow .2s,transform .2s;
+}
+.vl-card:active{transform:scale(.985)}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.vl-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 20px;border-radius:var(--r-full);border:none;cursor:pointer;
+  font-size:14px;font-weight:600;font-family:var(--font);
+  transition:all .15s;-webkit-user-select:none;user-select:none;
+}
+.vl-btn:active{transform:scale(.96)}
+.vl-btn-primary{background:var(--primary);color:white}
+.vl-btn-primary:hover{background:var(--primary-hover)}
+.vl-btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.vl-btn-outline:hover{border-color:var(--stone-400);background:var(--stone-100)}
+.vl-btn-ghost{background:transparent;color:var(--text-secondary)}
+.vl-btn-ghost:hover{background:var(--stone-100);color:var(--text)}
+.vl-btn-sm{padding:6px 14px;font-size:13px}
+.vl-btn-icon{width:40px;height:40px;padding:0;border-radius:var(--r-md)}
+
+/* ── Badge ────────────────────────────────────────────────── */
+.vl-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 10px;border-radius:var(--r-full);
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+}
+.vl-badge-success{background:var(--emerald-50);color:var(--emerald-700)}
+.vl-badge-warning{background:var(--amber-50);color:var(--amber-600)}
+.vl-badge-info{background:var(--blue-50);color:var(--blue-600)}
+.vl-badge-error{background:var(--red-50);color:var(--red-500)}
+.vl-badge-neutral{background:var(--stone-100);color:var(--stone-600)}
+
+/* ── Chip / Filter ────────────────────────────────────────── */
+.vl-chip{
+  padding:7px 16px;border-radius:var(--r-full);border:1px solid var(--border);
+  font-size:13px;font-weight:500;color:var(--text-secondary);background:white;
+  cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+.vl-chip.active,.vl-chip:hover{
+  background:var(--stone-800);color:white;border-color:var(--stone-800);
+}
+
+/* ── Input ────────────────────────────────────────────────── */
+.vl-input{
+  width:100%;padding:10px 14px;border:1px solid var(--border);
+  border-radius:var(--r-md);font-size:14px;font-family:var(--font);
+  background:white;color:var(--text);outline:none;transition:border-color .2s;
+}
+.vl-input:focus{border-color:var(--stone-400);box-shadow:0 0 0 3px rgba(120,113,108,.1)}
+.vl-input::placeholder{color:var(--stone-400)}
+
+/* ── Search ───────────────────────────────────────────────── */
+.vl-search{position:relative}
+.vl-search input{padding-left:40px}
+.vl-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--stone-400)}
+
+/* ── Section header ───────────────────────────────────────── */
+.vl-section-label{
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--stone-400);margin-bottom:12px;
+}
+
+/* ── Page layout ──────────────────────────────────────────── */
+.vl-page{padding:16px 16px 80px;max-width:600px;margin:0 auto}
+.vl-page-header{text-align:center;margin-bottom:24px}
+.vl-page-header h1{margin-bottom:4px}
+
+/* ── Empty / loading state ────────────────────────────────── */
+.vl-empty{text-align:center;padding:48px 24px}
+.vl-empty svg{width:48px;height:48px;color:var(--stone-300);margin-bottom:12px}
+.vl-empty h3{color:var(--stone-600);margin-bottom:6px}
+
+.vl-loading{text-align:center;padding:40px;color:var(--text-secondary)}
+.vl-spinner{
+  display:inline-block;width:24px;height:24px;
+  border:2.5px solid var(--stone-200);border-top-color:var(--stone-600);
+  border-radius:50%;animation:vlSpin .7s linear infinite;
+}
+@keyframes vlSpin{to{transform:rotate(360deg)}}
+
+/* ── Tab bar ──────────────────────────────────────────────── */
+.vl-tab-bar{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  display:flex;justify-content:space-around;align-items:center;
+  background:white;border-top:1px solid var(--border);
+  padding:5px 0 env(safe-area-inset-bottom,6px);
+}
+.vl-tab-bar a{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  text-decoration:none;padding:4px 10px;
+  color:var(--stone-400);font-size:10px;font-weight:500;
+  transition:color .15s;
+}
+.vl-tab-bar a svg{width:22px;height:22px}
+.vl-tab-bar a.active{color:var(--stone-800)}
+
+/* ── Utilities ────────────────────────────────────────────── */
+.hidden{display:none!important}
+.flex-center{display:flex;align-items:center;justify-content:center}
+.gap-8{gap:8px}.gap-12{gap:12px}.gap-16{gap:16px}
+.mt-8{margin-top:8px}.mt-16{margin-top:16px}.mt-24{margin-top:24px}
+.mb-8{margin-bottom:8px}.mb-16{margin-bottom:16px}.mb-24{margin-bottom:24px}
+.text-center{text-align:center}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono{font-family:var(--mono)}
+
+/* ── Row / info ───────────────────────────────────────────── */
+.vl-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:12px 0;border-bottom:1px solid var(--stone-100);
+}
+.vl-row:last-child{border-bottom:none}
+.vl-row-label{font-size:13px;color:var(--stone-500)}
+.vl-row-value{font-size:13px;font-weight:600;color:var(--stone-800);text-align:right}
+
+/* ── Grid ─────────────────────────────────────────────────── */
+.vl-grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.vl-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+
+/* ── Stat card ────────────────────────────────────────────── */
+.vl-stat{text-align:center;padding:16px 12px}
+.vl-stat-value{font-size:24px;font-weight:700;color:var(--stone-800)}
+.vl-stat-label{font-size:11px;color:var(--stone-400);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+
+/* ── Table ────────────────────────────────────────────────── */
+.vl-table{width:100%;border-collapse:collapse;font-size:13px}
+.vl-table th{
+  text-align:left;padding:10px 12px;font-weight:600;color:var(--stone-500);
+  text-transform:uppercase;font-size:11px;letter-spacing:.04em;
+  border-bottom:2px solid var(--stone-200);
+}
+.vl-table td{padding:10px 12px;border-bottom:1px solid var(--stone-100)}
+
+/* ── Animations ───────────────────────────────────────────── */
+@keyframes vlFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.vl-fade-up{animation:vlFadeUp .3s ease}
+
+/* ── Language toggle ──────────────────────────────────────── */
+.vl-lang-toggle{
+  display:inline-flex;border:1px solid var(--border);border-radius:var(--r-full);
+  overflow:hidden;font-size:12px;
+}
+.vl-lang-toggle button{
+  padding:5px 12px;border:none;background:transparent;cursor:pointer;
+  font-weight:600;color:var(--stone-500);font-family:var(--font);transition:all .15s;
+}
+.vl-lang-toggle button.active{
+  background:var(--stone-800);color:white;
+}

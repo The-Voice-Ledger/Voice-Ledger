@@ -1,350 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Ledger - Main Menu</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="/css/theme.css">
-    <style>
-        body {
-            padding: 20px 20px 80px 20px;
-            min-height: 100vh;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Ledger</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/miniapps/shared/theme.css">
+  <style>
+    body{padding:0}
+    .hero{
+      text-align:center;padding:32px 20px 24px;
+      background:linear-gradient(160deg,var(--stone-50) 0%,var(--stone-100) 100%);
+      border-bottom:1px solid var(--border);
+    }
+    .hero-logo{
+      width:56px;height:56px;border-radius:16px;margin:0 auto 12px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .hero-logo img{width:56px;height:56px;border-radius:16px;object-fit:contain}
+    .hero h1{margin-bottom:2px}
+    .hero .tagline{
+      font-size:11px;color:var(--stone-400);text-transform:uppercase;
+      letter-spacing:.1em;margin-top:6px;
+    }
+    .menu-grid{
+      display:grid;grid-template-columns:repeat(2,1fr);gap:12px;
+      padding:20px 16px 8px;max-width:480px;margin:0 auto;
+    }
+    .menu-card{
+      background:white;border:1px solid var(--border);border-radius:var(--r-lg);
+      padding:20px 16px;text-align:center;cursor:pointer;
+      transition:all .2s;position:relative;
+    }
+    .menu-card:active{transform:scale(.97);background:var(--stone-50)}
+    .menu-icon{
+      width:44px;height:44px;border-radius:12px;margin:0 auto 10px;
+      display:flex;align-items:center;justify-content:center;
+      background:var(--stone-100);color:var(--stone-600);transition:all .2s;
+    }
+    .menu-card:active .menu-icon{background:var(--stone-800);color:white}
+    .menu-icon svg{width:22px;height:22px}
+    .menu-title{font-size:14px;font-weight:600;color:var(--stone-800);margin-bottom:3px}
+    .menu-desc{font-size:11px;color:var(--stone-400);line-height:1.4}
 
-        .header {
-            text-align: center;
-            margin-bottom: 32px;
-        }
+    /* Admin card now lives inside the 3x2 grid — no separate row needed */
 
-        .logo-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .logo-icon {
-            width: 48px;
-            height: 48px;
-            color: var(--primary-blue);
-        }
-
-        h1 {
-            color: var(--primary-blue-dark);
-            font-size: 28px;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .subtitle {
-            color: #64748b;
-            font-size: 14px;
-            margin-top: 4px;
-        }
-
-        .menu-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        
-        @media (min-width: 600px) {
-            .menu-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        .menu-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: var(--shadow-md);
-            border: 2px solid transparent;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .menu-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 50%;
-            background: var(--gradient-glossy);
-            pointer-events: none;
-        }
-
-        .menu-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-            border-color: var(--primary-blue-light);
-        }
-
-        .menu-card:active {
-            transform: translateY(-2px);
-        }
-
-        .menu-icon {
-            width: 48px;
-            height: 48px;
-            margin: 0 auto 12px;
-            color: var(--primary-blue);
-        }
-
-        .menu-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-            margin-bottom: 4px;
-        }
-
-        .menu-description {
-            font-size: 12px;
-            color: #64748b;
-            line-height: 1.4;
-        }
-
-        .user-card {
-            background: white;
-            border-radius: 16px;
-            padding: 16px;
-            box-shadow: var(--shadow-md);
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            max-width: 600px;
-            margin: 0 auto;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .user-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 50%;
-            background: var(--gradient-glossy);
-            pointer-events: none;
-        }
-
-        .user-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--primary-blue);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            font-weight: 600;
-            flex-shrink: 0;
-        }
-
-        .user-details {
-            flex: 1;
-        }
-
-        .user-name {
-            font-weight: 600;
-            color: var(--primary-blue-dark);
-            margin-bottom: 2px;
-        }
-
-        .user-role {
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .tab-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            display: flex;
-            justify-content: space-around;
-            background: var(--card-bg, #1e293b);
-            border-top: 1px solid rgba(255,255,255,0.06);
-            padding: 6px 0 env(safe-area-inset-bottom, 8px);
-            z-index: 100;
-        }
-        .tab-bar a {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-            font-size: 11px;
-            color: #94a3b8;
-            text-decoration: none;
-            padding: 4px 8px;
-            transition: color .2s;
-        }
-        .tab-bar a.active { color: var(--primary-blue); }
-        .tab-bar a svg { width: 22px; height: 22px; }
-    </style>
+    .user-card{
+      display:flex;align-items:center;gap:14px;
+      background:white;border:1px solid var(--border);border-radius:var(--r-lg);
+      padding:14px 16px;margin:0 16px 24px;max-width:448px;
+      margin-left:auto;margin-right:auto;
+    }
+    .user-avatar{
+      width:44px;height:44px;border-radius:50%;flex-shrink:0;
+      background:var(--stone-800);color:white;
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;font-weight:700;
+    }
+    .user-name{font-size:14px;font-weight:600;color:var(--stone-800)}
+    .user-role{font-size:12px;color:var(--stone-400)}
+  </style>
 </head>
 <body>
-    <!-- Include SVG Icons -->
-    <svg style="display: none;">
-        <symbol id="icon-coffee" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M8.5 3C5.5 3 3 5.5 3 8.5c0 2.4 1.5 4.4 3.7 5.2.3 2.2 1.9 4 4 4.6.5.2 1 .2 1.5.2s1-.1 1.5-.2c2.1-.6 3.7-2.4 4-4.6C20.5 12.9 22 10.9 22 8.5 22 5.5 19.5 3 16.5 3c-1.3 0-2.5.5-3.5 1.2C12 3.5 10.8 3 9.5 3H8.5z"/>
-        </symbol>
-        <symbol id="icon-box" viewBox="0 0 24 24">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 8v13H3V8"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M1 3h22v5H1z"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="10" y1="12" x2="14" y2="12"/>
-        </symbol>
-        <symbol id="icon-dollar" viewBox="0 0 24 24">
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="12" y1="1" x2="12" y2="23"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </symbol>
-        <symbol id="icon-trace" viewBox="0 0 24 24">
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="18" cy="5" r="3"/>
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="6" cy="12" r="3"/>
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="18" cy="19" r="3"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-            <line fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-        </symbol>
-        <symbol id="icon-user" viewBox="0 0 24 24">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="12" cy="7" r="4"/>
-        </symbol>
-        <symbol id="icon-settings" viewBox="0 0 24 24">
-            <circle fill="none" stroke="currentColor" stroke-width="2" cx="12" cy="12" r="3"/>
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3M4.22 19.78l2.12-2.12m11.32-11.32l2.12-2.12"/>
-        </symbol>
-    </svg>
-
-    <div class="header">
-        <div class="logo-container">
-            <svg class="logo-icon"><use href="#icon-coffee"/></svg>
-        </div>
-        <h1 style="margin-bottom: 4px;">Voice First from Farm to Market</h1>
-        <p style="font-size: 13px; color: #94a3b8; font-style: italic; margin-bottom: 6px;">with</p>
-        <p class="subtitle">GS1 EPCIS 2.0 Blockchain Traceability</p>
+  <div class="hero">
+    <div class="hero-logo">
+      <img src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa" alt="WAGA Coffee">
     </div>
-
-    <div class="menu-grid">
-        <div class="menu-card" onclick="navigateTo('/miniapps/batch_browser.html')">
-            <svg class="menu-icon"><use href="#icon-box"/></svg>
-            <div class="menu-title">My Batches</div>
-            <div class="menu-description">View and manage coffee batches</div>
-        </div>
-
-        <div class="menu-card" onclick="navigateTo('/miniapps/marketplace.html')">
-            <svg class="menu-icon"><use href="#icon-dollar"/></svg>
-            <div class="menu-title">Marketplace</div>
-            <div class="menu-description">Browse and respond to RFQs</div>
-        </div>
-
-        <div class="menu-card" onclick="navigateTo('/miniapps/trace.html')">
-            <svg class="menu-icon"><use href="#icon-trace"/></svg>
-            <div class="menu-title">Trace</div>
-            <div class="menu-description">Track batch journey</div>
-        </div>
-
-        <div class="menu-card" onclick="navigateTo('/miniapps/assistant.html')">
-            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-            <div class="menu-title">Assistant</div>
-            <div class="menu-description">Ask anything about your supply chain</div>
-        </div>
-
-        <div class="menu-card" onclick="navigateTo('/miniapps/profile.html')">
-            <svg class="menu-icon"><use href="#icon-user"/></svg>
-            <div class="menu-title">Profile</div>
-            <div class="menu-description">View your profile & credentials</div>
-        </div>
+    <h1 data-i18n="app_subtitle">Voice-First from Farm to Market</h1>
+    <div class="vl-lang-toggle" style="margin-top:10px">
+      <button data-lang="en">EN</button>
+      <button data-lang="am">&#4771;&#4635;</button>
     </div>
+    <p class="tagline" data-i18n="app_tagline">GS1 EPCIS 2.0 &middot; Blockchain Traceability</p>
+  </div>
 
-    <!-- Admin button centered at bottom -->
-    <div style="display: flex; justify-content: center; margin-top: 8px; margin-bottom: 24px;">
-        <div class="menu-card" onclick="navigateTo('/miniapps/admin.html')" style="max-width: 280px; width: 100%;">
-            <svg class="menu-icon"><use href="#icon-settings"/></svg>
-            <div class="menu-title">Admin Dashboard</div>
-            <div class="menu-description">System administration</div>
-        </div>
+  <div class="menu-grid">
+    <div class="menu-card" onclick="navigateTo('/miniapps/batch_browser.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+      <div class="menu-title" data-i18n="menu_batches">My Batches</div>
+      <div class="menu-desc" data-i18n="menu_batches_desc">View and manage coffee batches</div>
     </div>
-
-    <div class="user-card" id="userInfo">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <div class="user-details">
-            <div class="user-name" id="userName">Loading...</div>
-            <div class="user-role" id="userRole">Telegram User</div>
-        </div>
+    <div class="menu-card" onclick="navigateTo('/miniapps/marketplace.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <div class="menu-title" data-i18n="menu_market">Marketplace</div>
+      <div class="menu-desc" data-i18n="menu_market_desc">Browse and respond to RFQs</div>
     </div>
+    <div class="menu-card" onclick="navigateTo('/miniapps/trace.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+      <div class="menu-title" data-i18n="menu_trace">Trace</div>
+      <div class="menu-desc" data-i18n="menu_trace_desc">Track batch journey on-chain</div>
+    </div>
+    <div class="menu-card" onclick="navigateTo('/miniapps/assistant.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+      <div class="menu-title" data-i18n="menu_assistant">Assistant</div>
+      <div class="menu-desc" data-i18n="menu_assistant_desc">Ask anything about your supply chain</div>
+    </div>
+    <div class="menu-card" onclick="navigateTo('/miniapps/profile.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div class="menu-title" data-i18n="menu_profile">Profile</div>
+      <div class="menu-desc" data-i18n="menu_profile_desc">Your account and credentials</div>
+    </div>
+    <div class="menu-card" onclick="navigateTo('/miniapps/admin.html')">
+      <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3M4.22 19.78l2.12-2.12m11.32-11.32l2.12-2.12"/></svg></div>
+      <div class="menu-title" data-i18n="menu_admin">Admin</div>
+      <div class="menu-desc" data-i18n="menu_admin_desc">System administration</div>
+    </div>
+  </div>
 
-    <!-- Bottom Tab Bar -->
-    <nav class="tab-bar">
-        <a href="/miniapps/" class="active">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Home
-        </a>
-        <a href="/miniapps/batch_browser.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/></svg>
-            Batches
-        </a>
-        <a href="/miniapps/assistant.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Assistant
-        </a>
-        <a href="/miniapps/marketplace.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            Market
-        </a>
-        <a href="/miniapps/profile.html">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            Profile
-        </a>
-    </nav>
+  <div class="user-card">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <div>
+      <div class="user-name" id="userName">Loading...</div>
+      <div class="user-role" id="userRole">Telegram User</div>
+    </div>
+  </div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+  <script src="/miniapps/shared/i18n.js"></script>
+  <script src="/miniapps/shared/tab-bar.js"></script>
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand(); tg.ready();
+    tg.MainButton.setText('\u2715 Close');
+    tg.MainButton.onClick(() => tg.close());
+    tg.MainButton.show();
 
-        tg.MainButton.setText('\u2715 Close');
-        tg.MainButton.onClick(() => { tg.close(); });
-        tg.MainButton.show();
+    const user = tg.initDataUnsafe?.user;
+    if (user) {
+      document.getElementById('userName').textContent =
+        user.first_name + (user.last_name ? ' ' + user.last_name : '');
+      document.getElementById('userAvatar').textContent =
+        user.first_name.charAt(0).toUpperCase();
+      if (user.language_code === 'am' && !localStorage.getItem('vl_lang')) {
+        vlI18n.setLang('am');
+      }
+    } else {
+      document.getElementById('userName').textContent = 'Voice Ledger User';
+      document.getElementById('userAvatar').textContent = 'V';
+    }
 
-        const user = tg.initDataUnsafe.user;
-        if (user) {
-            document.getElementById('userName').textContent = user.first_name + (user.last_name ? ' ' + user.last_name : '');
-            document.getElementById('userAvatar').textContent = user.first_name.charAt(0).toUpperCase();
-        }
-
-        function navigateTo(path) {
-            window.location.href = path;
-        }
-
-        async function loadStats() {
-            try {
-                const userId = tg.initDataUnsafe.user?.id;
-                if (!userId) return;
-                const resp = await fetch(`/api/miniapp/batches?user_id=${userId}`);
-                if (resp.ok) {
-                    const data = await resp.json();
-                    console.log('Batches loaded:', data.batches?.length || 0);
-                }
-            } catch (e) {
-                console.error('Error loading stats:', e);
-            }
-        }
-
-        loadStats();
-    </script>
+    function navigateTo(path) { window.location.href = path; }
+    vlTabBar('home');
+  </script>
 </body>
 </html>

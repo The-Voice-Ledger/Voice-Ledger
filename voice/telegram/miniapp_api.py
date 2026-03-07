@@ -5,13 +5,19 @@ Provides RESTful API for Telegram Mini Apps to query batch data.
 """
 
 import logging
-from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from typing import List, Dict, Any, Optional
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Query, Header
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from pathlib import Path
 from database import get_db
-from database.models import CoffeeBatch, EPCISEvent, UserIdentity, VerificationEvidence
-from sqlalchemy.orm import joinedload
+from database.models import (
+    CoffeeBatch, EPCISEvent, UserIdentity, VerificationEvidence,
+    RFQ, RFQOffer, RFQAcceptance, Organization
+)
+from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -358,66 +364,324 @@ async def trace_batch(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Serve mini app HTML
+# ═══════════════════════════════════════════════════════════════
+# MARKETPLACE API (for Telegram Mini Apps)
+# ═══════════════════════════════════════════════════════════════
+
+marketplace_router = APIRouter(prefix="/api/marketplace", tags=["miniapp-marketplace"])
+
+
+def _get_user_by_telegram(db, telegram_user_id) -> Optional[UserIdentity]:
+    """Look up user by Telegram ID (header value)."""
+    if not telegram_user_id:
+        return None
+    return db.query(UserIdentity).filter(
+        UserIdentity.telegram_user_id == str(telegram_user_id)
+    ).first()
+
+
+@marketplace_router.get("/rfqs")
+async def marketplace_list_rfqs(
+    status: Optional[str] = Query(None),
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """List open RFQs for the marketplace."""
+    try:
+        with get_db() as db:
+            query = db.query(RFQ).options(
+                joinedload(RFQ.buyer).joinedload(UserIdentity.organization),
+                subqueryload(RFQ.offers)
+            )
+            if status:
+                query = query.filter(RFQ.status == status)
+            else:
+                query = query.filter(RFQ.status.in_(['OPEN', 'ACTIVE']))
+
+            rfqs = query.order_by(RFQ.created_at.desc()).limit(50).all()
+
+            results = []
+            for rfq in rfqs:
+                buyer_name = ""
+                if rfq.buyer:
+                    buyer_name = f"{rfq.buyer.telegram_first_name or ''} {rfq.buyer.telegram_last_name or ''}".strip()
+                    if rfq.buyer.organization:
+                        buyer_name = rfq.buyer.organization.name
+
+                results.append({
+                    "id": rfq.id,
+                    "rfq_number": rfq.rfq_number,
+                    "title": f"{rfq.variety or 'Coffee'} — {rfq.quantity_kg} kg",
+                    "coffee_type": rfq.variety or "Arabica",
+                    "buyer_name": buyer_name,
+                    "buyer": buyer_name,
+                    "quantity": rfq.quantity_kg,
+                    "target_price": None,
+                    "grade": rfq.grade,
+                    "processing_method": rfq.processing_method,
+                    "delivery_location": rfq.delivery_location,
+                    "deadline": rfq.delivery_deadline.isoformat() if rfq.delivery_deadline else None,
+                    "status": rfq.status.lower(),
+                    "offer_count": len(rfq.offers) if rfq.offers else 0,
+                    "notes": rfq.transcript,
+                    "created_at": rfq.created_at.isoformat() if rfq.created_at else None,
+                })
+
+            return {"rfqs": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"marketplace_list_rfqs error: {e}", exc_info=True)
+        return {"rfqs": [], "count": 0}
+
+
+@marketplace_router.get("/my-offers")
+async def marketplace_my_offers(
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """List offers made by the current user's organization."""
+    try:
+        with get_db() as db:
+            user = _get_user_by_telegram(db, x_telegram_user_id)
+            if not user or not user.organization_id:
+                return {"offers": [], "count": 0}
+
+            offers = db.query(RFQOffer).filter(
+                RFQOffer.cooperative_id == user.organization_id
+            ).order_by(RFQOffer.created_at.desc()).limit(50).all()
+
+            results = []
+            for o in offers:
+                rfq = db.query(RFQ).filter_by(id=o.rfq_id).first()
+                results.append({
+                    "id": o.id,
+                    "offer_number": o.offer_number,
+                    "rfq_id": o.rfq_id,
+                    "rfq_title": f"{rfq.variety or 'Coffee'} — {rfq.quantity_kg} kg" if rfq else f"RFQ #{o.rfq_id}",
+                    "price": float(o.price_per_kg) if o.price_per_kg else None,
+                    "quantity": float(o.quantity_offered_kg) if o.quantity_offered_kg else None,
+                    "status": (o.status or "pending").lower(),
+                    "created_at": o.created_at.isoformat() if o.created_at else None,
+                })
+
+            return {"offers": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"marketplace_my_offers error: {e}", exc_info=True)
+        return {"offers": [], "count": 0}
+
+
+class OfferCreate(BaseModel):
+    rfq_id: int
+    price: float
+    quantity: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@marketplace_router.post("/offers")
+async def marketplace_submit_offer(
+    body: OfferCreate,
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """Submit an offer on an RFQ."""
+    try:
+        with get_db() as db:
+            user = _get_user_by_telegram(db, x_telegram_user_id)
+            if not user:
+                raise HTTPException(status_code=401, detail="User not found")
+
+            rfq = db.query(RFQ).filter_by(id=body.rfq_id).first()
+            if not rfq:
+                raise HTTPException(status_code=404, detail="RFQ not found")
+
+            # Generate offer number
+            count = db.query(RFQOffer).count()
+            offer_number = f"OFF-{count + 1:04d}"
+
+            offer = RFQOffer(
+                rfq_id=body.rfq_id,
+                cooperative_id=user.organization_id or user.id,
+                offer_number=offer_number,
+                quantity_offered_kg=body.quantity or rfq.quantity_kg,
+                price_per_kg=body.price,
+                delivery_timeline=body.notes,
+                status="PENDING",
+            )
+            db.add(offer)
+            db.flush()
+
+            return {
+                "success": True,
+                "offer_id": offer.id,
+                "offer_number": offer_number,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"marketplace_submit_offer error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN API (for Telegram Mini Apps)
+# ═══════════════════════════════════════════════════════════════
+
+admin_miniapp_router = APIRouter(prefix="/api/admin", tags=["miniapp-admin"])
+
+ADMIN_TELEGRAM_IDS = set()
+import os
+_admin_id = os.getenv("ADMIN_TELEGRAM_USER_ID")
+if _admin_id:
+    ADMIN_TELEGRAM_IDS.add(str(_admin_id))
+
+
+def _require_admin_telegram(telegram_user_id: str):
+    """Check if Telegram user is an admin."""
+    if not telegram_user_id or str(telegram_user_id) not in ADMIN_TELEGRAM_IDS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@admin_miniapp_router.get("/users")
+async def admin_list_users(
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """List all users (admin only)."""
+    _require_admin_telegram(x_telegram_user_id)
+    try:
+        with get_db() as db:
+            users = db.query(UserIdentity).order_by(
+                UserIdentity.is_approved.asc(),
+                UserIdentity.id.desc()
+            ).limit(100).all()
+
+            return {
+                "users": [
+                    {
+                        "id": u.id,
+                        "telegram_user_id": u.telegram_user_id,
+                        "name": f"{u.telegram_first_name or ''} {u.telegram_last_name or ''}".strip() or f"User {u.telegram_user_id}",
+                        "full_name": f"{u.telegram_first_name or ''} {u.telegram_last_name or ''}".strip(),
+                        "phone_number": u.phone_number,
+                        "role": u.role or "FARMER",
+                        "organization": u.organization.name if u.organization else None,
+                        "is_approved": u.is_approved,
+                        "preferred_language": u.preferred_language,
+                    }
+                    for u in users
+                ],
+                "total": len(users),
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"admin_list_users error: {e}", exc_info=True)
+        return {"users": [], "total": 0}
+
+
+@admin_miniapp_router.get("/stats")
+async def admin_stats(
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """Get summary statistics for admin dashboard."""
+    _require_admin_telegram(x_telegram_user_id)
+    try:
+        with get_db() as db:
+            total_users = db.query(UserIdentity).count()
+            total_batches = db.query(CoffeeBatch).count()
+            total_rfqs = db.query(RFQ).count()
+            total_events = db.query(EPCISEvent).count()
+
+            return {
+                "total_users": total_users,
+                "total_batches": total_batches,
+                "total_rfqs": total_rfqs,
+                "total_events": total_events,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"admin_stats error: {e}", exc_info=True)
+        return {"total_users": 0, "total_batches": 0, "total_rfqs": 0, "total_events": 0}
+
+
+class ApproveRequest(BaseModel):
+    telegram_user_id: int
+
+
+@admin_miniapp_router.post("/approve")
+async def admin_approve_user(
+    body: ApproveRequest,
+    x_telegram_user_id: Optional[str] = Header(None),
+):
+    """Approve a pending user registration."""
+    _require_admin_telegram(x_telegram_user_id)
+    try:
+        with get_db() as db:
+            user = db.query(UserIdentity).filter(
+                UserIdentity.telegram_user_id == str(body.telegram_user_id)
+            ).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            user.is_approved = True
+            user.approved_at = datetime.utcnow()
+            user.approved_by_admin_id = int(x_telegram_user_id) if x_telegram_user_id else None
+            db.flush()
+
+            return {
+                "success": True,
+                "message": f"User {user.telegram_first_name or user.telegram_user_id} approved",
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"admin_approve error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Serve mini app HTML pages (supports both /page and /page.html)
 mini_app_router = APIRouter(prefix="/miniapps", tags=["miniapp-pages"])
 
-@mini_app_router.get("/index")
-async def serve_index():
-    """Serve the main menu hub mini app."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "index.html"
+MINIAPPS_DIR = Path(__file__).parent.parent.parent / "miniapps"
+
+def _serve_page(filename: str):
+    """Return a FileResponse for the given miniapp HTML file."""
+    html_path = MINIAPPS_DIR / filename
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Mini app not found")
     return FileResponse(html_path, media_type="text/html")
 
+@mini_app_router.get("/index")
+@mini_app_router.get("/index.html")
+async def serve_index():
+    return _serve_page("index.html")
+
 @mini_app_router.get("/batch_browser")
+@mini_app_router.get("/batch_browser.html")
 async def serve_batch_browser():
-    """Serve the batch browser mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "batch_browser.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("batch_browser.html")
 
 @mini_app_router.get("/batches")
 async def serve_batches_alias():
-    """Alias for batch_browser for backward compatibility."""
-    return await serve_batch_browser()
+    return _serve_page("batch_browser.html")
 
 @mini_app_router.get("/marketplace")
+@mini_app_router.get("/marketplace.html")
 async def serve_marketplace():
-    """Serve the marketplace mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "marketplace.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("marketplace.html")
 
 @mini_app_router.get("/trace")
+@mini_app_router.get("/trace.html")
 async def serve_trace():
-    """Serve the traceability mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "trace.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("trace.html")
 
 @mini_app_router.get("/admin")
+@mini_app_router.get("/admin.html")
 async def serve_admin():
-    """Serve the admin dashboard mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "admin.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("admin.html")
 
 @mini_app_router.get("/profile")
+@mini_app_router.get("/profile.html")
 async def serve_profile():
-    """Serve the user profile mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "profile.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("profile.html")
 
 @mini_app_router.get("/assistant")
+@mini_app_router.get("/assistant.html")
 async def serve_assistant():
-    """Serve the AI assistant chat mini app HTML page."""
-    html_path = Path(__file__).parent.parent.parent / "miniapps" / "assistant.html"
-    if not html_path.exists():
-        raise HTTPException(status_code=404, detail="Mini app not found")
-    return FileResponse(html_path, media_type="text/html")
+    return _serve_page("assistant.html")
