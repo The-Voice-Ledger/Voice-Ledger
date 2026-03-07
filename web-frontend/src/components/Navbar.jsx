@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { LuMenu, LuX } from 'react-icons/lu'
+import { LuMenu, LuX, LuChevronDown } from 'react-icons/lu'
 import useAuthStore from '../stores/authStore'
 import useChatStore from '../stores/chatStore'
 
@@ -13,6 +13,26 @@ export default function Navbar() {
   const { setLanguage } = useChatStore()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const toolsRef = useRef(null)
+
+  // Close Tools dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const TOOLS = [
+    { to: '/financing',  label: t('nav_financing') },
+    { to: '/tracking',   label: t('nav_tracking') },
+    { to: '/compliance', label: t('nav_compliance') },
+    { to: '/dpp',        label: t('nav_dpp') },
+  ]
+
+  const isToolActive = TOOLS.some((tl) => location.pathname === tl.to)
 
   const toggleLang = () => {
     const next = i18n.language === 'en' ? 'am' : 'en'
@@ -58,10 +78,40 @@ export default function Navbar() {
           {navLink('/assistant', t('nav_assistant'))}
           {navLink('/marketplace', t('nav_marketplace'))}
           {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'))}
-          {navLink('/financing', t('nav_financing'))}
-          {navLink('/tracking', t('nav_tracking'))}
-          {navLink('/compliance', t('nav_compliance'))}
-          {navLink('/dpp', t('nav_dpp'))}
+
+          {/* Tools dropdown */}
+          <div ref={toolsRef} className="relative">
+            <button
+              onClick={() => setToolsOpen((o) => !o)}
+              className={`inline-flex items-center gap-1 px-1 py-1 text-[13px] tracking-wide transition-colors ${
+                isToolActive
+                  ? 'text-stone-900 font-semibold'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              {t('nav_tools')}
+              <LuChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {toolsOpen && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-xl shadow-lg border border-stone-100 py-1.5 z-50 animate-fade-in-up">
+                {TOOLS.map((tl) => (
+                  <Link
+                    key={tl.to}
+                    to={tl.to}
+                    onClick={() => setToolsOpen(false)}
+                    className={`block px-4 py-2 text-sm transition-colors ${
+                      isActive(tl.to)
+                        ? 'bg-stone-50 text-stone-900 font-semibold'
+                        : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+                    }`}
+                  >
+                    {tl.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right -- Controls */}
@@ -114,6 +164,7 @@ export default function Navbar() {
             {navLink('/assistant', t('nav_assistant'), true)}
             {navLink('/marketplace', t('nav_marketplace'), true)}
             {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'), true)}
+            <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-stone-400">{t('nav_tools')}</p>
             {navLink('/financing', t('nav_financing'), true)}
             {navLink('/tracking', t('nav_tracking'), true)}
             {navLink('/compliance', t('nav_compliance'), true)}

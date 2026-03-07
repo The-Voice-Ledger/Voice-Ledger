@@ -40,6 +40,7 @@ const resources = {
       nav_my_rfqs: 'My RFQs',
       nav_compliance: 'Compliance',
       nav_dpp: 'DPP Viewer',
+      nav_tools: 'Tools',
       // Landing page
       features_heading: 'Everything you need for compliant coffee imports',
       feat_traceability: 'Full Traceability',
@@ -186,6 +187,7 @@ const resources = {
       nav_my_rfqs: 'የእኔ RFQs',
       nav_compliance: 'ተስማሚነት',
       nav_dpp: 'DPP አያች',
+      nav_tools: 'መሳሪያዎች',
       // Landing page
       features_heading: 'ለተስማሚ የቡና ግዥ የሚያስፈልጉ ሁሉ',
       feat_traceability: 'ሙሉ ክትትል',
