@@ -28,9 +28,10 @@
 
 /* ── Mobile-first globals ──────────────────────────────────── */
 
-/* Prevent horizontal overflow on mobile */
+/* Prevent horizontal overflow on mobile — use clip, not hidden,
+   so position: sticky still works on <nav>. */
 html, body {
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
 }
 

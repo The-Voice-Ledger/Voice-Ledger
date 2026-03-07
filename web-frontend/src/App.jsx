@@ -8,6 +8,8 @@ import Marketplace from './pages/Marketplace'
 import MyRFQs from './pages/MyRFQs'
 import DPPViewer from './pages/DPPViewer'
 import Compliance from './pages/Compliance'
+import Financing from './pages/Financing'
+import Tracking from './pages/Tracking'
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
           <Route path="/my-rfqs" element={<MyRFQs />} />
           <Route path="/dpp" element={<DPPViewer />} />
           <Route path="/compliance" element={<Compliance />} />
+          <Route path="/financing" element={<Financing />} />
+          <Route path="/tracking" element={<Tracking />} />
         </Routes>
       </main>
       {/* Footer on all pages */}

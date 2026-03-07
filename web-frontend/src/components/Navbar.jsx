@@ -58,6 +58,8 @@ export default function Navbar() {
           {navLink('/assistant', t('nav_assistant'))}
           {navLink('/marketplace', t('nav_marketplace'))}
           {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'))}
+          {navLink('/financing', t('nav_financing'))}
+          {navLink('/tracking', t('nav_tracking'))}
           {navLink('/compliance', t('nav_compliance'))}
           {navLink('/dpp', t('nav_dpp'))}
         </div>
@@ -112,6 +114,8 @@ export default function Navbar() {
             {navLink('/assistant', t('nav_assistant'), true)}
             {navLink('/marketplace', t('nav_marketplace'), true)}
             {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'), true)}
+            {navLink('/financing', t('nav_financing'), true)}
+            {navLink('/tracking', t('nav_tracking'), true)}
             {navLink('/compliance', t('nav_compliance'), true)}
             {navLink('/dpp', t('nav_dpp'), true)}
             {!isAuthenticated && (
