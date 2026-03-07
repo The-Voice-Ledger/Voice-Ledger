@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Batches - The Voice Ledger</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="/miniapps/shared/voice.js"></script>
     <link rel="stylesheet" href="/css/theme.css">
     <style>
         body {
-            padding: 20px;
-            padding-bottom: 80px;
+            padding-top: 20px;
+            padding-bottom: 72px;
             min-height: 100vh;
         }
 
@@ -29,61 +28,6 @@
         .subtitle {
             color: #64748b;
             font-size: 14px;
-        }
-
-        .voice-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--primary-blue);
-            border: none;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-            z-index: 1000;
-        }
-
-        .voice-button:hover {
-            background: var(--primary-blue-dark);
-            transform: scale(1.05);
-        }
-
-        .voice-button svg {
-            width: 24px;
-            height: 24px;
-            color: white;
-        }
-        
-        .voice-button:nth-child(2) {
-            right: 78px;
-            width: 40px;
-            height: 40px;
-            background: #6366f1;
-        }
-        
-        .voice-button:nth-child(2):hover {
-            background: #4f46e5;
-        }
-        
-        .voice-button:nth-child(2) svg {
-            width: 20px;
-            height: 20px;
-        }
-
-        .voice-button.recording {
-            animation: pulse 1.5s ease-in-out infinite;
-            background: #ef4444;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
         }
 
         .search-bar {
@@ -401,6 +345,11 @@
             font-size: 12px;
             color: #64748b;
         }
+
+        .tab-bar { display: flex; justify-content: space-around; align-items: center; background: white; border-top: 1px solid #e5e7eb; padding: 6px 0 env(safe-area-inset-bottom, 6px); position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
+        .tab-bar a { display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; padding: 4px 8px; color: #94a3b8; font-size: 10px; font-weight: 500; }
+        .tab-bar a.active { color: var(--primary-blue); }
+        .tab-bar a svg { width: 22px; height: 22px; }
     </style>
 </head>
 <body>
@@ -431,18 +380,6 @@
             <circle fill="none" stroke="currentColor" stroke-width="2" cx="18.5" cy="18.5" r="2.5"/>
         </symbol>
     </svg>
-
-    <!-- Voice Button -->
-    <button class="voice-button" id="voiceButton">
-        <svg><use href="#icon-microphone"/></svg>
-    </button>
-    <button class="voice-button" id="voiceHelpButton">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-        </svg>
-    </button>
 
     <!-- List View -->
     <div id="listView">
@@ -496,64 +433,7 @@
         let currentFilter = 'all';
         let currentBatchId = null; // Track currently viewed batch
         
-        // Voice Interface - Initialize BEFORE functions that use it
-        const voiceInterface = new VoiceInterface(tg, {
-            context: {
-                app: 'batch_browser',
-                view: 'list',
-                user_role: 'farmer',
-                can_create: true
-            }
-        });
-        
-        /**
-         * Update voice context dynamically (Priority 1: Context Precision)
-         * Call this whenever the view or data changes
-         */
-        function updateVoiceContext() {
-            const isDetailView = document.getElementById('detailView').classList.contains('active');
-            
-            if (isDetailView && currentBatchId) {
-                // Detail view: Focus on specific batch
-                const batch = allBatches.find(b => b.batch_id === currentBatchId || b.id === currentBatchId);
-                
-                voiceInterface.setContext({
-                    view: 'detail',
-                    selected_batch: batch ? {
-                        batch_id: batch.batch_id,
-                        gtin: batch.gtin,
-                        quantity_kg: batch.quantity_kg,
-                        variety: batch.variety,
-                        status: batch.status,
-                        origin_region: batch.origin_region
-                    } : null,
-                    available_actions: ['share_batch', 'view_trace', 'record_event', 'go_back']
-                });
-            } else {
-                // List view: Show all batches
-                const filteredBatches = applyFilter(allBatches);
-                
-                voiceInterface.setContext({
-                    view: 'list',
-                    current_filter: currentFilter,
-                    total_batches: allBatches.length,
-                    filtered_batches: filteredBatches.length,
-                    visible_batches: filteredBatches.slice(0, 10).map(b => ({
-                        batch_id: b.batch_id,
-                        gtin: b.gtin,
-                        quantity_kg: b.quantity_kg,
-                        status: b.status,
-                        variety: b.variety
-                    })),
-                    available_actions: ['view_batch', 'filter_batches', 'record_new_batch', 'share_batch']
-                });
-                
-                // Clear selected batch from context
-                voiceInterface.clearContextKeys('selected_batch');
-            }
-            
-            console.log('Voice context updated - View:', isDetailView ? 'detail' : 'list');
-        }
+
 
         async function loadBatches() {
             const listElement = document.getElementById('batchList');
@@ -566,9 +446,6 @@
                 
                 const data = await response.json();
                 allBatches = data.batches || [];
-                
-                // Update voice context with loaded batches
-                updateVoiceContext();
                 
                 if (allBatches.length === 0) {
                     listElement.innerHTML = `
@@ -648,9 +525,6 @@
                 
                 const data = await response.json();
                 renderDetail(data);
-                
-                // Update voice context for detail view (Priority 1)
-                updateVoiceContext();
             } catch (error) {
                 console.error('Error loading batch details:', error);
                 detailContent.innerHTML = `<div class="error">Error: ${error.message}</div>`;
@@ -747,9 +621,6 @@
             
             document.getElementById('detailView').classList.remove('active');
             document.getElementById('listView').style.display = 'block';
-            
-            // Update voice context back to list view (Priority 1)
-            updateVoiceContext();
         }
 
         function formatDate(dateString) {
@@ -799,203 +670,17 @@
             return batches.filter(batch => batch.status === currentFilter);
         }
         
-        const voiceButton = document.getElementById('voiceButton');
 
-        voiceButton.addEventListener('click', async () => {
-            if (!voiceInterface.isRecording) {
-                await voiceInterface.startRecording(voiceButton);
-            } else {
-                await voiceInterface.stopRecording(voiceButton);
-            }
-        });
-        
-        document.getElementById('voiceHelpButton').addEventListener('click', () => {
-            tg.showPopup({
-                title: '🎤 Voice Commands',
-                message: 'Try saying:\n\n• "Record a new batch"\n• "Show me batch details"\n• "Share this batch"\n• "Filter by status"\n• "What batches do I have?"\n\nTip: Reference specific batches by name or say "this batch" when viewing one.',
-                buttons: [{ type: 'ok' }]
-            });
-        });
-        
-        // Replay button (Priority 5: TTS Controls)
-        const replayBtn = document.getElementById('voiceReplayButton');
-        if (replayBtn) {
-            replayBtn.addEventListener('click', () => {
-                voiceInterface.replayLastResponse();
-            });
-        }
-        
-        // Register action handlers (Priority 3: Complete coverage)
-        voiceInterface.onAction('share_batch', async (params) => {
-            const batchId = params.batch_id || params.id;
-            const batch = allBatches.find(b => b.batch_id === batchId || b.id === batchId);
-            if (batch) {
-                const shareText = `Check out my coffee batch: ${batch.batch_id}\n` +
-                    `Origin: ${batch.origin_region}\n` +
-                    `Quantity: ${batch.quantity_kg}kg\n` +
-                    `Grade: ${batch.grade || 'N/A'}\n` +
-                    `View trace: https://voiceledger.app/trace/${batch.gtin || batch.batch_id}`;
-                
-                if (navigator.share) {
-                    await navigator.share({ text: shareText });
-                    tg.HapticFeedback.notificationOccurred('success');
-                } else {
-                    tg.showAlert('Share functionality requires native share support');
-                }
-            } else {
-                tg.showAlert('Batch not found');
-            }
-        });
-        
-        voiceInterface.onAction('filter_batches', async (params) => {
-            const filter = params.status || params.filter;
-            if (filter && ['all', 'active', 'shipped', 'settled'].includes(filter)) {
-                currentFilter = filter;
-                document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-                const chip = document.querySelector(`.chip[data-filter="${filter}"]`);
-                if (chip) chip.classList.add('active');
-                renderBatches(applyFilter(allBatches));
-                updateVoiceContext();
-                tg.HapticFeedback.impactOccurred('light');
-                tg.showPopup({
-                    title: 'Filter Applied',
-                    message: `Showing ${filter === 'all' ? 'all' : filter} batches`,
-                    buttons: [{ type: 'ok' }]
-                });
-            } else {
-                tg.showAlert('Invalid filter. Use: all, active, shipped, or settled');
-            }
-        });
-        
-        voiceInterface.onAction('show_batch_details', async (params) => {
-            const batchId = params.batch_id || params.id;
-            const batch = allBatches.find(b => b.batch_id === batchId || b.id === batchId);
-            if (batch) {
-                showDetail(batch);
-                tg.HapticFeedback.impactOccurred('light');
-            } else {
-                tg.showAlert('Batch not found');
-            }
-        });
-        
-        voiceInterface.onAction('view_batch', async (params) => {
-            const batchId = params.batch_id || params.id;
-            const batch = allBatches.find(b => b.batch_id === batchId || b.id === batchId);
-            if (batch) {
-                showDetail(batch);
-                tg.HapticFeedback.impactOccurred('light');
-            } else {
-                tg.showAlert('Batch not found');
-            }
-        });
-        
-        voiceInterface.onAction('record_new_batch', async (params) => {
-            tg.showPopup({
-                title: '🎤 New Batch',
-                message: 'Use voice to record batch details:\n\n• Variety\n• Quantity\n• Farm location\n• Processing method',
-                buttons: [{ type: 'ok' }]
-            });
-        });
-        
-        voiceInterface.onAction('record_commission', async (params) => {
-            const batchId = params.batch_id || params.id;
-            if (!batchId) {
-                tg.showAlert('Please specify which batch to commission');
-                return;
-            }
-            
-            return new Promise(resolve => {
-                tg.showPopup({
-                    title: '⚠️ Confirm Commission',
-                    message: `Record commission event for batch ${batchId}?`,
-                    buttons: [
-                        { id: 'yes', type: 'default', text: 'Yes, Record' },
-                        { id: 'no', type: 'cancel' }
-                    ]
-                }, async (buttonId) => {
-                    if (buttonId === 'yes') {
-                        // TODO: Call API to record commission
-                        tg.HapticFeedback.notificationOccurred('success');
-                        tg.showAlert('✅ Commission recorded');
-                    }
-                    resolve();
-                });
-            });
-        });
-        
-        voiceInterface.onAction('record_shipment', async (params) => {
-            const batchId = params.batch_id || params.id;
-            if (!batchId) {
-                tg.showAlert('Please specify which batch to ship');
-                return;
-            }
-            
-            return new Promise(resolve => {
-                tg.showPopup({
-                    title: '⚠️ Confirm Shipment',
-                    message: `Record shipment event for batch ${batchId}?`,
-                    buttons: [
-                        { id: 'yes', type: 'default', text: 'Yes, Ship' },
-                        { id: 'no', type: 'cancel' }
-                    ]
-                }, async (buttonId) => {
-                    if (buttonId === 'yes') {
-                        // TODO: Call API to record shipment
-                        tg.HapticFeedback.notificationOccurred('success');
-                        tg.showAlert('✅ Shipment recorded');
-                    }
-                    resolve();
-                });
-            });
-        });
-        
-        voiceInterface.onAction('view_trace', async (params) => {
-            const batchId = params.batch_id || params.id;
-            if (batchId) {
-                window.location.href = `/miniapps/trace.html?batch=${batchId}`;
-            } else {
-                window.location.href = '/miniapps/trace.html';
-            }
-        });
-        
-        voiceInterface.onAction('go_back', async (params) => {
-            const detailView = document.getElementById('detailView');
-            if (detailView && !detailView.classList.contains('hidden')) {
-                detailView.classList.add('hidden');
-                document.getElementById('listView').classList.remove('hidden');
-                updateVoiceContext();
-                tg.HapticFeedback.impactOccurred('light');
-            } else {
-                tg.showAlert('Already in list view');
-            }
-        });
-        
-        voiceInterface.onWorkflow('batch_recording', async (workflow) => {
-            console.log('Batch recording workflow started:', workflow);
-            tg.showPopup({
-                title: 'Creating Batch',
-                message: 'Starting batch creation workflow via voice...',
-                buttons: [{ type: 'ok' }]
-            });
-        });
-        
-        // Add event listeners for filter chips (Priority 1: Context updates on filter)
-        document.querySelectorAll('.filter-chips .chip').forEach(chip => {
-            chip.addEventListener('click', function() {
-                // Update UI
-                document.querySelectorAll('.filter-chips .chip').forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-                
-                // Update filter and re-render
-                currentFilter = this.dataset.filter;
-                renderBatches(applyFilter(allBatches));
-                
-                // Update voice context (Priority 1)
-                updateVoiceContext();
-            });
-        });
 
         loadBatches();
     </script>
+
+<nav class="tab-bar">
+    <a href="/miniapps/index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
+    <a href="/miniapps/batch_browser.html" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Batches</a>
+    <a href="/miniapps/assistant.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Assistant</a>
+    <a href="/miniapps/marketplace.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Market</a>
+    <a href="/miniapps/profile.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Profile</a>
+</nav>
 </body>
 </html>

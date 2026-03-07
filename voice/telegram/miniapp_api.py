@@ -413,3 +413,11 @@ async def serve_profile():
     if not html_path.exists():
         raise HTTPException(status_code=404, detail="Mini app not found")
     return FileResponse(html_path, media_type="text/html")
+
+@mini_app_router.get("/assistant")
+async def serve_assistant():
+    """Serve the AI assistant chat mini app HTML page."""
+    html_path = Path(__file__).parent.parent.parent / "miniapps" / "assistant.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Mini app not found")
+    return FileResponse(html_path, media_type="text/html")
