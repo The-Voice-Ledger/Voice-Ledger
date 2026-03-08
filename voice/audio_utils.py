@@ -19,7 +19,7 @@ import json
 # Audio constraints
 MAX_FILE_SIZE_MB = 25  # OpenAI Whisper API limit
 MAX_DURATION_SECONDS = 600  # 10 minutes max
-SUPPORTED_FORMATS = ['.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg', '.wma']
+SUPPORTED_FORMATS = ['.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg', '.wma', '.webm', '.opus']
 
 
 class AudioValidationError(Exception):

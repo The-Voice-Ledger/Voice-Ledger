@@ -307,7 +307,7 @@ async def agent_voice(
         tmp.close()
 
         # --- 2. Convert & validate audio ---
-        wav_path = validate_and_convert_audio(tmp.name)
+        wav_path, _audio_meta = validate_and_convert_audio(tmp.name)
 
         # --- 3. ASR (sync, in thread) ---
         loop = asyncio.get_event_loop()
@@ -315,7 +315,7 @@ async def agent_voice(
             None,
             lambda: run_asr_with_user_preference(wav_path, language),
         )
-        transcript = asr_result.get("transcript", "")
+        transcript = asr_result.get("text", "")
         detected_lang = asr_result.get("language", language)
 
         if not transcript.strip():
