@@ -138,22 +138,26 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
     # Get GLN for display
     gln = batch_info.get('gln', 'Not assigned')
     
-    from voice.telegram.voice_responses import escape_markdown
-    
+    # Use HTML parse mode — MarkdownV2 requires escaping dozens of
+    # special characters (. - ! ( ) etc.) which is fragile with
+    # dynamic data like GTINs and GLNs.
+    import html as _html
+    _e = lambda v: _html.escape(str(v))  # shorthand for HTML-escaping
+
     caption = (
-        f"📦 *Batch Created \\- Awaiting Verification*\n\n"
-        f"*Batch ID:* `{batch_id}`\n"
-        f"🏷️ *GTIN:* `{gtin}`\n"
-        f"📍 *GLN:* `{gln}`\n"
-        f"☕ *Variety:* {escape_markdown(variety)}\n"
-        f"⚖️ *Quantity:* {escape_markdown(str(quantity))} kg\n"
-        f"🌍 *Origin:* {escape_markdown(origin)}\n"
-        f"📊 *Status:* {escape_markdown(status)}\n\n"
-        f"🔍 *Next Step: Physical Verification*\n"
-        f"Take this QR code to the cooperative collection center\\. "
-        f"The manager will scan it to verify your batch\\.\n\n"
-        f"⏱️ *Valid for:* 48 hours\n"
-        f"🔗 *Verification Token:* `{verification_token}`"
+        f"📦 <b>Batch Created — Awaiting Verification</b>\n\n"
+        f"<b>Batch ID:</b> <code>{_e(batch_id)}</code>\n"
+        f"🏷️ <b>GTIN:</b> <code>{_e(gtin)}</code>\n"
+        f"📍 <b>GLN:</b> <code>{_e(gln)}</code>\n"
+        f"☕ <b>Variety:</b> {_e(variety)}\n"
+        f"⚖️ <b>Quantity:</b> {_e(quantity)} kg\n"
+        f"🌍 <b>Origin:</b> {_e(origin)}\n"
+        f"📊 <b>Status:</b> {_e(status)}\n\n"
+        f"🔍 <b>Next Step: Physical Verification</b>\n"
+        f"Take this QR code to the cooperative collection center. "
+        f"The manager will scan it to verify your batch.\n\n"
+        f"⏱️ <b>Valid for:</b> 48 hours\n"
+        f"🔗 <b>Verification Token:</b> <code>{_e(verification_token)}</code>"
     )
     
     # Send photo with caption
@@ -164,7 +168,7 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
         data = {
             'chat_id': chat_id,
             'caption': caption,
-            'parse_mode': 'MarkdownV2'  # Use MarkdownV2 with proper escaping
+            'parse_mode': 'HTML'
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
