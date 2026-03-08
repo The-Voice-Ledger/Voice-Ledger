@@ -201,12 +201,13 @@ def generate_batch_id_from_entities(entities: dict) -> str:
     Returns:
         Generated batch_id (unique per second, max 50 characters)
     """
-    # Timestamp is 15 chars (YYYYMMDD_HHMMSS), need room for 2 underscores
-    # Max length: origin + "_" + product + "_" + timestamp = 50
-    # Therefore: origin (16) + product (17) + timestamp (15) + 2 underscores = 50
-    origin = entities.get("origin", "UNKNOWN").upper().replace(" ", "_")[:16]
+    origin = entities.get("origin")
+    if not origin or origin.upper() == "UNKNOWN":
+        origin = entities.get("farmer_origin", "UNKNOWN")
+    
+    origin = origin.upper().replace(" ", "_")[:16]
     product = entities.get("product", "COFFEE").upper().replace(" ", "_")[:17]
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")  # Include time for uniqueness (15 chars)
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     
     return f"{origin}_{product}_{timestamp}"
 
@@ -229,15 +230,29 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     Raises:
         VoiceCommandError: If required entities missing or operation fails
     """
-    # Validate required entities
-    required = ["quantity", "origin"]
-    missing = [field for field in required if not entities.get(field)]
-    if missing:
-        raise VoiceCommandError(f"Missing required information: {', '.join(missing)}")
+    # 1. Resolve Farmer Identity first for smart defaults
+    from database.models import FarmerIdentity, UserIdentity
+    farmer = None
+    if user_did:
+        farmer = db.query(FarmerIdentity).filter_by(did=user_did).first()
+    if not farmer and user_id:
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if user and user.did:
+            farmer = db.query(FarmerIdentity).filter_by(did=user.did).first()
     
     # Extract entities
     quantity = entities.get("quantity")
-    origin = entities.get("origin", "Unknown")
+    origin = entities.get("origin")
+    
+    # Smart Default: Auto-populate origin from farmer registration if missing
+    if (not origin or origin.lower() == "unknown") and farmer:
+        origin = f"{farmer.region}, {farmer.country_code}"
+        entities["farmer_origin"] = farmer.region # For batch_id generation
+        entities["origin"] = origin
+    
+    if not origin:
+        origin = "Unknown"
+
     product = entities.get("product", "Arabica Coffee")
     unit = entities.get("unit", "bags")
     
@@ -285,6 +300,7 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         "created_at": datetime.utcnow(),
         "created_by_user_id": user_id,  # Track user ownership
         "created_by_did": user_did,  # Denormalized for fast queries
+        "farmer_id": farmer.id if farmer else None, # SMART LINK: Associate with farmer profile
         # Verification workflow fields
         "status": "PENDING_VERIFICATION",  # Batch awaits verification
         "verification_token": verification_token,
@@ -304,12 +320,16 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         from voice.epcis.commission_events import create_commission_event
         
         # Find farmer identity for EPCIS events (submitter_id must reference farmer_identities.id)
-        from database.models import FarmerIdentity
-        farmer_identity = db.query(FarmerIdentity).filter_by(farmer_id=f"FARMER-{user_id}").first()
-        submitter_farmer_id = farmer_identity.id if farmer_identity else None
+        submitter_farmer_id = farmer.id if farmer else None
         
         if not submitter_farmer_id:
-            raise VoiceCommandError(f"Farmer identity not found for user {user_id}. Cannot create EPCIS event.")
+            # Fallback for backward compatibility or missing profiles
+            from database.models import FarmerIdentity
+            farmer_identity = db.query(FarmerIdentity).filter_by(farmer_id=f"FARMER-{user_id}").first()
+            submitter_farmer_id = farmer_identity.id if farmer_identity else None
+        
+        if not submitter_farmer_id:
+            raise VoiceCommandError(f"Farmer identity not found for user {user_id}. Please register your farm first.")
         
         event_result = create_commission_event(
             db=db,

@@ -503,9 +503,9 @@ def build_dpp(
             "region": region or batch.origin_region,
             "farmName": batch.farm_name,
             "farmer": {
-                "name": batch.farmer.name if batch.farmer else "Unknown",
-                "did": batch.farmer.did if batch.farmer else "Unknown",
-                "gln": batch.farmer.gln if batch.farmer else "Unknown"
+                "name": batch.farmer.name if batch.farmer else "Pending Registration",
+                "did": batch.farmer.did if batch.farmer else "did:key:pending",
+                "gln": batch.farmer.gln if batch.farmer else "0000000000000"
             }
         },
         "supplyChainActors": [],
@@ -582,6 +582,8 @@ def build_dpp(
     dd_creds = [c for c in batch.farmer.credentials if "duediligence" in c.credential_type.lower()] if batch.farmer else []
     if dd_creds:
         due_diligence["dueDiligenceStatement"] = dd_creds[0].credential_id
+    else:
+        due_diligence["dueDiligenceStatement"] = "PENDING_VERIFICATION"
     
     # Build blockchain section from database events
     blockchain = {
