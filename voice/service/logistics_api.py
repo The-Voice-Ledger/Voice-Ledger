@@ -327,9 +327,10 @@ async def get_shipment_status(container_sscc: str):
 
         # Fetch all EPCIS events that reference this SSCC
         sscc_urn = f"urn:epc:id:sscc:{container_sscc}"
+        from sqlalchemy import String
         epcis_events = (
             db.query(EPCISEvent)
-            .filter(EPCISEvent.event_json.cast(str).contains(container_sscc))
+            .filter(EPCISEvent.event_json.cast(String).contains(container_sscc))
             .order_by(EPCISEvent.event_time.asc())
             .all()
         )
