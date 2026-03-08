@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-DPP-TEST-004",
   "batchId": "BATCH-DPP-TEST-004",
   "version": "3.0.0",
-  "issuedAt": "2026-03-06T10:28:38.533306+00:00",
+  "issuedAt": "2026-03-08T17:21:01.126094+00:00",
   "productInformation": {
     "productName": "Persistence Test Coffee",
     "quantity": 100.0,
@@ -37,10 +37,11 @@
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-03-06",
+      "assessmentDate": "2026-03-08",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
-    }
+    },
+    "dueDiligenceStatement": "PENDING_VERIFICATION"
   },
   "eudrCompliance": {
     "regulation": {
@@ -66,7 +67,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-03-06",
+      "assessmentDate": "2026-03-08",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -79,7 +80,7 @@
       "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-03-06"
+      "nextReviewDate": "2027-03-08"
     }
   },
   "donAttestation": {
@@ -97,6 +98,7 @@
     "tokenId": 203
   },
   "qrCode": {
-    "url": "https://dpp.voiceledger.io/dpp/BATCH-DPP-TEST-004"
+    "url": "https://voice-ledger-production.up.railway.app/app/dpp/BATCH-DPP-TEST-004",
+    "imageUrl": "data:image/png;base64,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"
   }
 }

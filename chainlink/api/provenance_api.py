@@ -245,6 +245,7 @@ def get_deforestation_check(farm_id: str):
             "treeLossHectaresScaled": int(result.tree_cover_loss_hectares * 10_000),  # ×1e4
             "confidenceScaled": int(result.confidence_score * 10_000),                # ×1e4
             "dataSource": result.data_source,
+            "geostoreId": result.geostore_id or "",  # GFW geostore for DON spot-check
             "timestamp": int(datetime.utcnow().timestamp()),
         }
     finally:

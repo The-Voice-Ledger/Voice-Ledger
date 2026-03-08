@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-2025-TEST",
   "batchId": "BATCH-2025-TEST",
   "version": "3.0.0",
-  "issuedAt": "2026-03-06T10:28:39.686198+00:00",
+  "issuedAt": "2026-03-08T17:21:03.729553+00:00",
   "productInformation": {
     "productName": "Ethiopian Yirgacheffe - Test Batch",
     "quantity": 100.0,
@@ -37,10 +37,11 @@
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-03-06",
+      "assessmentDate": "2026-03-08",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
-    }
+    },
+    "dueDiligenceStatement": "PENDING_VERIFICATION"
   },
   "eudrCompliance": {
     "regulation": {
@@ -66,7 +67,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-03-06",
+      "assessmentDate": "2026-03-08",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -79,7 +80,7 @@
       "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-03-06"
+      "nextReviewDate": "2027-03-08"
     }
   },
   "donAttestation": {
@@ -97,6 +98,7 @@
     "tokenId": 42
   },
   "qrCode": {
-    "url": "https://dpp.voiceledger.io/dpp/BATCH-2025-TEST"
+    "url": "https://voice-ledger-production.up.railway.app/app/dpp/BATCH-2025-TEST",
+    "imageUrl": "data:image/png;base64,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"
   }
 }

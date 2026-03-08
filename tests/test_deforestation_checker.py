@@ -41,10 +41,10 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock geostore creation response
         mock_post.return_value = Mock(
-            status_code=200,
+            status_code=201,
             json=lambda: {
                 "data": {
-                    "id": "test-geostore-123"
+                    "gfw_geostore_id": "test-geostore-123"
                 }
             }
         )
@@ -77,8 +77,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock geostore creation
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-456"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-456"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -113,8 +113,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock responses
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-789"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-789"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -146,8 +146,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock responses
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-999"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-999"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -194,8 +194,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock responses
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-multi"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-multi"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -230,8 +230,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock responses
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-cutoff"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-cutoff"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -290,8 +290,8 @@ class TestDeforestationChecker(unittest.TestCase):
         
         # Mock responses
         mock_post.return_value = Mock(
-            status_code=200,
-            json=lambda: {"data": {"id": "test-geostore-radius"}}
+            status_code=201,
+            json=lambda: {"data": {"gfw_geostore_id": "test-geostore-radius"}}
         )
         mock_post.return_value.raise_for_status = Mock()
         
@@ -308,10 +308,14 @@ class TestDeforestationChecker(unittest.TestCase):
             radius_meters=500
         )
         
-        # Verify POST was called with correct buffer
+        # Verify POST was called with a Polygon geometry payload
         post_call_args = mock_post.call_args
-        geojson = post_call_args[1]['json']
-        self.assertEqual(geojson['properties']['buffer'], 500)
+        payload = post_call_args[1]['json']
+        self.assertEqual(payload['geometry']['type'], 'Polygon')
+        # The polygon coordinates should form a closed ring (5 points)
+        coords = payload['geometry']['coordinates'][0]
+        self.assertEqual(len(coords), 5)
+        self.assertEqual(coords[0], coords[-1])  # ring is closed
         
         self.assertTrue(result.compliant)
     

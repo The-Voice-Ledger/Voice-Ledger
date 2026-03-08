@@ -37,6 +37,7 @@ class DeforestationResult:
     methodology: str
     confidence_score: float  # 0.0 to 1.0
     details: Dict
+    geostore_id: Optional[str] = None  # GFW geostore ID for independent verification
 
 
 class DeforestationChecker:
@@ -66,7 +67,7 @@ class DeforestationChecker:
         
         # API endpoints
         self.geostore_url = f"{self.base_url}/geostore"
-        self.dataset_url = f"{self.base_url}/dataset/umd_tree_cover_loss/latest/query"
+        self.dataset_url = f"{self.base_url}/dataset/umd_tree_cover_loss/latest/query/json"
     
     def check_deforestation(
         self,
@@ -99,8 +100,10 @@ class DeforestationChecker:
             # Step 2: Query tree cover loss for years 2021+
             tree_loss_data = self._query_tree_cover_loss(geostore_id)
             
-            # Step 3: Analyze results
-            return self._analyze_deforestation(tree_loss_data, latitude, longitude)
+            # Step 3: Analyze results (include geostore_id for DON spot-check)
+            result = self._analyze_deforestation(tree_loss_data, latitude, longitude)
+            result.geostore_id = geostore_id
+            return result
             
         except Exception as e:
             logger.error(f"Deforestation check failed: {str(e)}")
@@ -114,27 +117,37 @@ class DeforestationChecker:
                 data_source="Global Forest Watch (API Error)",
                 methodology="Satellite imagery analysis failed",
                 confidence_score=0.0,
-                details={"error": str(e), "status": "api_unavailable"}
+                details={"error": str(e), "status": "api_unavailable"},
+                geostore_id=None,
             )
     
     def _create_geostore(self, latitude: float, longitude: float, radius_meters: int) -> str:
         """
         Create geostore (geographic area) around farm point.
         
-        Returns geostore_id for subsequent queries.
+        Sends a Polygon geometry approximating a square with the given radius.
+        Returns gfw_geostore_id for subsequent queries.
         """
-        # Create circular buffer around point
-        # GFW expects GeoJSON format
-        geojson = {
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [longitude, latitude]  # GeoJSON uses [lon, lat]
-            },
-            "properties": {
-                "buffer": radius_meters  # Buffer in meters
-            }
+        import math
+        # Approximate a square polygon around the point
+        # 1 degree latitude ≈ 111,320 meters
+        lat_offset = radius_meters / 111320
+        # 1 degree longitude varies with latitude
+        lon_offset = radius_meters / (111320 * math.cos(math.radians(latitude)))
+
+        polygon = {
+            "type": "Polygon",
+            "coordinates": [[
+                [longitude - lon_offset, latitude - lat_offset],
+                [longitude + lon_offset, latitude - lat_offset],
+                [longitude + lon_offset, latitude + lat_offset],
+                [longitude - lon_offset, latitude + lat_offset],
+                [longitude - lon_offset, latitude - lat_offset],  # close ring
+            ]]
         }
+
+        # GFW Data API geostore endpoint accepts {"geometry": {...}}
+        payload = {"geometry": polygon}
         
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -142,14 +155,15 @@ class DeforestationChecker:
         
         response = requests.post(
             self.geostore_url,
-            json=geojson,
+            json=payload,
             headers=headers,
-            timeout=30
+            timeout=30,
+            allow_redirects=True,
         )
         response.raise_for_status()
         
         data = response.json()
-        geostore_id = data['data']['id']
+        geostore_id = data['data']['gfw_geostore_id']
         
         logger.info(f"Created geostore: {geostore_id}")
         return geostore_id
@@ -161,30 +175,36 @@ class DeforestationChecker:
         Returns tree loss statistics by year.
         """
         # SQL query to get tree cover loss after 2020
+        # NOTE: Do NOT alias umd_tree_cover_loss__year to "year" — GFW treats it
+        # as an invalid layer name.  Use the full column name everywhere.
         sql_query = (
-            "SELECT umd_tree_cover_loss__year as year, "
-            "SUM(area__ha) as loss_area_ha, "
+            "SELECT umd_tree_cover_loss__year, "
             "SUM(umd_tree_cover_loss__ha) as tree_loss_ha "
             "FROM data "
             f"WHERE umd_tree_cover_loss__year > {self.eudr_cutoff_year} "
-            "GROUP BY year "
-            "ORDER BY year"
+            "GROUP BY umd_tree_cover_loss__year "
+            "ORDER BY umd_tree_cover_loss__year"
         )
         
         params = {
             "sql": sql_query,
-            "geostore_id": geostore_id
+            "geostore_id": geostore_id,
         }
-        
-        headers = {}
+
+        # GFW API key must be sent as a *query parameter* (not header) because
+        # the ``/latest/`` path triggers a 307 redirect that strips headers.
+        # An ``origin`` header matching the key's allowed-domains list is also
+        # required so the Data API can verify the key.
         if self.api_key:
-            headers["x-api-key"] = self.api_key
+            params["x-api-key"] = self.api_key
+
+        headers = {"origin": "http://localhost"}
         
         response = requests.get(
             self.dataset_url,
             params=params,
             headers=headers,
-            timeout=30
+            timeout=30,
         )
         response.raise_for_status()
         
@@ -214,7 +234,7 @@ class DeforestationChecker:
         loss_by_year = {}
         
         for record in records:
-            year = record.get('year')
+            year = record.get('umd_tree_cover_loss__year') or record.get('year')
             loss_ha = record.get('tree_loss_ha', 0.0) or record.get('loss_area_ha', 0.0)
             
             if year and year > self.eudr_cutoff_year:

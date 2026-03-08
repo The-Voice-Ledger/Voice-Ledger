@@ -58,6 +58,12 @@ const configSchema = z.object({
    *  We use a regex instead so validation works in both Node and CRE simulation. */
   apiBaseUrl: z.string().regex(/^https?:\/\/.+/, "Must be an http(s) URL"),
 
+  /** GFW (Global Forest Watch) API key for independent spot-check by DON nodes */
+  gfwApiKey: z.string().optional().default(""),
+
+  /** GFW data API base URL */
+  gfwApiUrl: z.string().optional().default("https://data-api.globalforestwatch.org"),
+
   /** Hex-encoded data-feed ID for the provenance feed */
   provenanceDataIdHex: z.string(),
 
@@ -96,7 +102,14 @@ interface DeforestationResult {
   riskLevelCode: number;  // 0=LOW 1=MEDIUM 2=HIGH 3=UNKNOWN
   eudrCompliant: boolean;
   treeLossHectaresScaled: number;  // scaled ×1e4
+  geostoreId: string;     // GFW geostore ID for DON spot-check
   timestamp: number;
+}
+
+/** Raw GFW tree cover loss data returned by DON spot-check */
+interface GfwTreeLoss {
+  totalTreeLossHaScaled: number;  // sum of tree_loss_ha × 1e4 (integer)
+  recordCount: number;            // number of yearly records
 }
 
 interface BatchDetails {
@@ -166,6 +179,60 @@ const fetchDeforestationResult = (
     })
     .result();
   return JSON.parse(new TextDecoder().decode(resp.body));
+};
+
+/**
+ * DON Spot-Check: fetch raw tree cover loss directly from GFW.
+ *
+ * Uses the same geostore_id that our API used, so the geographic area is
+ * identical. Each DON node independently queries GFW and sums the post-2020
+ * tree loss. The result is compared against our API's claim.
+ */
+const fetchGfwTreeLoss = (
+  sendRequester: HTTPSendRequester,
+  config: Config,
+  geostoreId: string,
+): GfwTreeLoss => {
+  // NOTE: Do NOT alias umd_tree_cover_loss__year to "year" — GFW treats
+  // it as an invalid layer name.
+  const sql =
+    "SELECT umd_tree_cover_loss__year, " +
+    "SUM(umd_tree_cover_loss__ha) as tree_loss_ha " +
+    "FROM data " +
+    "WHERE umd_tree_cover_loss__year > 2020 " +
+    "GROUP BY umd_tree_cover_loss__year ORDER BY umd_tree_cover_loss__year";
+
+  // API key is passed as a *query parameter* (not header) because the
+  // /latest/ path triggers a 307 redirect that strips headers.  An origin
+  // header matching the key's allowed-domains list is also required.
+  let url =
+    `${config.gfwApiUrl}/dataset/umd_tree_cover_loss/latest/query/json` +
+    `?sql=${encodeURIComponent(sql)}&geostore_id=${encodeURIComponent(geostoreId)}`;
+  if (config.gfwApiKey) {
+    url += `&x-api-key=${encodeURIComponent(config.gfwApiKey)}`;
+  }
+
+  const headers: Record<string, string> = { origin: "http://localhost" };
+
+  const resp = sendRequester
+    .sendRequest({ method: "GET", url, headers })
+    .result();
+  const body = JSON.parse(new TextDecoder().decode(resp.body));
+  const records: Array<{
+    umd_tree_cover_loss__year: number;
+    tree_loss_ha: number;
+  }> = body.data || [];
+
+  // Sum and scale to integer (×1e4) — same scaling as our API
+  const totalLossHa = records.reduce(
+    (sum: number, r: { tree_loss_ha: number }) => sum + (r.tree_loss_ha || 0),
+    0,
+  );
+
+  return {
+    totalTreeLossHaScaled: Math.round(totalLossHa * 10000),
+    recordCount: records.length,
+  };
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -354,10 +421,10 @@ const onDeforestationRequest = (
   const farmId = body.farm_id;
   runtime.log(`[Trigger 3] Farm ID: ${farmId}`);
 
-  // ── 2. Each DON node independently calls GFW via our API ──
+  // ── 2. Fetch our API's computed result (includes geostoreId) ──
   //        Identical consensus: all nodes must get the same result
   const httpClient = new HTTPClient();
-  const result = httpClient
+  const apiResult = httpClient
     .sendRequest(
       runtime,
       fetchDeforestationResult,
@@ -366,28 +433,73 @@ const onDeforestationRequest = (
     .result();
 
   runtime.log(
-    `[Trigger 3] DON consensus reached — risk: ${result.riskLevelCode}, ` +
-      `compliant: ${result.eudrCompliant}, loss: ${result.treeLossHectaresScaled / 10000} ha`,
+    `[Trigger 3] API result — risk: ${apiResult.riskLevelCode}, ` +
+      `compliant: ${apiResult.eudrCompliant}, loss: ${apiResult.treeLossHectaresScaled / 10000} ha, ` +
+      `geostore: ${apiResult.geostoreId}`,
   );
 
-  // ── 3. ABI-encode deforestation attestation ──
+  // ── 3. DON Spot-Check: independently query GFW with the same geostore ──
+  //        Each node calls GFW directly, sums post-2020 tree loss.
+  //        Identical consensus: all nodes must get the same raw GFW data.
+  const gfwResult = httpClient
+    .sendRequest(
+      runtime,
+      fetchGfwTreeLoss,
+      consensusIdenticalAggregation<GfwTreeLoss>(),
+    )(runtime.config, apiResult.geostoreId)
+    .result();
+
+  runtime.log(
+    `[Trigger 3] GFW spot-check — raw loss: ${gfwResult.totalTreeLossHaScaled / 10000} ha ` +
+      `(${gfwResult.recordCount} yearly records)`,
+  );
+
+  // ── 4. Compare: our API vs direct GFW query ──
+  //        Apply the same EUDR threshold (< 0.5 ha = compliant)
+  const EUDR_THRESHOLD_SCALED = 5000; // 0.5 ha × 1e4
+  const spotCheckCompliant = gfwResult.totalTreeLossHaScaled < EUDR_THRESHOLD_SCALED;
+
+  // Check tree loss values match (allow ±1 unit tolerance for rounding)
+  const lossMatch =
+    Math.abs(apiResult.treeLossHectaresScaled - gfwResult.totalTreeLossHaScaled) <= 1;
+  const complianceMatch = apiResult.eudrCompliant === spotCheckCompliant;
+
+  if (!lossMatch || !complianceMatch) {
+    runtime.log(
+      `[Trigger 3] ⚠ SPOT CHECK MISMATCH — ` +
+        `API loss: ${apiResult.treeLossHectaresScaled}, GFW loss: ${gfwResult.totalTreeLossHaScaled}, ` +
+        `API compliant: ${apiResult.eudrCompliant}, spot-check compliant: ${spotCheckCompliant}`,
+    );
+    // Refuse to attest — return dispute without writing on-chain
+    return JSON.stringify({
+      farmId: apiResult.farmId,
+      attested: false,
+      reason: "spot_check_mismatch",
+      apiTreeLoss: apiResult.treeLossHectaresScaled,
+      gfwTreeLoss: gfwResult.totalTreeLossHaScaled,
+    });
+  }
+
+  runtime.log("[Trigger 3] ✓ Spot-check PASSED — API and GFW agree");
+
+  // ── 5. ABI-encode deforestation attestation ──
   const encodedPayload = encodeAbiParameters(
     parseAbiParameters(
       "string farmId, int64 latitude, int64 longitude, uint8 riskLevel, " +
         "bool eudrCompliant, uint256 treeLossScaled, uint256 timestamp",
     ),
     [
-      result.farmId,
-      BigInt(result.latitude),
-      BigInt(result.longitude),
-      result.riskLevelCode,
-      result.eudrCompliant,
-      BigInt(result.treeLossHectaresScaled),
-      BigInt(result.timestamp),
+      apiResult.farmId,
+      BigInt(apiResult.latitude),
+      BigInt(apiResult.longitude),
+      apiResult.riskLevelCode,
+      apiResult.eudrCompliant,
+      BigInt(apiResult.treeLossHectaresScaled),
+      BigInt(apiResult.timestamp),
     ],
   );
 
-  // ── 4. DON-sign and write attestation on-chain ──
+  // ── 6. DON-sign and write attestation on-chain ──
   const report = runtime
     .report({
       encodedPayload: hexToBase64(encodedPayload),
@@ -422,9 +534,10 @@ const onDeforestationRequest = (
   }
 
   return JSON.stringify({
-    farmId: result.farmId,
-    riskLevel: result.riskLevelCode,
-    eudrCompliant: result.eudrCompliant,
+    farmId: apiResult.farmId,
+    riskLevel: apiResult.riskLevelCode,
+    eudrCompliant: apiResult.eudrCompliant,
+    spotCheckPassed: true,
     attested: true,
   });
 };

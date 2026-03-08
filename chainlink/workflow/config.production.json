@@ -1,6 +1,8 @@
 {
   "schedule": "0 */5 * * * *",
   "apiBaseUrl": "https://voice-ledger-api.up.railway.app",
+  "gfwApiKey": "${GFW_API_KEY}",
+  "gfwApiUrl": "https://data-api.globalforestwatch.org",
   "provenanceDataIdHex": "766f6963656c65646765722d70726f76656e616e6365",
   "evms": [
     {
