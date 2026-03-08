@@ -2707,11 +2707,6 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         # QR code as a photo so the farmer can take it to the
                         # cooperative.  The legacy BatchRecordingWorkflow does
                         # this automatically; the agent path was missing it.
-                        logger.info(
-                            f"📦 QR gate: performed_write={agent_result.performed_write}, "
-                            f"intent={agent_result.intent!r}, "
-                            f"tool_calls={[tc.tool_name for tc in agent_result.tool_calls]}"
-                        )
                         if (
                             agent_result.performed_write
                             and agent_result.intent == "record_commission"
@@ -2724,10 +2719,6 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                                         _batch_data = _tc.result_data
                                         break
 
-                                logger.info(
-                                    f"📦 QR data: has_batch_data={_batch_data is not None}, "
-                                    f"has_token={bool(_batch_data.get('verification_token') if _batch_data else False)}"
-                                )
                                 if _batch_data and _batch_data.get("verification_token"):
                                     from voice.telegram.notifier import send_batch_verification_qr
                                     _batch_info = {

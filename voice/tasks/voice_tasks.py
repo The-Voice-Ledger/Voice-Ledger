@@ -514,6 +514,37 @@ def process_voice_command_task(
                                         language=user_language,
                                     )
                                 )
+
+                                # ── Post-commission QR code (voice path) ──
+                                if (
+                                    agent_result.performed_write
+                                    and agent_result.intent == "record_commission"
+                                ):
+                                    try:
+                                        _batch_data = None
+                                        for _tc in agent_result.tool_calls:
+                                            if _tc.tool_name == "record_commission" and _tc.success:
+                                                _batch_data = _tc.result_data
+                                                break
+                                        if _batch_data and _batch_data.get("verification_token"):
+                                            from voice.telegram.notifier import send_batch_verification_qr
+                                            _batch_info = {
+                                                "batch_id": _batch_data.get("batch_id"),
+                                                "gtin": _batch_data.get("gtin"),
+                                                "gln": _batch_data.get("gln"),
+                                                "variety": _batch_data.get("variety"),
+                                                "quantity_kg": _batch_data.get("quantity_kg"),
+                                                "origin": _batch_data.get("origin"),
+                                                "status": _batch_data.get("status"),
+                                                "verification_token": _batch_data["verification_token"],
+                                            }
+                                            _qr_ok = loop.run_until_complete(
+                                                send_batch_verification_qr(int(user_id), _batch_info)
+                                            )
+                                            logger.info(f"📦 Post-commission QR sent to {user_id}: {_qr_ok}")
+                                    except Exception as _qr_err:
+                                        logger.error(f"Failed to send post-commission QR: {_qr_err}", exc_info=True)
+
                                 pending = asyncio.all_tasks(loop)
                                 if pending:
                                     loop.run_until_complete(
