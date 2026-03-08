@@ -59,10 +59,10 @@ const configSchema = z.object({
   apiBaseUrl: z.string().regex(/^https?:\/\/.+/, "Must be an http(s) URL"),
 
   /** GFW (Global Forest Watch) API key for independent spot-check by DON nodes */
-  gfwApiKey: z.string().optional().default(""),
+  gfwApiKey: z.string(),
 
   /** GFW data API base URL */
-  gfwApiUrl: z.string().optional().default("https://data-api.globalforestwatch.org"),
+  gfwApiUrl: z.string(),
 
   /** Hex-encoded data-feed ID for the provenance feed */
   provenanceDataIdHex: z.string(),
