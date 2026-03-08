@@ -289,7 +289,19 @@ def get_conversation_history(user_id: int, max_messages: int = 20) -> List[Dict[
             return []
         messages = json.loads(data)
         # Only return last N messages to stay within context window
-        return messages[-max_messages:]
+        messages = messages[-max_messages:]
+
+        # ── Sanitize: strip any leading tool / assistant(tool_calls) messages ──
+        # These are orphaned when the slice cuts between an assistant(tool_calls)
+        # and its paired tool result, which causes OpenAI 400 errors.
+        while messages and messages[0].get("role") in ("tool",) or (
+            messages
+            and messages[0].get("role") == "assistant"
+            and messages[0].get("tool_calls")
+        ):
+            messages.pop(0)
+
+        return messages
     except Exception as e:
         logger.warning(f"Failed to load history for user {user_id}: {e}")
         return []
@@ -298,11 +310,11 @@ def get_conversation_history(user_id: int, max_messages: int = 20) -> List[Dict[
 def save_conversation_history(user_id: int, messages: List[Dict[str, str]], ttl: int = 600):
     """
     Save conversation history to Redis with TTL.
-    
-    Args:
-        user_id: User database ID
-        messages: List of message dicts (role, content, tool_calls, etc.)
-        ttl: Time-to-live in seconds (default 10 minutes)
+
+    Only clean user/assistant text turns are persisted. Tool call scaffolding
+    (assistant with tool_calls, role=tool messages) is ephemeral per-turn and
+    must NOT be saved — partial saves cause orphaned tool messages that make
+    OpenAI return 400 on the next request.
     """
     r = _get_redis()
     if not r:
@@ -310,38 +322,18 @@ def save_conversation_history(user_id: int, messages: List[Dict[str, str]], ttl:
     
     try:
         key = f"agent:history:{user_id}"
-        # Only keep the messages that GPT needs (system prompt excluded)
         serializable = []
         for msg in messages:
-            entry = {"role": msg["role"]}
-            if msg.get("content"):
-                entry["content"] = msg["content"]
-            if msg.get("tool_calls"):
-                # Serialize tool_calls for storage
-                entry["tool_calls"] = [
-                    {
-                        "id": tc.id if hasattr(tc, "id") else tc.get("id"),
-                        "type": "function",
-                        "function": {
-                            "name": (
-                                tc.function.name
-                                if hasattr(tc, "function")
-                                else tc.get("function", {}).get("name")
-                            ),
-                            "arguments": (
-                                tc.function.arguments
-                                if hasattr(tc, "function")
-                                else tc.get("function", {}).get("arguments", "{}")
-                            ),
-                        },
-                    }
-                    for tc in msg["tool_calls"]
-                ]
-            if msg.get("tool_call_id"):
-                entry["tool_call_id"] = msg["tool_call_id"]
-            if msg.get("name"):
-                entry["name"] = msg["name"]
-            serializable.append(entry)
+            role = msg.get("role")
+            # Only keep plain user and assistant text messages
+            if role not in ("user", "assistant"):
+                continue
+            # Skip assistant messages that contain tool_calls (ephemeral scaffolding)
+            if role == "assistant" and msg.get("tool_calls"):
+                continue
+            content = msg.get("content") or ""
+            if content.strip():
+                serializable.append({"role": role, "content": content})
         
         r.setex(key, ttl, json.dumps(serializable))
     except Exception as e:
