@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useSearchParams, Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams, Link } from 'react-router-dom'
 import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle } from 'react-icons/lu'
 import { fetchDPP } from '../api/marketplace'
 
@@ -31,20 +31,29 @@ function DPPSkeleton() {
 
 export default function DPPViewer() {
   const { t } = useTranslation()
+  const { batchId: pathBatchId } = useParams()
   const [searchParams] = useSearchParams()
-  const [batchId, setBatchId] = useState(searchParams.get('batch') || '')
+  const [batchId, setBatchId] = useState(pathBatchId || searchParams.get('batch') || '')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
-  const handleSearch = async (e) => {
-    e?.preventDefault()
-    if (!batchId.trim()) return
+  useEffect(() => {
+    if (pathBatchId) {
+      setBatchId(pathBatchId)
+      performLookup(pathBatchId)
+    } else if (searchParams.get('batch')) {
+      performLookup(searchParams.get('batch'))
+    }
+  }, [pathBatchId, searchParams])
+
+  const performLookup = async (id) => {
+    if (!id.trim()) return
     setLoading(true)
     setError(null)
     setResult(null)
     try {
-      const res = await fetchDPP(batchId.trim())
+      const res = await fetchDPP(id.trim())
       setResult(res)
     } catch (err) {
       setError(err.message)
@@ -53,8 +62,12 @@ export default function DPPViewer() {
     }
   }
 
+  const handleSearch = (e) => {
+    e?.preventDefault()
+    performLookup(batchId)
+  }
+
   const dpp = result?.data?.dpp || result?.data || null
-  const text = result?.text || ''
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -98,92 +111,113 @@ export default function DPPViewer() {
       {/* DPP Result */}
       {result && (
         <div className="space-y-6">
-          {/* Agent text response */}
-          {text && (
-            <div className="bg-white rounded-xl border border-stone-200 p-5 text-sm text-stone-700 whitespace-pre-wrap leading-relaxed">
-              {text}
-            </div>
-          )}
+
 
           {/* Structured DPP card */}
           {dpp && (
-            <div className="bg-white rounded-xl border border-forest-200 p-6 space-y-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
-              <h2 className="text-lg font-bold text-forest-700 flex items-center gap-2">
-                <LuSprout className="w-5 h-5" /> {t('dpp_title')}
-              </h2>
-
-              <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                {dpp.batch_id && <Field label="Batch ID" value={dpp.batch_id} />}
-                {dpp.gtin && <Field label="GTIN" value={dpp.gtin} />}
-                {dpp.origin && <Field label="Origin" value={dpp.origin} />}
-                {dpp.variety && <Field label="Variety" value={dpp.variety} />}
-                {dpp.processing && <Field label="Processing" value={dpp.processing} />}
-                {dpp.grade && <Field label="Grade" value={dpp.grade} />}
-                {dpp.quantity_kg && <Field label="Quantity" value={`${dpp.quantity_kg} kg`} />}
-                {dpp.farmer_name && <Field label="Farmer" value={dpp.farmer_name} />}
-                {dpp.cooperative && <Field label="Cooperative" value={dpp.cooperative} />}
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+              <div className="bg-stone-50 border-b border-stone-100 px-6 py-4">
+                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                  <LuSprout className="w-5 h-5 text-forest-600" /> {t('dpp_title')}
+                </h2>
               </div>
 
-              {/* Certifications */}
-              {dpp.certifications?.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1">{t('dpp_certifications')}</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {dpp.certifications.map((cert) => (
-                      <span key={cert} className="text-xs bg-forest-100 text-forest-700 rounded-full px-2.5 py-0.5">
-                        {cert}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="p-6 space-y-6">
+                <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-6">
+                  {(dpp.batch_id || dpp.id) && <Field label="Batch ID" value={dpp.batch_id || dpp.id} highlight />}
+                  {dpp.gtin && <Field label="GTIN" value={dpp.gtin} />}
+                  {(dpp.origin || dpp.region) && <Field label="Origin" value={dpp.origin || dpp.region} />}
+                  {dpp.variety && <Field label="Variety" value={dpp.variety} />}
+                  {dpp.grade && <Field label="Grade" value={dpp.grade} />}
+                  {(dpp.quantity_kg || dpp.quantity || dpp.amount) && (
+                    <Field label="Quantity" value={`${dpp.quantity_kg || dpp.quantity || dpp.amount} kg`} />
+                  )}
+                  {dpp.farmer_name && <Field label="Farmer" value={dpp.farmer_name} />}
+                  {dpp.cooperative && <Field label="Cooperative" value={dpp.cooperative} />}
 
-              {/* GPS */}
-              {(dpp.latitude || dpp.gps_coordinates) && (
-                <div className="flex items-center gap-2 text-xs text-stone-500">
-                  <LuShieldCheck className="w-3.5 h-3.5 text-forest-600" />
-                  GPS: {dpp.latitude && dpp.longitude ? `${dpp.latitude}, ${dpp.longitude}` : dpp.gps_coordinates}
-                </div>
-              )}
-
-              {/* Blockchain status */}
-              {(dpp.blockchain_anchored || dpp.tx_hash) && (
-                <div className="flex items-center gap-2 text-xs text-stone-500">
-                  <LuLink className="w-3.5 h-3.5 text-stone-600" />
-                  {dpp.blockchain_anchored ? 'Anchored on Base Sepolia' : 'Not yet anchored'}
-                  {dpp.tx_hash && <code className="text-[10px] truncate max-w-[200px]">{dpp.tx_hash}</code>}
-                </div>
-              )}
-
-              {/* QR code */}
-              {(dpp.qr_url || dpp.qr_image) && (
-                <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row items-center gap-6">
-                  {dpp.qr_image && (
-                    <div className="bg-white p-2 rounded-lg border border-stone-200 shadow-sm">
-                      <img 
-                        src={dpp.qr_image} 
-                        alt="DPP QR Code" 
-                        className="w-32 h-32 object-contain"
-                      />
+                  {/* GPS */}
+                  {(dpp.latitude || dpp.gps_coordinates) && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1">GPS Location</dt>
+                      <dd className="flex items-center gap-2 text-sm text-stone-700 font-medium">
+                        <LuShieldCheck className="w-4 h-4 text-forest-600" />
+                        {dpp.latitude && dpp.longitude ? `${dpp.latitude}, ${dpp.longitude}` : (dpp.gps_coordinates === '?, ?' ? 'Not available' : dpp.gps_coordinates)}
+                      </dd>
                     </div>
                   )}
-                  <div className="space-y-1">
-                    <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">DPP Resolver</h3>
-                    <a
-                      href={dpp.qr_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-forest-600 underline break-all flex items-center gap-1.5"
-                    >
-                      <LuLink className="w-3.5 h-3.5" />
-                      {dpp.qr_url}
-                    </a>
-                    <p className="text-[10px] text-stone-400 mt-1">
-                      Scan to verify this batch on the Voice Ledger network
-                    </p>
+
+                  {/* Blockchain status */}
+                  {(dpp.blockchain_anchored || dpp.tx_hash) && (
+                    <div className="sm:col-span-2 space-y-2">
+                      <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1">Blockchain Proof</dt>
+                      <dd className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium text-stone-700">
+                          <div className={`w-2 h-2 rounded-full ${dpp.blockchain_anchored ? 'bg-forest-500 animate-pulse' : 'bg-amber-400'}`} />
+                          {dpp.blockchain_anchored ? 'Anchored on Base Sepolia' : 'Not yet anchored'}
+                        </div>
+                        {dpp.tx_hash && (
+                          <div className="group relative">
+                            <code className="block text-[11px] font-mono bg-stone-50 text-stone-500 p-3 rounded-xl border border-stone-100 break-all leading-relaxed">
+                              {dpp.tx_hash}
+                            </code>
+                          </div>
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+
+                {/* Certifications */}
+                {dpp.certifications?.length > 0 && (
+                  <div className="pt-4 border-t border-stone-50">
+                    <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-2">{t('dpp_certifications')}</dt>
+                    <div className="flex flex-wrap gap-2">
+                      {dpp.certifications.map((cert) => (
+                        <span key={cert} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-forest-50 text-forest-700 border border-forest-100">
+                          {cert}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* QR code section - The star of the show */}
+                {(dpp.qr_url || dpp.qr_image) && (
+                  <div className="mt-8 pt-8 border-t border-stone-100 bg-stone-50/50 -mx-6 -mb-6 px-6 py-8 flex flex-col items-center text-center">
+                    <h3 className="text-sm font-bold text-stone-900 mb-6 uppercase tracking-[0.2em]">View QR Code</h3>
+
+                    {dpp.qr_image && (
+                      <div className="relative group">
+                        <div className="absolute -inset-4 bg-gradient-to-tr from-forest-100 to-amber-100 rounded-2xl blur-xl opacity-50 group-hover:opacity-100 transition duration-500" />
+                        <div className="relative bg-white p-4 rounded-2xl border border-stone-200 shadow-xl">
+                          <img
+                            src={dpp.qr_image}
+                            alt="DPP QR Code"
+                            className="w-48 h-48 object-contain"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-8 space-y-3 max-w-sm">
+                      <p className="text-xs text-stone-500 leading-relaxed">
+                        Scan this code to verify the full immutable history of this batch on the Voice Ledger network.
+                      </p>
+                      {dpp.qr_url && (
+                        <a
+                          href={dpp.qr_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 text-[10px] font-mono text-stone-400 hover:text-forest-600 transition-colors bg-white px-3 py-1.5 rounded-full border border-stone-100 shadow-sm"
+                        >
+                          <LuLink className="w-3 h-3" />
+                          {dpp.qr_url}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -232,11 +266,13 @@ export default function DPPViewer() {
   )
 }
 
-function Field({ label, value }) {
+function Field({ label, value, highlight }) {
   return (
     <div>
-      <dt className="text-xs text-stone-500">{label}</dt>
-      <dd className="font-medium text-stone-800">{value}</dd>
+      <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1">{label}</dt>
+      <dd className={`text-sm font-medium ${highlight ? 'text-forest-700 font-bold' : 'text-stone-700'}`}>
+        {value || '—'}
+      </dd>
     </div>
   )
 }

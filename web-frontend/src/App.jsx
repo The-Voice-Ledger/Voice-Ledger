@@ -23,6 +23,7 @@ export default function App() {
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/my-rfqs" element={<MyRFQs />} />
           <Route path="/dpp" element={<DPPViewer />} />
+          <Route path="/dpp/:batchId" element={<DPPViewer />} />
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/financing" element={<Financing />} />
           <Route path="/tracking" element={<Tracking />} />
