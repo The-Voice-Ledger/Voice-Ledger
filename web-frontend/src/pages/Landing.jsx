@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
+import useAuthStore from '../stores/authStore'
 import {
   LuCoffee, LuShieldCheck, LuHandshake, LuSprout, LuLink, LuMic,
   LuMessageCircle, LuRadioTower, LuLandmark, LuShip, LuFileText,
@@ -135,6 +136,7 @@ function CardDeck({ features }) {
 
 export default function Landing() {
   const { t } = useTranslation()
+  const { isAuthenticated, user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('supply')
 
   // All features grouped by category
@@ -198,12 +200,14 @@ export default function Landing() {
             >
               <LuMessageCircle className="w-5 h-5" /> {t('cta_chat')}
             </Link>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 border-2 border-white/40 text-white font-semibold rounded-full px-6 py-3 hover:bg-white/10 hover:scale-105 active:scale-95 transition-all"
-            >
-              {t('cta_login')}
-            </Link>
+            {!isAuthenticated && (
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 border-2 border-white/40 text-white font-semibold rounded-full px-6 py-3 hover:bg-white/10 hover:scale-105 active:scale-95 transition-all"
+              >
+                {t('cta_login')}
+              </Link>
+            )}
           </div>
 
           {/* Trust badges */}

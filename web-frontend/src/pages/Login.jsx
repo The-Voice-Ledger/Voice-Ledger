@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useAuthStore from '../stores/authStore'
 
@@ -9,11 +9,16 @@ import { login as apiLogin } from '../api/agent'
 export default function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const { login, isAuthenticated } = useAuthStore()
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    return <Navigate to="/assistant" replace />
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
