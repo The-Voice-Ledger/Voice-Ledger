@@ -8,6 +8,7 @@ import {
   LuUsers, LuPackage, LuGlobe,
 } from 'react-icons/lu'
 import SupplyChainJourney from '../components/SupplyChainJourney'
+import ImageCarousel from '../components/ImageCarousel'
 
 /* ── Category definitions ───────────────────────────────────────── */
 
@@ -266,6 +267,9 @@ export default function Landing() {
 
       {/* Supply-chain journey animation */}
       <SupplyChainJourney />
+
+      {/* IPFS farm photo carousel */}
+      <ImageCarousel />
 
       {/* Features - tabbed categories + 3D stacked decks */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
