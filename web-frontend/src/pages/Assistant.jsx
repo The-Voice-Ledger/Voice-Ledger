@@ -88,28 +88,164 @@ function ToolUsagePills({ tools, t }) {
   )
 }
 
-/** Tiny replay button for TTS audio */
+/** Simple audio controls for existing auto-played audio */
 function PlayButton({ audioBase64 }) {
-  const [playing, setPlaying] = useState(false)
-  const play = useCallback(async () => {
-    if (playing) return
-    setPlaying(true)
-    try { await getVoiceManager().playBase64(audioBase64) } catch {}
-    setPlaying(false)
-  }, [audioBase64, playing])
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const voiceManagerRef = useRef(null)
+  const progressIntervalRef = useRef(null)
+
+  useEffect(() => {
+    voiceManagerRef.current = getVoiceManager()
+    
+    // Check if audio is currently playing
+    const checkAudio = () => {
+      const vm = voiceManagerRef.current
+      const audio = vm.getCurrentAudio()
+      
+      if (audio) {
+        setIsPlaying(!audio.paused)
+        setDuration(audio.duration || 0)
+        setCurrentTime(audio.currentTime || 0)
+        
+        // Start progress tracking if playing
+        if (!audio.paused && !progressIntervalRef.current) {
+          progressIntervalRef.current = setInterval(() => {
+            setCurrentTime(audio.currentTime || 0)
+          }, 100)
+        } else if (audio.paused && progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current)
+          progressIntervalRef.current = null
+        }
+      } else {
+        setIsPlaying(false)
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current)
+          progressIntervalRef.current = null
+        }
+      }
+    }
+
+    // Check immediately
+    checkAudio()
+    
+    // Set up periodic check
+    const interval = setInterval(checkAudio, 200)
+    
+    return () => {
+      clearInterval(interval)
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+      }
+    }
+  }, [])
+
+  const play = async () => {
+    const vm = voiceManagerRef.current
+    
+    // Always play - either resume or start new
+    const audio = vm.getCurrentAudio()
+    if (audio && audio.paused) {
+      // Resume existing audio
+      audio.play()
+      setIsPlaying(true)
+    } else {
+      // Start new audio
+      await vm.playBase64(audioBase64)
+      setIsPlaying(true)
+    }
+  }
+
+  const pause = () => {
+    const vm = voiceManagerRef.current
+    const audio = vm.getCurrentAudio()
+    if (audio && !audio.paused) {
+      audio.pause()
+      setIsPlaying(false)
+    }
+  }
+
+  const stop = () => {
+    const vm = voiceManagerRef.current
+    vm.stopCurrentAudio()
+    setIsPlaying(false)
+    setCurrentTime(0)
+    
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+  }
+
+  const formatTime = (time) => {
+    if (!time || !isFinite(time)) return '0:00'
+    const minutes = Math.floor(time / 60)
+    const seconds = Math.floor(time % 60)
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+
+  // Always show controls if we have audioBase64
+  const showControls = audioBase64
 
   return (
-    <button
-      onClick={play}
-      className="inline-flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-600 transition mt-1"
-      title="Replay audio"
-    >
-      {playing
-        ? <LuLoader className="w-3 h-3 animate-spin" />
-        : <LuVolume2 className="w-3 h-3" />
-      }
-      <span>{playing ? 'Playing…' : 'Play'}</span>
-    </button>
+    <div className="mt-2 flex items-center gap-2 text-[10px] text-stone-500">
+      {showControls && (
+        <>
+          {!isPlaying ? (
+            <button
+              onClick={play}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 transition"
+              title="Play audio"
+            >
+              <LuVolume2 className="w-3 h-3" />
+              <span>Play</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={pause}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 transition"
+                title="Pause audio"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
+                </svg>
+                <span>Pause</span>
+              </button>
+
+              <button
+                onClick={stop}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 transition"
+                title="Stop audio"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" />
+                </svg>
+                <span>Stop</span>
+              </button>
+
+              {/* Progress bar */}
+              <div className="flex-1 max-w-32">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-stone-400">{formatTime(currentTime)}</span>
+                  <div className="flex-1 h-1 bg-stone-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-stone-400 transition-all duration-100"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-stone-400">{formatTime(duration)}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 

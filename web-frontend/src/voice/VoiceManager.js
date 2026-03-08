@@ -16,6 +16,10 @@ export class VoiceManager {
     this._analyser = null
     this._silenceTimer = null
     this.isRecording = false
+    
+    // Global TTS audio management
+    this.currentAudio = null
+    this.currentAudioUrl = null
   }
 
   /** Request mic permission (call once early to avoid popup delay). */
@@ -95,28 +99,63 @@ export class VoiceManager {
     }
   }
 
+  /** Stop any currently playing TTS audio */
+  stopCurrentAudio() {
+    if (this.currentAudio) {
+      this.currentAudio.pause()
+      this.currentAudio.currentTime = 0
+      this.currentAudio = null
+    }
+    if (this.currentAudioUrl) {
+      URL.revokeObjectURL(this.currentAudioUrl)
+      this.currentAudioUrl = null
+    }
+  }
+
   /** Play a base64-encoded audio response. Returns a promise that resolves when done. */
   playBase64(b64, mime = 'audio/mp3') {
     return new Promise((resolve) => {
+      // Stop any currently playing audio first
+      this.stopCurrentAudio()
+      
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
       const blob = new Blob([bytes], { type: mime })
       const url = URL.createObjectURL(blob)
+      this.currentAudioUrl = url
+      
       const audio = new Audio(url)
+      this.currentAudio = audio
+      
       audio.onended = () => {
         URL.revokeObjectURL(url)
+        this.currentAudio = null
+        this.currentAudioUrl = null
         resolve()
       }
       audio.onerror = () => {
         URL.revokeObjectURL(url)
+        this.currentAudio = null
+        this.currentAudioUrl = null
         resolve()
       }
       audio.play()
     })
   }
 
+  /** Get current audio instance for external control */
+  getCurrentAudio() {
+    return this.currentAudio
+  }
+
+  /** Check if audio is currently playing */
+  isAudioPlaying() {
+    return this.currentAudio && !this.currentAudio.paused
+  }
+
   /** Release mic stream. */
   destroy() {
     this.stop()
+    this.stopCurrentAudio() // Also stop any playing TTS audio
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop())
       this.stream = null
