@@ -1,7 +1,7 @@
 import { useSearchParams, Link, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle } from 'react-icons/lu'
+import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle, LuPrinter } from 'react-icons/lu'
 import { fetchDPP } from '../api/marketplace'
 
 /* ── Skeleton loader ───────────────────────────────────────────── */
@@ -115,7 +115,7 @@ export default function DPPViewer() {
 
           {/* Structured DPP card */}
           {dpp && (
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300 dpp-print-card">
               <div className="bg-stone-50 border-b border-stone-100 px-6 py-4">
                 <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
                   <LuSprout className="w-5 h-5 text-forest-600" /> {t('dpp_title')}
@@ -199,22 +199,25 @@ export default function DPPViewer() {
                       </div>
                     )}
 
-                    <div className="mt-8 space-y-3 max-w-sm">
-                      <p className="text-xs text-stone-500 leading-relaxed">
-                        Scan this code to verify the full immutable history of this batch on the Voice Ledger network.
-                      </p>
-                      {dpp.qr_url && (
-                        <a
-                          href={dpp.qr_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-2 text-[10px] font-mono text-stone-400 hover:text-forest-600 transition-colors bg-white px-3 py-1.5 rounded-full border border-stone-100 shadow-sm"
-                        >
-                          <LuLink className="w-3 h-3" />
-                          {dpp.qr_url}
-                        </a>
-                      )}
+                    {/* Print / Save as PDF */}
+                    <div className="mt-6">
+                      <button
+                        onClick={() => window.print()}
+                        className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-sm px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95"
+                      >
+                        <LuPrinter className="w-4 h-4" />
+                        Save as PDF
+                      </button>
                     </div>
+
+                    <style>{`
+                      @media print {
+                        nav, header, footer, form,
+                        .dpp-no-print { display: none !important; }
+                        body { background: white; }
+                        .dpp-print-card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+                      }
+                    `}</style>
                   </div>
                 )}
               </div>

@@ -16,7 +16,7 @@ from qrcode.image.pil import PilImage
 
 def generate_qr_code(
     batch_id: str,
-    resolver_base_url: str = "https://dpp.voiceledger.io",
+    resolver_base_url: str = "https://voice-ledger-production.up.railway.app/app",
     output_file: Optional[Path] = None,
     size: int = 10,
     border: int = 2
@@ -69,7 +69,7 @@ def generate_qr_code(
 
 def generate_qr_code_svg(
     batch_id: str,
-    resolver_base_url: str = "https://dpp.voiceledger.io",
+    resolver_base_url: str = "https://voice-ledger-production.up.railway.app/app",
     output_file: Optional[Path] = None
 ) -> str:
     """
@@ -113,7 +113,7 @@ def generate_qr_code_svg(
 def create_labeled_qr_code(
     batch_id: str,
     product_name: str,
-    resolver_base_url: str = "https://dpp.voiceledger.io",
+    resolver_base_url: str = "https://voice-ledger-production.up.railway.app/app",
     output_file: Optional[Path] = None
 ) -> Path:
     """
@@ -196,7 +196,7 @@ def create_labeled_qr_code(
 
 def generate_batch_qr_codes(
     batches: list[tuple[str, str]],
-    resolver_base_url: str = "https://dpp.voiceledger.io",
+    resolver_base_url: str = "https://voice-ledger-production.up.railway.app/app",
     output_dir: Optional[Path] = None
 ) -> list[Path]:
     """

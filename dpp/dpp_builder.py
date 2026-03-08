@@ -457,7 +457,7 @@ def build_dpp(
     cooperative: Optional[str] = None,
     deforestation_risk: str = "none",
     eudr_compliant: bool = True,
-    resolver_base_url: str = "https://dpp.voiceledger.io"
+    resolver_base_url: str = "https://voice-ledger-production.up.railway.app/app"
 ) -> Dict[str, Any]:
     """
     Build a Digital Product Passport from database batch data.
