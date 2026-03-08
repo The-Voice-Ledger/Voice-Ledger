@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Landing from './pages/Landing'
@@ -12,13 +12,10 @@ import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
 
 export default function App() {
-  const location = useLocation()
-  const isChat = location.pathname === '/assistant'
-
   return (
-    <div className={`flex flex-col bg-stone-50 text-stone-900 ${isChat ? 'h-dvh overflow-hidden' : 'min-h-dvh'}`}>
+    <div className="flex flex-col min-h-dvh bg-stone-50 text-stone-900">
       <Navbar />
-      <main className={`flex-1 flex flex-col ${isChat ? 'min-h-0' : ''}`}>
+      <main className="flex-1">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/assistant" element={<Assistant />} />
@@ -32,7 +29,8 @@ export default function App() {
           <Route path="/tracking" element={<Tracking />} />
         </Routes>
       </main>
-      {!isChat && <Footer />}
+      {/* Footer on all pages */}
+      <Footer />
     </div>
   )
 }
