@@ -315,7 +315,7 @@ export default function Assistant() {
   const initial = userInitial(user)
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 max-w-3xl mx-auto w-full">
+    <div className="flex flex-col max-w-3xl mx-auto w-full" style={{ height: 'calc(100dvh - 3.5rem)' }}>
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-stone-200">
         <div className="flex items-center gap-2">
@@ -468,8 +468,8 @@ export default function Assistant() {
         </div>
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-stone-200 bg-white px-3 sm:px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+      {/* Input bar — DEBUG: red bg + mb-16 to shift up and make visible */}
+      <div className="border-t border-stone-200 bg-red-300 px-3 sm:px-4 py-3 mb-16">
         <form onSubmit={handleSubmit} className="flex items-center gap-1.5 sm:gap-2">
           {/* Voice button */}
           <button
