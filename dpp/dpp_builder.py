@@ -439,6 +439,7 @@ def load_batch_data(batch_id: str):
         _ = batch.variety
         _ = batch.process_method
         _ = batch.farm_name
+        _ = batch.qr_code_base64
         
         # Expunge all related objects from session so they can be used outside
         db.expunge_all()
@@ -609,8 +610,22 @@ def build_dpp(
     # Build QR code section
     dpp_url = f"{resolver_base_url}/dpp/{batch_id}"
     
-    # Generate base64 QR code image
-    qr_base64, _ = generate_qr_code(batch_id, resolver_base_url=resolver_base_url)
+    # Use stored QR code or generate if missing (legacy batches)
+    qr_base64 = getattr(batch, 'qr_code_base64', None)
+    if not qr_base64:
+        # Generate base64 QR code image
+        qr_base64, _ = generate_qr_code(batch_id, resolver_base_url=resolver_base_url)
+        
+        # Save to DB for legacy batches so it's only generated once
+        try:
+            with get_db() as db:
+                db_batch = db.query(CoffeeBatch).filter_by(batch_id=batch_id).first()
+                if db_batch:
+                    db_batch.qr_code_base64 = qr_base64
+                    db.commit()
+                    logger.info(f"✓ Saved QR code to DB for legacy batch {batch_id}")
+        except Exception as e:
+            logger.warning(f"Could not save QR code for legacy batch {batch_id}: {e}")
     
     qr_code = {
         "url": dpp_url,

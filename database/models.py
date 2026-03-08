@@ -245,6 +245,8 @@ class CoffeeBatch(Base):
     has_photo_evidence = Column(Boolean, default=False)
     verifying_organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
     
+    qr_code_base64 = Column(Text, nullable=True)  # Base64 encoded PNG of DPP QR code
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

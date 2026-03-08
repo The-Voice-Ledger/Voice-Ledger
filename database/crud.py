@@ -19,6 +19,16 @@ def create_farmer(db: Session, farmer_data: dict) -> FarmerIdentity:
 
 def create_batch(db: Session, batch_data: dict) -> CoffeeBatch:
     """Create new coffee batch."""
+    # Generate QR code if not provided
+    if 'qr_code_base64' not in batch_data and 'batch_id' in batch_data:
+        try:
+            from dpp.qrcode_gen import generate_qr_code
+            qr_base64, _ = generate_qr_code(batch_data['batch_id'])
+            batch_data['qr_code_base64'] = qr_base64
+        except Exception as e:
+            # Non-fatal error for batch creation
+            print(f"⚠️ Failed to generate QR code for batch {batch_data['batch_id']}: {e}")
+
     batch = CoffeeBatch(**batch_data)
     db.add(batch)
     db.commit()
