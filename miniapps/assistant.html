@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/miniapps/shared/theme.css">
   <style>
     html,body{height:100%;overflow:hidden}
-    body{padding:0;display:flex;flex-direction:column;background:var(--bg)}
+    body{padding:0 0 56px;display:flex;flex-direction:column;background:var(--bg)}
 
     .chat-header{
       display:flex;align-items:center;gap:12px;
@@ -113,6 +113,7 @@
       display:flex;align-items:flex-end;gap:8px;
       padding:10px 12px;background:white;
       border-top:1px solid var(--border);flex-shrink:0;
+      z-index:100;
     }
     .input-bar textarea{
       flex:1;resize:none;border:1px solid var(--border);
