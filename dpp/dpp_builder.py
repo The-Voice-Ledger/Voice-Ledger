@@ -16,6 +16,7 @@ from database import get_db, get_batch_by_batch_id, get_batch_events
 from database.models import CoffeeBatch, AggregationRelationship, EPCISEvent, FarmerIdentity, VerificationPhoto
 from sqlalchemy.orm import Session
 from voice.verification.deforestation_checker import DeforestationChecker
+from dpp.qrcode_gen import generate_qr_code
 import logging
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,27 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
         EUDR compliance section dict
     """
     farmer = batch.farmer
+    if not farmer:
+        # Return a minimal or "MISSING" compliance section
+        return {
+            "regulation": {
+                "name": "EU Deforestation Regulation (EUDR)",
+                "reference": "Regulation (EU) 2023/1115"
+            },
+            "complianceStatus": "NO_FARMER_DATA",
+            "complianceLevel": "Non-Compliant",
+            "geolocation": {
+                "farmLocation": {
+                    "status": "MISSING",
+                    "warning": "No farmer data associated with batch"
+                }
+            },
+            "riskAssessment": {
+                "deforestationRisk": "UNKNOWN",
+                "riskFactors": [{"factor": "No farmer data", "severity": "HIGH"}],
+                "assessmentDate": datetime.now(timezone.utc).date().isoformat()
+            }
+        }
     
     # Check GPS verification status
     has_registration_gps = farmer.photo_latitude is not None and farmer.photo_longitude is not None
@@ -386,13 +408,37 @@ def load_batch_data(batch_id: str):
         if not batch:
             return None
         
-        # Force load all relationships before expunging from session
-        _  = batch.farmer.name  # Load farmer
-        _ = batch.farmer.did
-        _ = len(batch.farmer.credentials)  # Load credentials collection
-        _ = [c.credential_type for c in batch.farmer.credentials]  # Load each credential
-        _ = len(batch.events)  # Load events collection
-        _ = [e.event_type for e in batch.events]  # Load each event
+        # Force load all relationships and fields before expunging from session
+        if batch.farmer:
+            _ = batch.farmer.name
+            _ = batch.farmer.did
+            _ = batch.farmer.gln
+            _ = len(batch.farmer.credentials)
+            for c in batch.farmer.credentials:
+                _ = c.credential_type
+                _ = c.credential_id
+                _ = c.issuer_did
+                _ = c.subject_did
+                _ = c.issuance_date
+                _ = c.expiration_date
+                _ = c.revoked
+        
+        _ = len(batch.events)
+        for e in batch.events:
+            _ = e.event_type
+            _ = e.event_time
+            _ = e.event_hash
+            _ = e.biz_step
+            _ = e.blockchain_tx_hash
+            _ = e.blockchain_confirmed_at
+            _ = e.created_at
+        
+        # Also load some basic batch fields that might be lazy if they were deferred (unlikely but safe)
+        _ = batch.origin_country
+        _ = batch.origin_region
+        _ = batch.variety
+        _ = batch.process_method
+        _ = batch.farm_name
         
         # Expunge all related objects from session so they can be used outside
         db.expunge_all()
@@ -456,9 +502,9 @@ def build_dpp(
             "region": region or batch.origin_region,
             "farmName": batch.farm_name,
             "farmer": {
-                "name": batch.farmer.name,
-                "did": batch.farmer.did,
-                "gln": batch.farmer.gln
+                "name": batch.farmer.name if batch.farmer else "Unknown",
+                "did": batch.farmer.did if batch.farmer else "Unknown",
+                "gln": batch.farmer.gln if batch.farmer else "Unknown"
             }
         },
         "supplyChainActors": [],
@@ -466,20 +512,21 @@ def build_dpp(
     }
     
     # Extract supply chain actors from farmer's credentials
-    for cred in batch.farmer.credentials:
-        if not cred.revoked:
-            actor = {
-                "role": cred.credential_type.replace("Certification", "").lower(),
-                "name": batch.farmer.name,
-                "did": cred.subject_did,
-                "credential": {
-                    "id": cred.credential_id,
-                    "type": cred.credential_type,
-                    "issuer": cred.issuer_did,
-                    "issuedDate": cred.issuance_date.isoformat()
+    if batch.farmer:
+        for cred in batch.farmer.credentials:
+            if not cred.revoked:
+                actor = {
+                    "role": cred.credential_type.replace("Certification", "").lower(),
+                    "name": batch.farmer.name,
+                    "did": cred.subject_did,
+                    "credential": {
+                        "id": cred.credential_id,
+                        "type": cred.credential_type,
+                        "issuer": cred.issuer_did,
+                        "issuedDate": cred.issuance_date.isoformat()
+                    }
                 }
-            }
-            traceability["supplyChainActors"].append(actor)
+                traceability["supplyChainActors"].append(actor)
     
     # Extract EPCIS events from database
     for db_event in batch.events:
@@ -501,15 +548,16 @@ def build_dpp(
     }
     
     # Add certifications from farmer's credentials
-    for cred in batch.farmer.credentials:
-        if not cred.revoked and "certification" in cred.credential_type.lower():
-            cert = {
-                "type": cred.credential_type,
-                "issuer": cred.issuer_did,
-                "issuedDate": cred.issuance_date.isoformat(),
-                "expiryDate": cred.expiration_date.isoformat() if cred.expiration_date else None
-            }
-            sustainability["certifications"].append(cert)
+    if batch.farmer:
+        for cred in batch.farmer.credentials:
+            if not cred.revoked and "certification" in cred.credential_type.lower():
+                cert = {
+                    "type": cred.credential_type,
+                    "issuer": cred.issuer_did,
+                    "issuedDate": cred.issuance_date.isoformat(),
+                    "expiryDate": cred.expiration_date.isoformat() if cred.expiration_date else None
+                }
+                sustainability["certifications"].append(cert)
     
     # Placeholder for carbon footprint (would come from batch metadata)
     sustainability["carbonFootprint"] = {
@@ -530,7 +578,7 @@ def build_dpp(
     }
     
     # Add due diligence credential reference if available
-    dd_creds = [c for c in batch.farmer.credentials if "duediligence" in c.credential_type.lower()]
+    dd_creds = [c for c in batch.farmer.credentials if "duediligence" in c.credential_type.lower()] if batch.farmer else []
     if dd_creds:
         due_diligence["dueDiligenceStatement"] = dd_creds[0].credential_id
     
@@ -560,8 +608,13 @@ def build_dpp(
     
     # Build QR code section
     dpp_url = f"{resolver_base_url}/dpp/{batch_id}"
+    
+    # Generate base64 QR code image
+    qr_base64, _ = generate_qr_code(batch_id, resolver_base_url=resolver_base_url)
+    
     qr_code = {
-        "url": dpp_url
+        "url": dpp_url,
+        "imageUrl": f"data:image/png;base64,{qr_base64}"
     }
     
     # Build comprehensive EUDR compliance section with GPS photo verification

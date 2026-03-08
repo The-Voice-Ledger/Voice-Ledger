@@ -155,16 +155,34 @@ export default function DPPViewer() {
                 </div>
               )}
 
-              {/* QR code link */}
-              {dpp.qr_url && (
-                <a
-                  href={dpp.qr_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block text-sm text-forest-600 underline"
-                >
-                  View QR Code
-                </a>
+              {/* QR code */}
+              {(dpp.qr_url || dpp.qr_image) && (
+                <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row items-center gap-6">
+                  {dpp.qr_image && (
+                    <div className="bg-white p-2 rounded-lg border border-stone-200 shadow-sm">
+                      <img 
+                        src={dpp.qr_image} 
+                        alt="DPP QR Code" 
+                        className="w-32 h-32 object-contain"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">DPP Resolver</h3>
+                    <a
+                      href={dpp.qr_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-forest-600 underline break-all flex items-center gap-1.5"
+                    >
+                      <LuLink className="w-3.5 h-3.5" />
+                      {dpp.qr_url}
+                    </a>
+                    <p className="text-[10px] text-stone-400 mt-1">
+                      Scan to verify this batch on the Voice Ledger network
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           )}
