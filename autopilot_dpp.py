@@ -66,10 +66,10 @@ def autopilot_process_batch(db, batch_id_or_obj, verifier_tid):
         else:
             print_status("!", "No creator identity found.", YELLOW)
 
-    # 1.2 Fix Region/Country and Origin
+    # 1.2 Fix Region/Country on farmer profile
     if batch.farmer:
         f_modified = False
-        if not batch.farmer.region or batch.farmer.region.lower() == "none" or batch.farmer.region == "":
+        if not batch.farmer.region or batch.farmer.region.lower() in ("none", "unknown", ""):
             parts = batch.batch_id.split('_')
             inferred_region = parts[0].capitalize() if parts else "Sidama"
             batch.farmer.region = inferred_region
@@ -85,11 +85,60 @@ def autopilot_process_batch(db, batch_id_or_obj, verifier_tid):
             modified = True
             db.flush()
 
-        if not batch.origin or batch.origin.lower() == "unknown":
-            new_origin = f"{batch.farmer.region}, {batch.farmer.country_code or 'ET'}"
-            batch.origin = new_origin
-            print_status("✓", f"Auto-filled Batch Origin: {new_origin}")
+    # 1.3 Fix batch-level origin fields (what the DPP displays)
+    DEFAULT_REGION = "Sidama"
+    DEFAULT_COUNTRY = "ET"
+    DEFAULT_COUNTRY_FULL = "Ethiopia"
+
+    if batch.farmer:
+        region = batch.farmer.region or DEFAULT_REGION
+        country = batch.farmer.country_code or DEFAULT_COUNTRY
+    else:
+        region = DEFAULT_REGION
+        country = DEFAULT_COUNTRY
+
+    if not batch.origin_region or batch.origin_region.lower() in ("none", "unknown", ""):
+        batch.origin_region = region
+        print_status("✓", f"Fixed Batch origin_region: {region}")
+        modified = True
+
+    if not batch.origin_country or batch.origin_country.lower() in ("none", "unknown", ""):
+        batch.origin_country = DEFAULT_COUNTRY
+        print_status("✓", f"Fixed Batch origin_country: {DEFAULT_COUNTRY}")
+        modified = True
+
+    if not batch.origin or batch.origin.lower() in ("none", "unknown", "none, none", "?, ?", ""):
+        new_origin = f"{batch.origin_region or region}, {DEFAULT_COUNTRY_FULL}"
+        batch.origin = new_origin
+        print_status("✓", f"Auto-filled Batch Origin: {new_origin}")
+        modified = True
+
+    # 1.4 Set cooperative from the creator's organization or use default
+    DEFAULT_COOPERATIVE = "Sidama Farmers Cooperative"
+    if not batch.verifying_organization_id:
+        # Try creator's organization first
+        creator = db.query(UserIdentity).filter_by(id=batch.created_by_user_id).first()
+        coop_org = None
+        if creator and creator.organization_id:
+            from database.models import Organization
+            coop_org = db.query(Organization).filter_by(id=creator.organization_id).first()
+
+        if coop_org:
+            batch.verifying_organization_id = coop_org.id
+            print_status("✓", f"Linked Cooperative: {coop_org.name}")
             modified = True
+        else:
+            # Try to find or create the default cooperative
+            from database.models import Organization
+            default_coop = db.query(Organization).filter(
+                Organization.name == DEFAULT_COOPERATIVE
+            ).first()
+            if default_coop:
+                batch.verifying_organization_id = default_coop.id
+                print_status("✓", f"Linked Default Cooperative: {DEFAULT_COOPERATIVE}")
+                modified = True
+            else:
+                print_status("!", f"No cooperative organization found. Cooperative will show as '{DEFAULT_COOPERATIVE}' via DPP fallback.", YELLOW)
 
     if modified:
         db.commit()

@@ -95,6 +95,34 @@ class ToolRegistry:
         self._tools["check_trade_financing"] = self._check_trade_financing
 
     # ------------------------------------------------------------------
+    # Helper: Cooperative lookup
+    # ------------------------------------------------------------------
+
+    def _get_batch_cooperative(self, batch_id: str, db: Session) -> str:
+        """Look up cooperative name from the batch's verifying org or creator's org."""
+        try:
+            from database.models import CoffeeBatch, UserIdentity, Organization
+            batch = db.query(CoffeeBatch).filter_by(batch_id=batch_id).first()
+            if not batch:
+                return "Unknown Cooperative"
+            # 1. Try verifying organization (set by autopilot)
+            if batch.verifying_organization_id:
+                org = db.query(Organization).filter_by(id=batch.verifying_organization_id).first()
+                if org:
+                    return org.name
+            # 2. Try creator's organization
+            if batch.created_by_user_id:
+                creator = db.query(UserIdentity).filter_by(id=batch.created_by_user_id).first()
+                if creator and creator.organization_id:
+                    org = db.query(Organization).filter_by(id=creator.organization_id).first()
+                    if org:
+                        return org.name
+            return "Unknown Cooperative"
+        except Exception as e:
+            logger.debug("Could not resolve cooperative for %s: %s", batch_id, e)
+            return "Unknown Cooperative"
+
+    # ------------------------------------------------------------------
     # Container marketplace tool implementations (Agent #3b)
     # ------------------------------------------------------------------
 
@@ -1817,7 +1845,7 @@ class ToolRegistry:
                 "grade": product.get("grade", "A"),
                 "quantity_kg": product.get("quantity"),
                 "farmer_name": origin.get("farmer", {}).get("name"),
-                "cooperative": dpp.get("cooperative", "Unknown Cooperative"),
+                "cooperative": dpp.get("cooperative") or self._get_batch_cooperative(batch_id, db),
                 "certifications": [c.get("type") for c in dpp.get("sustainability", {}).get("certifications", [])],
                 "latitude": origin.get("latitude"),
                 "longitude": origin.get("longitude"),
