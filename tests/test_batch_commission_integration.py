@@ -62,6 +62,16 @@ def test_batch_commission_with_event():
         print(f"  Quantity: {result['quantity_kg']} kg")
         print(f"  Status: {result['status']}")
         
+        # Verify QR code is included in commission response
+        assert 'qr_code_base64' in result, "qr_code_base64 missing from commission result"
+        assert result['qr_code_base64'] is not None, "qr_code_base64 is None"
+        assert len(result['qr_code_base64']) > 100, "qr_code_base64 looks too short"
+        print(f"  QR Code: ✅ ({len(result['qr_code_base64'])} chars base64)")
+        
+        # Verify verification_token is present (used for verification QR)
+        assert result.get('verification_token'), "verification_token missing from commission result"
+        print(f"  Verification Token: {result['verification_token']}")
+        
         # Check if EPCIS event was created
         if result.get('epcis_event'):
             print(f"\n🗄️  EPCIS Commission Event:")

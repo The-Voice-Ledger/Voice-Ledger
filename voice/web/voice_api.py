@@ -468,6 +468,16 @@ async def upload_voice(
                             'entities': agent_result.entities,
                             'response_source': 'agent',
                         }
+                        # Attach batch data (incl. QR code) for commission so
+                        # the frontend can render the verification QR.
+                        if (
+                            agent_result.performed_write
+                            and agent_result.intent == "record_commission"
+                        ):
+                            for _tc in agent_result.tool_calls:
+                                if _tc.tool_name == "record_commission" and _tc.success:
+                                    conv_result["batch_data"] = _tc.result_data
+                                    break
                         agent_handled = True
 
                 except Exception as agent_err:

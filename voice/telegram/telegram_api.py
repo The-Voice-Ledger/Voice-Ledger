@@ -2702,6 +2702,47 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                             )
                             agent_handled = True
 
+                        # ── Post-commission QR code ──
+                        # When the agent creates a batch, send the verification
+                        # QR code as a photo so the farmer can take it to the
+                        # cooperative.  The legacy BatchRecordingWorkflow does
+                        # this automatically; the agent path was missing it.
+                        if (
+                            agent_result.performed_write
+                            and agent_result.intent == "record_commission"
+                        ):
+                            try:
+                                # Find the commission tool-call result
+                                _batch_data = None
+                                for _tc in agent_result.tool_calls:
+                                    if _tc.tool_name == "record_commission" and _tc.success:
+                                        _batch_data = _tc.result_data
+                                        break
+
+                                if _batch_data and _batch_data.get("verification_token"):
+                                    from voice.telegram.notifier import send_batch_verification_qr
+                                    _batch_info = {
+                                        "batch_id": _batch_data.get("batch_id"),
+                                        "gtin": _batch_data.get("gtin"),
+                                        "gln": _batch_data.get("gln"),
+                                        "variety": _batch_data.get("variety"),
+                                        "quantity_kg": _batch_data.get("quantity_kg"),
+                                        "origin": _batch_data.get("origin"),
+                                        "status": _batch_data.get("status"),
+                                        "verification_token": _batch_data["verification_token"],
+                                    }
+                                    _qr_sent = await send_batch_verification_qr(
+                                        int(user_id), _batch_info
+                                    )
+                                    logger.info(
+                                        f"📦 Post-commission QR sent to {user_id}: {_qr_sent}"
+                                    )
+                            except Exception as _qr_err:
+                                logger.error(
+                                    f"Failed to send post-commission QR to {user_id}: {_qr_err}",
+                                    exc_info=True,
+                                )
+
                 except Exception as agent_err:
                     _agent_error_detail = f"{type(agent_err).__name__}: {agent_err}"
                     logger.error(f"🤖 Agent failed for text, falling back to legacy: {agent_err}", exc_info=True)

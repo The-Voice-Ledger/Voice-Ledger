@@ -93,8 +93,21 @@ async def get_batch_dpp(
     if not batch:
         raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
 
+    # Derive real compliance values from farmer data instead of hardcoding
+    deforestation_risk = "none"
+    eudr_compliant = True
+    if batch.farmer:
+        f = batch.farmer
+        risk = (f.deforestation_risk or "UNKNOWN").lower()
+        deforestation_risk = risk if risk in ("low", "medium", "high", "unknown") else "none"
+        eudr_compliant = (
+            f.deforestation_compliant is True
+            and f.latitude is not None
+            and f.longitude is not None
+        )
+
     try:
-        dpp = build_dpp(batch_id=batch_id, deforestation_risk="none", eudr_compliant=True)
+        dpp = build_dpp(batch_id=batch_id, deforestation_risk=deforestation_risk, eudr_compliant=eudr_compliant)
     except Exception as exc:
         logger.exception("Error building DPP for %s", batch_id)
         raise HTTPException(status_code=500, detail=f"Error building DPP: {exc}")
@@ -205,10 +218,22 @@ async def get_container_dpp(container_sscc: str) -> Dict[str, Any]:
         )
         child_batch_ids = [row.child_identifier for row in agg_rows]
 
-        # Build a DPP per child batch
+        # Build a DPP per child batch (derive real compliance values)
         for bid in child_batch_ids:
             try:
-                dpp = build_dpp(batch_id=bid, deforestation_risk="none", eudr_compliant=True)
+                child_batch = load_batch_data(bid)
+                d_risk = "none"
+                d_compliant = True
+                if child_batch and child_batch.farmer:
+                    f = child_batch.farmer
+                    risk = (f.deforestation_risk or "UNKNOWN").lower()
+                    d_risk = risk if risk in ("low", "medium", "high", "unknown") else "none"
+                    d_compliant = (
+                        f.deforestation_compliant is True
+                        and f.latitude is not None
+                        and f.longitude is not None
+                    )
+                dpp = build_dpp(batch_id=bid, deforestation_risk=d_risk, eudr_compliant=d_compliant)
                 child_dpps.append(dpp)
             except Exception:
                 logger.warning("Could not build DPP for child batch %s", bid)

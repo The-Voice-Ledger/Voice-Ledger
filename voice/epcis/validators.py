@@ -169,51 +169,76 @@ def validate_eudr_compliance(
     db: Session
 ) -> Tuple[bool, str]:
     """
-    Verify all farmers have GPS coordinates (EUDR Article 9 requirement).
-    
-    EU Regulation 2023/1115 Article 9 requires geolocation of ALL plots
-    where commodities were produced. Products without complete geolocation
-    cannot be placed on EU market (rejected at customs).
-    
-    This validator ensures aggregated containers meet EUDR requirements
-    BEFORE creating the container, preventing costly compliance issues.
-    
+    Full EUDR compliance check for batches (Articles 9 + 10).
+
+    Validates:
+      1. Article 9 – GPS coordinates exist for every farmer
+      2. Article 9 – GPS is photo-verified (not just self-reported)
+      3. Article 10 – Deforestation check has been run AND passed
+
     Args:
         batch_ids: List of batch identifiers to validate
         db: Database session
-    
+
     Returns:
         Tuple of (is_valid: bool, error_message: str)
     """
     if not batch_ids:
         return False, "No batch IDs provided"
-    
+
     # Query batches with farmer relationships
     batches = db.query(CoffeeBatch).filter(
         CoffeeBatch.batch_id.in_(batch_ids)
     ).all()
-    
-    # Check each batch has farmer with GPS coordinates
-    non_compliant_farmers = []
-    
+
+    missing_gps = []
+    unverified_gps = []
+    deforestation_fail = []
+
     for batch in batches:
-        if not batch.farmer:
-            non_compliant_farmers.append(f"{batch.batch_id} (no farmer linked)")
+        farmer = batch.farmer
+        if not farmer:
+            missing_gps.append(f"{batch.batch_id} (no farmer linked)")
             continue
-        
-        # Check for GPS coordinates
-        if batch.farmer.latitude is None or batch.farmer.longitude is None:
-            non_compliant_farmers.append(
-                f"{batch.farmer.name} (batch {batch.batch_id})"
+
+        # 1. Must have ANY coordinates
+        if farmer.latitude is None or farmer.longitude is None:
+            missing_gps.append(f"{farmer.name} (batch {batch.batch_id})")
+            continue
+
+        # 2. Prefer photo-verified GPS; flag if only self-reported
+        if farmer.photo_latitude is None or farmer.photo_longitude is None or farmer.gps_verified_at is None:
+            unverified_gps.append(f"{farmer.name} (batch {batch.batch_id})")
+
+        # 3. Deforestation check must have run AND returned compliant=True
+        if farmer.deforestation_compliant is not True:
+            risk = farmer.deforestation_risk or 'NOT_CHECKED'
+            deforestation_fail.append(
+                f"{farmer.name} (batch {batch.batch_id}, risk={risk})"
             )
-    
-    if non_compliant_farmers:
-        return False, (
-            f"EUDR violation: Missing geolocation for farmers: "
-            f"{', '.join(non_compliant_farmers)}. "
-            f"All plots must have GPS coordinates (EU Regulation 2023/1115 Article 9)"
+
+    # Build combined error message
+    issues = []
+    if missing_gps:
+        issues.append(
+            f"Missing geolocation: {', '.join(missing_gps)}"
         )
-    
+    if unverified_gps:
+        issues.append(
+            f"GPS not photo-verified (self-reported only): {', '.join(unverified_gps)}"
+        )
+    if deforestation_fail:
+        issues.append(
+            f"Deforestation check failed or not run: {', '.join(deforestation_fail)}"
+        )
+
+    if issues:
+        return False, (
+            "EUDR compliance issues found — "
+            + "; ".join(issues)
+            + ". (EU Regulation 2023/1115 Articles 9 & 10)"
+        )
+
     return True, ""
 
 

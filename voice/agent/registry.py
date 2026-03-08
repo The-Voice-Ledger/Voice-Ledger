@@ -1714,7 +1714,7 @@ class ToolRegistry:
         if is_valid:
             return (
                 f"All {len(batch_ids)} batch(es) are EUDR compliant. "
-                "GPS coordinates verified for all farmers.",
+                "GPS photo-verified and deforestation checks passed for all farmers.",
                 {
                     "compliant": True,
                     "batch_count": len(batch_ids),
