@@ -315,7 +315,7 @@ export default function Assistant() {
   const initial = userInitial(user)
 
   return (
-    <div className="flex flex-col flex-1 max-w-3xl mx-auto w-full">
+    <div className="flex flex-col flex-1 min-h-0 max-w-3xl mx-auto w-full">
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-stone-200">
         <div className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export default function Assistant() {
       </div>
 
       {/* Messages area - with top fade gradient */}
-      <div ref={scrollRef} className="relative flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="relative flex-1 min-h-0 overflow-y-auto">
         {/* Top fade hint */}
         <div className="sticky top-0 left-0 right-0 h-6 bg-gradient-to-b from-stone-50 to-transparent z-10 pointer-events-none" />
 
