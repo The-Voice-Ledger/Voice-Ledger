@@ -15,8 +15,14 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Debug: Check auth state
+  console.log('🔍 Login.jsx Debug:')
+  console.log('  - isAuthenticated:', isAuthenticated)
+  console.log('  - should redirect:', isAuthenticated)
+
   // Redirect if already authenticated
   if (isAuthenticated) {
+    console.log('🔍 Login.jsx: User is authenticated, redirecting to /assistant...')
     return <Navigate to="/assistant" replace />
   }
 
