@@ -58,7 +58,7 @@ class EUDRArticle9(BaseModel):
     deforestation_compliant: Optional[bool] = None
     deforestation_confidence: Optional[float] = None
     deforestation_data_source: Optional[str] = None
-    compliance_status: str  # FULLY_VERIFIED | FARM_VERIFIED | SELF_REPORTED | NO_GPS
+    compliance_status: str  # FULLY_VERIFIED | FARM_VERIFIED | DEVICE_GPS | SELF_REPORTED | DEFORESTATION_RISK | NO_GPS
     compliance_level: str   # Gold | Silver | Bronze | Non-Compliant
     gtin: Optional[str] = None
     blockchain_event_count: int = 0
@@ -132,7 +132,7 @@ async def get_batch_dpp(
             "eudrVerification": {
                 "status": eudr.get("complianceStatus", "UNKNOWN"),
                 "level": eudr.get("complianceLevel", "Unknown"),
-                "gpsVerified": eudr.get("complianceStatus") in ("FULLY_VERIFIED", "FARM_VERIFIED"),
+                "gpsVerified": eudr.get("complianceStatus") in ("FULLY_VERIFIED", "FARM_VERIFIED", "DEVICE_GPS"),
             },
             "qrUrl": dpp.get("qrCode", {}).get("url"),
         }
