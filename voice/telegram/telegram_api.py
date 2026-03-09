@@ -2179,82 +2179,16 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 # Build aggregated DPP (container_id is an SSCC, not a batch_id)
                 logger.info(f"Building aggregated DPP for SSCC {container_id}")
                 dpp = build_aggregated_dpp(container_id)
-                
-                # Format response with key information
-                contributors = dpp.get('traceability', {}).get('contributors', [])
-                num_contributors = len(contributors)
-                total_qty = dpp.get('productInformation', {}).get('totalQuantity', 'Unknown')
-                eudr_compliant = dpp.get('dueDiligence', {}).get('eudrCompliant', False)
-                all_geolocated = dpp.get('dueDiligence', {}).get('allFarmersGeolocated', False)
-                
-                # Get EUDR compliance details
-                eudr_compliance = dpp.get('eudrCompliance', {})
-                compliance_status = eudr_compliance.get('complianceStatus', 'UNKNOWN')
-                compliance_level = eudr_compliance.get('complianceLevel', 'Unknown')
-                farm_gps = eudr_compliance.get('geolocation', {}).get('farmLocation', {})
-                verification_photos = eudr_compliance.get('geolocation', {}).get('harvestVerification', [])
-                
-                # Build compliance status emoji
-                status_emoji = {
-                    'FULLY_VERIFIED': '🟢',
-                    'FARM_VERIFIED': '🟡',
-                    'SELF_REPORTED': '🟠',
-                    'NO_GPS': '🔴'
-                }.get(compliance_status, '⚪')
-                
-                # Build contributors list
-                contributor_lines = []
-                for c in contributors[:5]:  # Show first 5 farmers
-                    farmer_name = c.get('farmer', 'Unknown')
-                    contribution = c.get('contributionPercent', '0%')
-                    region = c.get('origin', {}).get('region', 'Unknown')
-                    contributor_lines.append(
-                        f"  • {farmer_name} - {contribution} ({region})"
-                    )
-                
-                if num_contributors > 5:
-                    contributor_lines.append(f"  ... and {num_contributors - 5} more farmers")
-                
-                contributors_text = "\n".join(contributor_lines)
-                
-                # Send formatted DPP summary with EUDR compliance
-                message_text = (
-                    f"📄 *Digital Product Passport*\n\n"
-                    f"*Container:* `{container_id}`\n"
-                    f"*Total Quantity:* {total_qty}\n"
-                    f"*Contributors:* {num_contributors} farmers\n\n"
-                    f"*Farmer Contributions:*\n{contributors_text}\n\n"
-                    f"*EUDR Compliance:*\n"
-                    f"{status_emoji} Status: {compliance_status.replace('_', ' ').title()}\n"
-                    f"📊 Level: {compliance_level}\n"
+
+                # Use the unified DPP delivery package
+                from voice.telegram.notifier import send_dpp_package
+                await send_dpp_package(
+                    chat_id=int(user_id),
+                    batch_id=container_id,
+                    dpp=dpp,
                 )
-                
-                # Add GPS verification details if available
-                if farm_gps.get('coordinates'):
-                    coords = farm_gps['coordinates']
-                    message_text += f"📍 Farm GPS: {coords['latitude']:.6f}, {coords['longitude']:.6f}\n"
-                    if farm_gps.get('verifiedAt'):
-                        message_text += f"✅ Verified: {farm_gps['verifiedAt'][:10]}\n"
-                
-                if verification_photos:
-                    message_text += f"📸 Harvest Photos: {len(verification_photos)} verified\n"
-                
-                message_text += (
-                    f"\n*Due Diligence:*\n"
-                    f"{'✅' if eudr_compliant else '❌'} EUDR Compliant\n"
-                    f"{'✅' if all_geolocated else '❌'} All Farmers Geolocated\n\n"
-                    f"*QR Code:* {dpp.get('qrCode', {}).get('url', 'N/A')}\n\n"
-                    f"Full DPP with blockchain proofs and GPS verification."
-                )
-                
-                await processor.send_notification(
-                    channel_name='telegram',
-                    user_id=user_id,
-                    message=message_text,
-                    parse_mode='Markdown'
-                )
-                
-                logger.info(f"Successfully generated DPP for {container_id} with {num_contributors} contributors")
+
+                logger.info(f"Successfully generated DPP for {container_id}")
                 
             except Exception as e:
                 logger.error(f"Error generating DPP for {container_id}: {e}", exc_info=True)
@@ -2738,24 +2672,57 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                                         f"📦 Post-commission QR sent to {user_id}: {_qr_sent}"
                                     )
 
-                                    # Also send DPP PDF document
+                                    # Send full DPP package (summary + QR + PDF + buttons)
                                     try:
-                                        from voice.telegram.notifier import send_batch_dpp_pdf
-                                        _pdf_sent = await send_batch_dpp_pdf(
-                                            int(user_id),
-                                            _batch_data.get("batch_id"),
+                                        from voice.telegram.notifier import send_dpp_package
+                                        _dpp_sent = await send_dpp_package(
+                                            chat_id=int(user_id),
+                                            batch_id=_batch_data.get("batch_id"),
                                         )
                                         logger.info(
-                                            f"📄 Post-commission DPP PDF sent to {user_id}: {_pdf_sent}"
+                                            f"📄 Post-commission DPP package sent to {user_id}: {_dpp_sent}"
                                         )
-                                    except Exception as _pdf_err:
+                                    except Exception as _dpp_err:
                                         logger.warning(
-                                            f"DPP PDF send failed (non-critical): {_pdf_err}"
+                                            f"DPP package send failed (non-critical): {_dpp_err}"
                                         )
                             except Exception as _qr_err:
                                 logger.error(
                                     f"Failed to send post-commission QR to {user_id}: {_qr_err}",
                                     exc_info=True,
+                                )
+
+                        # ── Post get_dpp DPP package ──
+                        # When the agent retrieves a DPP, supplement
+                        # the plain-text summary with the rich package
+                        # (formatted message, QR photo, PDF, buttons).
+                        if any(
+                            tc.tool_name == "get_dpp" and tc.success
+                            for tc in agent_result.tool_calls
+                        ):
+                            try:
+                                _dpp_tc = next(
+                                    tc for tc in agent_result.tool_calls
+                                    if tc.tool_name == "get_dpp" and tc.success
+                                )
+                                _bid = (
+                                    _dpp_tc.result_data.get("batch_id")
+                                    if _dpp_tc.result_data else None
+                                )
+                                if _bid:
+                                    from voice.telegram.notifier import send_dpp_package
+                                    await send_dpp_package(
+                                        chat_id=int(user_id),
+                                        batch_id=_bid,
+                                        include_qr=True,
+                                        include_pdf=True,
+                                    )
+                                    logger.info(
+                                        f"📋 Agent get_dpp package sent to {user_id} for {_bid}"
+                                    )
+                            except Exception as _dpp_pkg_err:
+                                logger.warning(
+                                    f"Agent DPP package send failed (non-critical): {_dpp_pkg_err}"
                                 )
 
                 except Exception as agent_err:

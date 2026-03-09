@@ -300,3 +300,226 @@ async def send_batch_dpp_pdf(chat_id: int, batch_id: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to send DPP PDF to {chat_id}: {e}")
         return False
+
+
+# ---------------------------------------------------------------------------
+# Unified DPP Telegram Package
+# ---------------------------------------------------------------------------
+
+def _get_public_base_url() -> str:
+    """Return the public-facing base URL for links shared in Telegram."""
+    import os as _os
+    for key in ("RAILWAY_PUBLIC_DOMAIN", "BASE_URL", "API_BASE_URL", "NGROK_URL"):
+        val = _os.getenv(key, "").strip()
+        if val:
+            return val.rstrip("/") if val.startswith("http") else f"https://{val}"
+    return "http://localhost:8002"
+
+
+async def send_dpp_package(
+    chat_id: int,
+    batch_id: str,
+    *,
+    dpp: Optional[dict] = None,
+    include_pdf: bool = True,
+    include_qr: bool = True,
+) -> bool:
+    """
+    Send an elegant, multi-part DPP delivery to a Telegram chat.
+
+    Sequence:
+      1. Rich HTML summary message with inline buttons (View Passport / Download PDF)
+      2. QR code as a photo (if available)
+      3. PDF document (if requested and generation succeeds)
+
+    This is the single call-site for DPP delivery on Telegram - used by
+    the /dpp command, post-commission flow, and agent get_dpp tool.
+
+    Args:
+        chat_id:      Telegram chat / user ID.
+        batch_id:     The coffee batch identifier.
+        dpp:          Pre-built DPP dict.  If *None*, one is built on the fly.
+        include_pdf:  Whether to attach the PDF document.
+        include_qr:   Whether to send the QR photo.
+
+    Returns:
+        True if the summary message was sent (the primary deliverable).
+    """
+    import httpx
+    import html as _html
+    import json as _json
+    import base64
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not set - cannot send DPP package")
+        return False
+
+    # ── build DPP if not provided ──────────────────────────────────
+    if dpp is None:
+        try:
+            from dpp.dpp_builder import build_dpp
+            dpp = build_dpp(batch_id=batch_id)
+        except Exception as e:
+            logger.error("Cannot build DPP for %s: %s", batch_id, e)
+            return False
+
+    _e = lambda v: _html.escape(str(v)) if v is not None else "N/A"
+
+    # ── extract fields ─────────────────────────────────────────────
+    prod  = dpp.get("productInformation", {})
+    trace = dpp.get("traceability", {})
+    origin = trace.get("origin", {})
+    farmer = origin.get("farmer", {})
+    eudr  = dpp.get("eudrCompliance", {})
+    dd    = dpp.get("dueDiligence", {})
+    bc    = dpp.get("blockchain", {})
+    don   = dpp.get("donAttestation", {})
+    qr    = dpp.get("qrCode", {})
+    events = trace.get("events", [])
+
+    # Compliance badge
+    comp_status = eudr.get("complianceStatus", "UNKNOWN")
+    status_emoji = {
+        "FULLY_VERIFIED": "🟢", "FARM_VERIFIED": "🟡",
+        "SELF_REPORTED": "🟠", "NO_GPS": "🔴",
+    }.get(comp_status, "⚪")
+
+    level = _e(eudr.get("complianceLevel", "Unknown"))
+    anchored = bool(bc.get("transactionHash") or bc.get("anchors"))
+    tx_hash = bc.get("transactionHash") or (
+        bc["anchors"][0].get("transactionHash") if bc.get("anchors") else None
+    )
+
+    # ── format lineage ─────────────────────────────────────────────
+    lineage_lines = []
+    for i, ev in enumerate(events[:6], 1):
+        ts = (ev.get("timestamp") or "")[:10]
+        etype = ev.get("eventType", "Event")
+        biz = ev.get("bizStep", "")
+        lineage_lines.append(f"   {i}. {_e(etype)}" + (f" - {_e(biz)}" if biz else "") + (f"  <i>{_e(ts)}</i>" if ts else ""))
+    lineage_block = "\n".join(lineage_lines) if lineage_lines else "   No events recorded yet."
+
+    # ── DON attestation line ───────────────────────────────────────
+    don_block = ""
+    if don.get("attestationExists"):
+        don_block = (
+            f"\n<b>Chainlink DON</b>\n"
+            f"   Risk: {_e(don.get('riskLabel'))}  "
+            f"{'✅' if don.get('eudrCompliant') else '❌'} EUDR\n"
+        )
+
+    # ── build message ──────────────────────────────────────────────
+    message = (
+        f"📋 <b>Digital Product Passport</b>\n"
+        f"{'━' * 28}\n\n"
+
+        f"<b>Batch</b>   <code>{_e(dpp.get('batchId', batch_id))}</code>\n"
+        f"<b>GTIN</b>    <code>{_e(prod.get('gtin'))}</code>\n\n"
+
+        f"<b>Product</b>\n"
+        f"   {_e(prod.get('productName', 'Coffee'))} - {_e(prod.get('variety'))}\n"
+        f"   {_e(prod.get('processMethod', ''))}  |  {_e(prod.get('quantity'))} {_e(prod.get('unit', 'kg'))}\n\n"
+
+        f"<b>Origin</b>\n"
+        f"   📍 {_e(origin.get('region'))}, {_e(origin.get('country'))}\n"
+        f"   🧑‍🌾 {_e(farmer.get('name', 'Unknown farmer'))}\n"
+        f"   🌿 Farm: {_e(origin.get('farmName', '-'))}\n\n"
+
+        f"<b>EUDR Compliance</b>\n"
+        f"   {status_emoji} {_e(comp_status.replace('_', ' ').title())}  |  Level: {level}\n"
+        f"   {'✅' if dd.get('eudrCompliant') else '❌'} EUDR Compliant   "
+        f"{'✅' if dd.get('allFarmersGeolocated') or (origin.get('latitude') is not None) else '⚠️'} GPS Verified\n"
+        f"{don_block}\n"
+
+        f"<b>Blockchain</b>\n"
+        f"   {'🔗 Anchored' if anchored else '⏳ Pending'}"
+        + (f"\n   <code>{_e(tx_hash)}</code>" if tx_hash else "")
+        + f"\n\n"
+
+        f"<b>Supply Chain</b>\n"
+        f"{lineage_block}\n\n"
+
+        f"{'━' * 28}\n"
+        f"<i>Voice Ledger - Ethiopian Coffee Traceability</i>"
+    )
+
+    base_url = _get_public_base_url()
+    bid_enc = _html.escape(batch_id)
+
+    # ── inline keyboard buttons ────────────────────────────────────
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "🌐 View Passport", "url": f"{base_url}/passport/{bid_enc}"},
+                {"text": "📄 Download PDF", "url": f"{base_url}/api/dpp/batch/{bid_enc}/pdf"},
+            ],
+        ]
+    }
+
+    # ── 1. Send summary message ────────────────────────────────────
+    ok = False
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": message,
+                    "parse_mode": "HTML",
+                    "reply_markup": keyboard,
+                },
+            )
+        ok = resp.status_code == 200
+        if not ok:
+            logger.error("DPP summary send failed: %s %s", resp.status_code, resp.text)
+    except Exception as exc:
+        logger.error("DPP summary send error: %s", exc)
+
+    if not ok:
+        return False
+
+    # ── 2. Send QR code photo (best-effort) ────────────────────────
+    if include_qr:
+        qr_img = qr.get("imageUrl", "")  # base64 data-URL or http URL
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                if qr_img.startswith("data:image"):
+                    # data:image/png;base64,...
+                    raw = base64.b64decode(qr_img.split(",", 1)[1])
+                    await client.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                        data={"chat_id": chat_id, "caption": f"QR - {batch_id}"},
+                        files={"photo": ("qr.png", raw, "image/png")},
+                    )
+                elif qr_img.startswith("http"):
+                    await client.post(
+                        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                        json={"chat_id": chat_id, "photo": qr_img, "caption": f"QR - {batch_id}"},
+                    )
+                else:
+                    logger.debug("No usable QR image for %s", batch_id)
+        except Exception as exc:
+            logger.warning("QR photo send failed (non-critical): %s", exc)
+
+    # ── 3. Send PDF document (best-effort) ─────────────────────────
+    if include_pdf:
+        try:
+            from dpp.dpp_pdf import build_and_render_pdf
+            pdf_bytes = bytes(build_and_render_pdf(batch_id))
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                    data={
+                        "chat_id": chat_id,
+                        "caption": f"📄 DPP - {_e(batch_id)}",
+                        "parse_mode": "HTML",
+                    },
+                    files={"document": (f"DPP_{batch_id}.pdf", pdf_bytes, "application/pdf")},
+                )
+            logger.info("DPP PDF sent to %s for batch %s", chat_id, batch_id)
+        except Exception as exc:
+            logger.warning("PDF send failed (non-critical): %s", exc)
+
+    logger.info("DPP package delivered to %s for batch %s", chat_id, batch_id)
+    return True

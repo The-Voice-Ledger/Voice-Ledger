@@ -543,17 +543,40 @@ def process_voice_command_task(
                                             )
                                             logger.info(f"📦 Post-commission QR sent to {user_id}: {_qr_ok}")
 
-                                            # Also send DPP PDF document
+                                            # Send full DPP package (summary + QR + PDF + buttons)
                                             try:
-                                                from voice.telegram.notifier import send_batch_dpp_pdf
-                                                _pdf_ok = loop.run_until_complete(
-                                                    send_batch_dpp_pdf(int(user_id), _batch_data.get("batch_id"))
+                                                from voice.telegram.notifier import send_dpp_package
+                                                _dpp_ok = loop.run_until_complete(
+                                                    send_dpp_package(int(user_id), _batch_data.get("batch_id"))
                                                 )
-                                                logger.info(f"📄 Post-commission DPP PDF sent to {user_id}: {_pdf_ok}")
-                                            except Exception as _pdf_err:
-                                                logger.warning(f"DPP PDF send failed (non-critical): {_pdf_err}")
+                                                logger.info(f"📄 Post-commission DPP package sent to {user_id}: {_dpp_ok}")
+                                            except Exception as _dpp_err:
+                                                logger.warning(f"DPP package send failed (non-critical): {_dpp_err}")
                                     except Exception as _qr_err:
                                         logger.error(f"Failed to send post-commission QR: {_qr_err}", exc_info=True)
+
+                                # ── Post get_dpp DPP package ──
+                                if any(
+                                    tc.tool_name == "get_dpp" and tc.success
+                                    for tc in agent_result.tool_calls
+                                ):
+                                    try:
+                                        _dpp_tc = next(
+                                            tc for tc in agent_result.tool_calls
+                                            if tc.tool_name == "get_dpp" and tc.success
+                                        )
+                                        _bid = (
+                                            _dpp_tc.result_data.get("batch_id")
+                                            if _dpp_tc.result_data else None
+                                        )
+                                        if _bid:
+                                            from voice.telegram.notifier import send_dpp_package
+                                            _dpp_ok = loop.run_until_complete(
+                                                send_dpp_package(int(user_id), _bid)
+                                            )
+                                            logger.info(f"📋 Agent get_dpp package sent to {user_id} for {_bid}: {_dpp_ok}")
+                                    except Exception as _dpp_pkg_err:
+                                        logger.warning(f"Agent DPP package send failed (non-critical): {_dpp_pkg_err}")
 
                                 pending = asyncio.all_tasks(loop)
                                 if pending:
@@ -915,17 +938,17 @@ def process_voice_command_task(
                                 if success:
                                     logger.info(f"Notification sent successfully to {target_id}")
 
-                                    # Also send DPP PDF document
+                                    # Send full DPP package (summary + QR + PDF + buttons)
                                     try:
-                                        from voice.telegram.notifier import send_batch_dpp_pdf
+                                        from voice.telegram.notifier import send_dpp_package
                                         _bid = db_result.get("batch_id")
                                         if _bid:
-                                            _pdf_ok = loop.run_until_complete(
-                                                send_batch_dpp_pdf(target_id, _bid)
+                                            _dpp_ok = loop.run_until_complete(
+                                                send_dpp_package(target_id, _bid)
                                             )
-                                            logger.info(f"📄 DPP PDF sent to {target_id}: {_pdf_ok}")
-                                    except Exception as _pdf_err:
-                                        logger.warning(f"DPP PDF send failed (non-critical): {_pdf_err}")
+                                            logger.info(f"📄 DPP package sent to {target_id}: {_dpp_ok}")
+                                    except Exception as _dpp_err:
+                                        logger.warning(f"DPP package send failed (non-critical): {_dpp_err}")
                                 else:
                                     logger.error(f"Failed to send notification to {target_id}")
                             finally:
