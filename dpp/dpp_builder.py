@@ -78,7 +78,10 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
             compliance_status = "FARM_VERIFIED"  # Farm GPS only
             compliance_level = "Silver"
     elif has_self_reported_gps:
-        compliance_status = "SELF_REPORTED"  # GPS but no photo proof
+        if farmer.gps_verified_at:
+            compliance_status = "DEVICE_GPS"  # Telegram location share (device GPS)
+        else:
+            compliance_status = "SELF_REPORTED"  # Truly manual / self-reported
         compliance_level = "Bronze"
     else:
         compliance_status = "NO_GPS"  # Missing geolocation
@@ -114,13 +117,16 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
             }
         }
     elif has_self_reported_gps:
+        # Determine actual GPS source - Telegram location share vs manual entry
+        gps_source = "Telegram Location Share" if farmer.gps_verified_at else "Self-Reported"
         eudr_section["geolocation"]["farmLocation"] = {
-            "source": "Self-Reported",
+            "source": gps_source,
             "coordinates": {
                 "latitude": farmer.latitude,
                 "longitude": farmer.longitude
             },
-            "warning": "Not cryptographically verified. Upload farm photo for full compliance."
+            "verifiedAt": farmer.gps_verified_at.isoformat() if farmer.gps_verified_at else None,
+            "warning": "Not cryptographically verified via photo EXIF. Upload farm photo for full compliance."
         }
     else:
         eudr_section["geolocation"]["farmLocation"] = {
@@ -225,6 +231,14 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
                     "severity": deforestation_result.risk_level,
                     "mitigation": deforestation_result.details.get("recommendation")
                 })
+                # ── Downgrade compliance ──
+                # A failed deforestation check overrides any GPS-based
+                # tier.  EUDR Article 10 requires zero post-2020
+                # deforestation regardless of geolocation quality.
+                compliance_level = "Non-Compliant"
+                compliance_status = "DEFORESTATION_RISK"
+                eudr_section["complianceLevel"] = compliance_level
+                eudr_section["complianceStatus"] = compliance_status
             else:
                 eudr_section["riskAssessment"]["riskFactors"].append({
                     "factor": "No deforestation detected after Dec 31, 2020",
@@ -284,10 +298,17 @@ def build_eudr_compliance_section(batch: CoffeeBatch, db: Session) -> Dict[str, 
         })
     
     # Add due diligence statement
+    gps_desc = (
+        "has been cryptographically verified via photo EXIF metadata"
+        if has_registration_gps
+        else "was provided via Telegram location sharing (not photo-verified)"
+        if farmer.gps_verified_at
+        else "is self-reported and requires verification"
+    )
     eudr_section["dueDiligenceStatement"] = {
         "operator": "Voice Ledger Supply Chain Platform",
         "statement": f"This batch has undergone GPS verification with compliance level: {compliance_level}. "
-                    f"Geolocation data {'has been cryptographically verified via photo EXIF metadata' if has_registration_gps else 'is self-reported and requires photo verification'}.",
+                    f"Geolocation data {gps_desc}.",
         "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
         "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
         "nextReviewDate": (datetime.now(timezone.utc).date().replace(year=datetime.now(timezone.utc).year + 1)).isoformat()
@@ -440,6 +461,13 @@ def load_batch_data(batch_id: str):
         _ = batch.process_method
         _ = batch.farm_name
         _ = batch.qr_code_base64
+        # Quality assessment fields
+        _ = batch.cupping_score
+        _ = batch.moisture_pct
+        _ = batch.screen_size
+        _ = batch.defect_count
+        _ = batch.defect_category
+        _ = batch.sensory_notes
         
         # Expunge all related objects from session so they can be used outside
         db.expunge_all()
@@ -495,6 +523,26 @@ def build_dpp(
         "processMethod": process_method or batch.process_method,
         "gtin": batch.gtin
     }
+    
+    # Build quality assessment section (populated during cooperative verification)
+    quality_assessment = {
+        "status": "ASSESSED" if batch.cupping_score is not None else "PENDING_VERIFICATION",
+    }
+    if batch.cupping_score is not None:
+        quality_assessment["cuppingScore"] = batch.cupping_score
+        quality_assessment["scaProtocol"] = "SCA Cupping Protocol (0-100)"
+    if batch.moisture_pct is not None:
+        quality_assessment["moisturePct"] = batch.moisture_pct
+    if batch.screen_size:
+        quality_assessment["screenSize"] = batch.screen_size
+    if batch.defect_count is not None:
+        quality_assessment["defectCount"] = batch.defect_count
+        quality_assessment["defectCategory"] = batch.defect_category
+    if batch.sensory_notes:
+        quality_assessment["sensoryNotes"] = batch.sensory_notes
+    if batch.verified_at:
+        quality_assessment["assessedAt"] = batch.verified_at.isoformat()
+        quality_assessment["assessedBy"] = batch.verified_by_did
     
     # Build traceability section from database
     traceability = {
@@ -651,6 +699,7 @@ def build_dpp(
         "productInformation": product_info,
         "traceability": traceability,
         "sustainability": sustainability,
+        "qualityAssessment": quality_assessment,
         "dueDiligence": due_diligence,
         "eudrCompliance": eudr_compliance,
         "donAttestation": don_attestation,  # Chainlink DON-attested deforestation

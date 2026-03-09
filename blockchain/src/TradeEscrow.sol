@@ -80,11 +80,11 @@ contract TradeEscrow is ERC1155Holder {
     // Enums
     // ─────────────────────────────────────────────
     enum TradeStatus {
-        None,           // 0 — does not exist
-        Active,         // 1 — advance disbursed, token in escrow, awaiting delivery
-        Settled,        // 2 — buyer paid, token released, pool repaid
-        Defaulted,      // 3 — buyer failed to pay within grace period
-        Cancelled       // 4 — cancelled before delivery (token returned to seller)
+        None,           // 0 - does not exist
+        Active,         // 1 - advance disbursed, token in escrow, awaiting delivery
+        Settled,        // 2 - buyer paid, token released, pool repaid
+        Defaulted,      // 3 - buyer failed to pay within grace period
+        Cancelled       // 4 - cancelled before delivery (token returned to seller)
     }
 
     // ─────────────────────────────────────────────
@@ -443,7 +443,7 @@ contract TradeEscrow is ERC1155Holder {
     }
 
     // ─────────────────────────────────────────────
-    // Cancel (before delivery, owner only — emergency)
+    // Cancel (before delivery, owner only - emergency)
     // ─────────────────────────────────────────────
 
     /**

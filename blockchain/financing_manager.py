@@ -91,7 +91,7 @@ class FinancingManager:
         )
 
         logger.info(
-            "FinancingManager initialised — pool=%s escrow=%s chain=%d",
+            "FinancingManager initialised - pool=%s escrow=%s chain=%d",
             self.pool_address,
             self.escrow_address,
             self.w3.eth.chain_id,
@@ -131,7 +131,7 @@ class FinancingManager:
             return None
 
     # ─────────────────────────────────────────
-    # Pool — read
+    # Pool - read
     # ─────────────────────────────────────────
 
     def pool_stats(self) -> Dict[str, Any]:
@@ -167,7 +167,7 @@ class FinancingManager:
         }
 
     # ─────────────────────────────────────────
-    # Pool — write (investor actions)
+    # Pool - write (investor actions)
     # ─────────────────────────────────────────
 
     def deposit(self, amount_usdc: float, receiver: str) -> Optional[str]:
@@ -197,7 +197,7 @@ class FinancingManager:
         )
 
     # ─────────────────────────────────────────
-    # Escrow — read
+    # Escrow - read
     # ─────────────────────────────────────────
 
     def get_trade(self, trade_id: int) -> Optional[Dict[str, Any]]:
@@ -230,7 +230,7 @@ class FinancingManager:
         return self.escrow.functions.isTokenPledged(token_id).call()
 
     # ─────────────────────────────────────────
-    # Escrow — write
+    # Escrow - write
     # ─────────────────────────────────────────
 
     def request_advance(
@@ -288,7 +288,7 @@ class FinancingManager:
         )
 
     # ─────────────────────────────────────────
-    # Fee distributor — read
+    # Fee distributor - read
     # ─────────────────────────────────────────
 
     def fee_stats(self) -> Dict[str, Any]:

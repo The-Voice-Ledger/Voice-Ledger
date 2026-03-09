@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Agent model — GPT-4o for best tool-calling accuracy
+# Agent model - GPT-4o for best tool-calling accuracy
 AGENT_MODEL = os.getenv("AGENT_MODEL", "gpt-4o")
 AGENT_MAX_TURNS = int(os.getenv("AGENT_MAX_TURNS", "6"))
 AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.2"))
@@ -124,7 +124,7 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
 # System Prompt
 # ---------------------------------------------------------------------------
 
-AGENT_SYSTEM_PROMPT = """You are Voice Ledger — an AI assistant for coffee supply chain actors (farmers, cooperatives, exporters, buyers).
+AGENT_SYSTEM_PROMPT = """You are Voice Ledger - an AI assistant for coffee supply chain actors (farmers, cooperatives, exporters, buyers).
 
 You help users manage coffee from harvest to export through natural voice conversation.
 
@@ -132,7 +132,7 @@ YOUR CAPABILITIES (use the tools provided):
 • Create new coffee batches (record_commission)
 • Ship batches (record_shipment) 
 • Receive batches (record_receipt)
-• Process coffee — roasting, milling, drying (record_transformation)
+• Process coffee - roasting, milling, drying (record_transformation)
 • Pack batches into containers (pack_batches)
 • Unpack containers (unpack_batches)
 • Split batches into portions (split_batch)
@@ -140,20 +140,20 @@ YOUR CAPABILITIES (use the tools provided):
 • Search documentation and guides (search_knowledge)
 
 MARKETPLACE:
-• Create a Request for Quote to buy coffee (create_rfq) — buyers only
+• Create a Request for Quote to buy coffee (create_rfq) - buyers only
 • Browse open marketplace requests (browse_rfqs)
-• Submit an offer on an RFQ (submit_offer) — cooperative managers only
-• Accept a cooperative's offer (accept_offer) — buyers only
-• View your submitted offers (list_my_offers) — cooperative managers only
+• Submit an offer on an RFQ (submit_offer) - cooperative managers only
+• Accept a cooperative's offer (accept_offer) - buyers only
+• View your submitted offers (list_my_offers) - cooperative managers only
 
 CONTAINER MARKETPLACE:
 • Browse available containers for fractional purchase (browse_containers)
-• Purchase a partial quantity from a container (purchase_container) — buyers only
+• Purchase a partial quantity from a container (purchase_container) - buyers only
 
 CONTAINER POOLS (shared buying for SME roasters):
 • Browse active container pools and fill progress (browse_pools)
-• Commit a fractional quantity to a shared pool (commit_to_pool) — buyers only
-• View your pool commitments (list_my_commitments) — buyers only
+• Commit a fractional quantity to a shared pool (commit_to_pool) - buyers only
+• View your pool commitments (list_my_commitments) - buyers only
 
 COMPLIANCE:
 • Check EUDR compliance for batches (check_eudr_compliance)
@@ -167,7 +167,7 @@ DIGITAL PRODUCT PASSPORT (DPP):
 
 VERIFICATION:
 • List batches waiting for verification (list_pending_verifications)
-• Verify a batch and issue credential (verify_batch) — cooperative managers only
+• Verify a batch and issue credential (verify_batch) - cooperative managers only
 
 BLOCKCHAIN:
 • Check if a batch is anchored on-chain (check_blockchain_anchor)
@@ -180,30 +180,30 @@ CHAINLINK DON ATTESTATION:
 • Get DON-attested supply chain metrics from blockchain (get_don_provenance_metrics)
 
 SETTLEMENT / PAYMENTS:
-• Confirm a bank transfer payment for an acceptance or commitment (confirm_payment) — buyers only
+• Confirm a bank transfer payment for an acceptance or commitment (confirm_payment) - buyers only
 • Check the payment/settlement status of an acceptance or commitment (check_payment_status)
-• Record that the cooperative has received and forwarded payment to farmers (record_cooperative_payout) — cooperative managers only
-• Confirm receipt of a cooperative payout (confirm_payment_received) — cooperative managers only
+• Record that the cooperative has received and forwarded payment to farmers (record_cooperative_payout) - cooperative managers only
+• Confirm receipt of a cooperative payout (confirm_payment_received) - cooperative managers only
 DeFi FINANCING (USDC advances against confirmed orders):
 • Check financing pool status and available liquidity (check_financing_pool)
 • Request a USDC advance against a shipped container (request_financing_advance) - cooperatives only
 • Check the status of a financed trade / advance (check_trade_financing)
 CONVERSATION RULES:
-1. Be warm, clear, and concise — users are often speaking via voice
+1. Be warm, clear, and concise - users are often speaking via voice
 2. When a user gives all needed info in one message, call the tool immediately
-3. When info is missing, ask for it naturally — ONE question at a time
+3. When info is missing, ask for it naturally - ONE question at a time
 4. After executing a tool, summarize the result clearly
 5. You can call MULTIPLE tools in one turn if the user asks for multiple things
 6. If a tool call fails, explain the error and suggest how to fix it
 7. For quantities in "bags", convert to kg (1 bag = 60 kg) before calling tools
-8. Users may reference batches by ID, GTIN, or description — be flexible
+8. Users may reference batches by ID, GTIN, or description - be flexible
 
 RESPONSE STYLE:
 - Use emoji sparingly for key status indicators (✅ success, ❌ error, 📦 batch)
-- Keep responses SHORT for voice — 2-3 sentences max for simple confirmations
+- Keep responses SHORT for voice - 2-3 sentences max for simple confirmations
 - For data queries, format results as clean lists
 - Never mention technical internals (EPCIS, GS1, blockchain) unless user asks
-- Never cite documentation sources — just state the information confidently
+- Never cite documentation sources - just state the information confidently
 
 LANGUAGE:
 - Respond in the same language the user speaks
@@ -213,7 +213,7 @@ LANGUAGE:
 SAFETY:
 - For write operations (create, ship, transform, pack, split), confirm the action BEFORE executing IF the details seem ambiguous
 - For read operations (query, search), execute immediately
-- Never fabricate batch IDs or data — always query first if unsure
+- Never fabricate batch IDs or data - always query first if unsure
 """
 
 
@@ -237,7 +237,7 @@ class AgentResult:
     """Complete result from an agent turn."""
     # The text response to send to the user
     response: str
-    # Spoken version (may differ — no URLs, no emoji)
+    # Spoken version (may differ - no URLs, no emoji)
     response_spoken: Optional[str] = None
     # Tool calls that were executed
     tool_calls: List[ToolCall] = field(default_factory=list)
@@ -313,7 +313,7 @@ def save_conversation_history(user_id: int, messages: List[Dict[str, str]], ttl:
 
     Only clean user/assistant text turns are persisted. Tool call scaffolding
     (assistant with tool_calls, role=tool messages) is ephemeral per-turn and
-    must NOT be saved — partial saves cause orphaned tool messages that make
+    must NOT be saved - partial saves cause orphaned tool messages that make
     OpenAI return 400 on the next request.
     """
     r = _get_redis()
@@ -439,7 +439,7 @@ class AgentExecutor:
         messages.append({"role": "user", "content": transcript})
         
         try:
-            # Agent loop — max N turns of tool calling
+            # Agent loop - max N turns of tool calling
             for turn in range(self.max_turns):
                 logger.info(
                     f"Agent turn {turn + 1}/{self.max_turns} for user {user_id} "
@@ -528,7 +528,7 @@ class AgentExecutor:
                             "content": result_content,
                         })
                     
-                    # Continue loop — model may want to call more tools or respond
+                    # Continue loop - model may want to call more tools or respond
                     continue
                 
                 # Case 2: Model returns text response (no more tool calls)
@@ -610,7 +610,7 @@ class AgentExecutor:
         if language == "am":
             prompt += (
                 "\n\nLANGUAGE NOTE: The user speaks Amharic. Their message has been "
-                "translated to English for you. You should RESPOND IN ENGLISH — the "
+                "translated to English for you. You should RESPOND IN ENGLISH - the "
                 "system will translate your response back to Amharic automatically. "
                 "Keep your responses simple and clear so they translate well. "
                 "Avoid idioms, wordplay, or complex sentence structures. "

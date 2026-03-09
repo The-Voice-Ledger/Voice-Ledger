@@ -148,7 +148,7 @@ class CoffeeBatchTokenManager:
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
-            logger.info("Mint tx sent: %s — waiting for confirmation", tx_hash.hex())
+            logger.info("Mint tx sent: %s - waiting for confirmation", tx_hash.hex())
             
             # Wait for receipt (30 second timeout)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=30)
@@ -257,7 +257,7 @@ class CoffeeBatchTokenManager:
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
-            logger.info("Container mint tx sent: %s — burning %d child tokens", tx_hash.hex(), len(child_token_ids))
+            logger.info("Container mint tx sent: %s - burning %d child tokens", tx_hash.hex(), len(child_token_ids))
             
             # Wait for receipt (60 second timeout for more complex tx)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chainlink CRE Client — Python interface for the Voice Ledger CRE workflow.
+Chainlink CRE Client - Python interface for the Voice Ledger CRE workflow.
 
 Provides three capabilities:
 
@@ -11,15 +11,15 @@ Provides three capabilities:
 In production the HTTP trigger request goes to the DON gateway URL.
 In simulation mode (no DON gateway set) the client calls the local
 provenance API, ABI-encodes the result, and writes it directly to
-ProvenanceDataReceiver as the trusted forwarder — exercising the full
+ProvenanceDataReceiver as the trusted forwarder - exercising the full
 smart-contract path without requiring a live DON.
 
 Environment variables:
-    BASE_SEPOLIA_RPC_URL           — RPC endpoint (required)
-    PRIVATE_KEY_SEP                — Forwarder wallet private key (required)
-    PROVENANCE_RECEIVER_ADDRESS    — ProvenanceDataReceiver contract address
-    CRE_DON_GATEWAY_URL            — DON HTTP trigger gateway (optional)
-    CRE_API_BASE_URL               — Voice Ledger provenance API base URL
+    BASE_SEPOLIA_RPC_URL           - RPC endpoint (required)
+    PRIVATE_KEY_SEP                - Forwarder wallet private key (required)
+    PROVENANCE_RECEIVER_ADDRESS    - ProvenanceDataReceiver contract address
+    CRE_DON_GATEWAY_URL            - DON HTTP trigger gateway (optional)
+    CRE_API_BASE_URL               - Voice Ledger provenance API base URL
 
 Created: February 2026
 """
@@ -152,7 +152,7 @@ class CREClient:
             self.contract = None
             self._deployed = False
             logger.warning(
-                "ProvenanceDataReceiver not deployed — reads will return "
+                "ProvenanceDataReceiver not deployed - reads will return "
                 "defaults, simulation writes disabled"
             )
 
@@ -264,7 +264,7 @@ class CREClient:
         In production: POSTs to the CRE DON gateway (HTTP trigger).
         In simulation: Calls the local provenance API, ABI-encodes the
         result, and submits it to ProvenanceDataReceiver.onReport()
-        as the trusted forwarder — exercising the full contract path.
+        as the trusted forwarder - exercising the full contract path.
 
         Args:
             farm_id: Farmer identifier
@@ -288,7 +288,7 @@ class CREClient:
             resp.raise_for_status()
             result = resp.json()
             logger.info(
-                "DON attestation requested for %s — %s", farm_id, result
+                "DON attestation requested for %s - %s", farm_id, result
             )
             return {
                 "mode": "don",
@@ -320,9 +320,9 @@ class CREClient:
             resp.raise_for_status()
             data = resp.json()
         except requests.exceptions.ConnectionError:
-            # API not running — generate mock data from database
+            # API not running - generate mock data from database
             logger.warning(
-                "Provenance API not reachable — using database fallback"
+                "Provenance API not reachable - using database fallback"
             )
             data = self._deforestation_from_database(farm_id)
             if not data:
@@ -378,7 +378,7 @@ class CREClient:
             tx_hex = tx_hash.hex() if isinstance(tx_hash, bytes) else tx_hash
 
             logger.info(
-                "Simulation attestation written for %s — tx: %s",
+                "Simulation attestation written for %s - tx: %s",
                 farm_id, tx_hex,
             )
 
@@ -512,7 +512,7 @@ def read_metrics() -> ProvenanceMetrics:
 
 
 if __name__ == "__main__":
-    print("Chainlink CRE Client — Voice Ledger")
+    print("Chainlink CRE Client - Voice Ledger")
     print("=" * 50)
 
     try:

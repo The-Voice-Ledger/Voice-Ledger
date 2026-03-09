@@ -8,7 +8,7 @@ import {ProvenanceDataReceiver} from "../src/ProvenanceDataReceiver.sol";
 /**
  * @title  DeployProvenanceReceiver
  * @notice Standalone deployment for the CRE DON report receiver.
- * @dev    Deploys only ProvenanceDataReceiver — use this when the other
+ * @dev    Deploys only ProvenanceDataReceiver - use this when the other
  *         Voice Ledger contracts are already live and unchanged.
  *
  *  Usage (Base Sepolia):

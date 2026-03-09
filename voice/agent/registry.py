@@ -30,7 +30,7 @@ class ToolRegistry:
     
     def _register_defaults(self):
         """Register the built-in supply chain tools."""
-        # Write tools — delegate to command_integration.py handlers
+        # Write tools - delegate to command_integration.py handlers
         self._tools["record_commission"] = self._wrap_commission
         self._tools["record_shipment"] = self._wrap_shipment
         self._tools["record_receipt"] = self._wrap_receipt
@@ -39,7 +39,7 @@ class ToolRegistry:
         self._tools["unpack_batches"] = self._wrap_unpack
         self._tools["split_batch"] = self._wrap_split
         
-        # Read tools — new capabilities the old pipeline didn't have
+        # Read tools - new capabilities the old pipeline didn't have
         self._tools["query_batches"] = self._query_batches
         self._tools["search_knowledge"] = self._search_knowledge
         
@@ -1186,7 +1186,7 @@ class ToolRegistry:
 
         # ── Post-commission CRE hook ──
         # If the farmer has GPS coords, automatically request a DON
-        # deforestation attestation. Best-effort — never blocks commission.
+        # deforestation attestation. Best-effort - never blocks commission.
         try:
             self._auto_request_don_attestation(db, user_id, data)
         except Exception as e:
@@ -1280,7 +1280,7 @@ class ToolRegistry:
         return handle_split_batch(db, entities, user_id=user_id, user_did=user_did)
     
     # ------------------------------------------------------------------
-    # Read tool implementations (new — not in old pipeline)
+    # Read tool implementations (new - not in old pipeline)
     # ------------------------------------------------------------------
     
     def _query_batches(
@@ -1815,6 +1815,14 @@ class ToolRegistry:
         dd = dpp.get("dueDiligence", {})
         bc = dpp.get("blockchain", {})
         don = dpp.get("donAttestation", {})
+        eudr = dpp.get("eudrCompliance", {})
+        geo_coords = (
+            eudr.get("geolocation", {})
+            .get("farmLocation", {})
+            .get("coordinates", {})
+        )
+        farm_lat = geo_coords.get("latitude")
+        farm_lon = geo_coords.get("longitude")
 
         don_line = ""
         if don.get("attestationExists"):
@@ -1847,9 +1855,9 @@ class ToolRegistry:
                 "farmer_name": origin.get("farmer", {}).get("name"),
                 "cooperative": dpp.get("cooperative") or self._get_batch_cooperative(batch_id, db),
                 "certifications": [c.get("type") for c in dpp.get("sustainability", {}).get("certifications", [])],
-                "latitude": origin.get("latitude"),
-                "longitude": origin.get("longitude"),
-                "gps_coordinates": f"{origin.get('latitude', '?')}, {origin.get('longitude', '?')}",
+                "latitude": farm_lat,
+                "longitude": farm_lon,
+                "gps_coordinates": f"{farm_lat or '?'}, {farm_lon or '?'}",
                 "eudr_compliant": dd.get("eudrCompliant"),
                 "deforestation_risk": dd.get("riskAssessment", {}).get("deforestationRisk"),
                 "blockchain_anchored": bc.get("anchors") and len(bc.get("anchors", [])) > 0,
@@ -1937,7 +1945,7 @@ class ToolRegistry:
                 {"error": str(e)},
             )
 
-        # Extract contributor data — recursive DPP has 'contributors' not 'chainOfCustody'
+        # Extract contributor data - recursive DPP has 'contributors' not 'chainOfCustody'
         contributors = lineage.get("traceability", {}).get("contributors", [])
         trace_method = lineage.get("traceability", {}).get("traceMethod", "")
         product_info = lineage.get("productInformation", {})
@@ -2094,6 +2102,20 @@ class ToolRegistry:
         batch.verifying_organization_id = user.organization_id
         batch.verified_at = datetime.utcnow()
         batch.verification_used = True
+
+        # Persist quality assessment data if provided
+        if args.get("cupping_score") is not None:
+            batch.cupping_score = float(args["cupping_score"])
+        if args.get("moisture_pct") is not None:
+            batch.moisture_pct = float(args["moisture_pct"])
+        if args.get("screen_size"):
+            batch.screen_size = str(args["screen_size"])
+        if args.get("defect_count") is not None:
+            batch.defect_count = int(args["defect_count"])
+        if args.get("defect_category"):
+            batch.defect_category = str(args["defect_category"])
+        if args.get("sensory_notes"):
+            batch.sensory_notes = args["sensory_notes"]
 
         # Try to issue verification credential
         credential_issued = False
@@ -2271,7 +2293,7 @@ class ToolRegistry:
 
         if not on_chain:
             return (
-                f"Batch {batch.batch_id} is not anchored on-chain yet — "
+                f"Batch {batch.batch_id} is not anchored on-chain yet - "
                 "cannot verify hash integrity.",
                 {"batch_id": batch.batch_id, "anchored": False, "verified": None},
             )
@@ -2286,7 +2308,7 @@ class ToolRegistry:
 
         if match:
             return (
-                f"✅ Batch {batch.batch_id} data integrity verified — "
+                f"✅ Batch {batch.batch_id} data integrity verified - "
                 "hash matches blockchain record. No tampering detected.",
                 {
                     "batch_id": batch.batch_id,
@@ -2297,7 +2319,7 @@ class ToolRegistry:
             )
         else:
             return (
-                f"⚠️ Batch {batch.batch_id} hash MISMATCH — data may have "
+                f"⚠️ Batch {batch.batch_id} hash MISMATCH - data may have "
                 "been modified since it was anchored on-chain.",
                 {
                     "batch_id": batch.batch_id,
@@ -2350,7 +2372,7 @@ class ToolRegistry:
             return (
                 f"📋 Deforestation check completed for farm {farm_id} "
                 f"({'✅ EUDR compliant' if compliant else '❌ Not compliant'}). "
-                f"Note: contract not deployed — result not written on-chain.",
+                f"Note: contract not deployed - result not written on-chain.",
                 result,
             )
         else:
@@ -2463,7 +2485,7 @@ class ToolRegistry:
         farmer = db.query(FarmerIdentity).filter_by(did=user.did).first()
         if not farmer or not farmer.latitude or not farmer.longitude:
             logger.debug(
-                "Skipping CRE auto-attestation — farmer %s has no GPS",
+                "Skipping CRE auto-attestation - farmer %s has no GPS",
                 farmer.farmer_id if farmer else "?",
             )
             return

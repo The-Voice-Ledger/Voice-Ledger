@@ -234,7 +234,7 @@ def validate_eudr_compliance(
 
     if issues:
         return False, (
-            "EUDR compliance issues found — "
+            "EUDR compliance issues found - "
             + "; ".join(issues)
             + ". (EU Regulation 2023/1115 Articles 9 & 10)"
         )

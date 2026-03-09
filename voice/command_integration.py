@@ -7,9 +7,12 @@ It handles entity validation, required field generation, and CRUD execution.
 
 import sys
 import os
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -349,6 +352,43 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
         # NOTE: Token minting happens AFTER cooperative verification
         # See voice/telegram/verification_handler.py::_process_verification()
         # This prevents unverified batches from getting on-chain representation
+        
+        # ── Early deforestation check + DON attestation ──────────────
+        # Run GFW satellite check NOW so the DPP has deforestation data
+        # from creation.  Write result on-chain via CRE client so the
+        # DON attestation section is populated before verification.
+        try:
+            if farmer and (farmer.latitude or farmer.photo_latitude):
+                lat = float(farmer.photo_latitude or farmer.latitude)
+                lon = float(farmer.photo_longitude or farmer.longitude)
+                from voice.verification.deforestation_checker import DeforestationChecker
+                checker = DeforestationChecker()
+                defo = checker.check_deforestation(lat, lon, radius_meters=1000)
+                # Store in farmer record
+                farmer.deforestation_checked_at = defo.check_date
+                farmer.deforestation_risk = defo.risk_level
+                farmer.deforestation_compliant = defo.compliant
+                farmer.tree_cover_loss_hectares = defo.tree_cover_loss_hectares
+                farmer.deforestation_data_source = defo.data_source
+                farmer.deforestation_confidence = defo.confidence_score
+                farmer.deforestation_details = defo.details
+                db.commit()
+                logger.info(
+                    "Deforestation check at commission: %s risk, %.2f ha loss",
+                    defo.risk_level, defo.tree_cover_loss_hectares,
+                )
+                # Write DON attestation on-chain
+                try:
+                    from chainlink.cre_client import get_cre_client
+                    cre = get_cre_client()
+                    farm_id = farmer.farmer_id or f"FARMER-{farmer.id}"
+                    if cre._deployed:
+                        don_result = cre.request_deforestation_attestation(farm_id)
+                        logger.info("DON attestation written for %s: %s", farm_id, don_result.get("status"))
+                except Exception as don_err:
+                    logger.warning("DON attestation write failed (non-critical): %s", don_err)
+        except Exception as defo_err:
+            logger.warning("Deforestation check at commission failed (non-critical): %s", defo_err)
         
         # Convert to dict for JSON response
         result = {

@@ -256,7 +256,7 @@ if MINIAPP_AVAILABLE:
     app.include_router(admin_miniapp_router)
     print("✅ Mini app endpoints registered at /api/miniapp/*, /miniapps/*, /api/marketplace/*, /api/admin/*")
 
-# Include CRE Provenance API router (Lab 29 — Chainlink DON data endpoints)
+# Include CRE Provenance API router (Lab 29 - Chainlink DON data endpoints)
 try:
     from chainlink.api.provenance_api import provenance_router
     app.include_router(provenance_router)

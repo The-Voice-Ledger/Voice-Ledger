@@ -1,5 +1,5 @@
 /**
- * Voice Ledger Mini-App — Shared Tab Bar
+ * Voice Ledger Mini-App - Shared Tab Bar
  *
  * Usage:  <script src="/miniapps/shared/tab-bar.js"></script>
  * Then call:  vlTabBar('home')      // highlights Home

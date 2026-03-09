@@ -411,7 +411,7 @@ async def marketplace_list_rfqs(
                 results.append({
                     "id": rfq.id,
                     "rfq_number": rfq.rfq_number,
-                    "title": f"{rfq.variety or 'Coffee'} — {rfq.quantity_kg} kg",
+                    "title": f"{rfq.variety or 'Coffee'} - {rfq.quantity_kg} kg",
                     "coffee_type": rfq.variety or "Arabica",
                     "buyer_name": buyer_name,
                     "buyer": buyer_name,
@@ -455,7 +455,7 @@ async def marketplace_my_offers(
                     "id": o.id,
                     "offer_number": o.offer_number,
                     "rfq_id": o.rfq_id,
-                    "rfq_title": f"{rfq.variety or 'Coffee'} — {rfq.quantity_kg} kg" if rfq else f"RFQ #{o.rfq_id}",
+                    "rfq_title": f"{rfq.variety or 'Coffee'} - {rfq.quantity_kg} kg" if rfq else f"RFQ #{o.rfq_id}",
                     "price": float(o.price_per_kg) if o.price_per_kg else None,
                     "quantity": float(o.quantity_offered_kg) if o.quantity_offered_kg else None,
                     "status": (o.status or "pending").lower(),

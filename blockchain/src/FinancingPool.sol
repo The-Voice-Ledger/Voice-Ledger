@@ -188,7 +188,7 @@ contract FinancingPool is ERC4626 {
      * @param  fee       Fee portion (recorded for analytics; not transferred here)
      */
     function returnFunds(uint256 tradeId, uint256 principal, uint256 fee) external onlyEscrow {
-        // Pull principal from escrow — reverts if escrow didn't approve
+        // Pull principal from escrow - reverts if escrow didn't approve
         IERC20(asset()).safeTransferFrom(msg.sender, address(this), principal);
 
         // Reduce outstanding advances
@@ -199,7 +199,7 @@ contract FinancingPool is ERC4626 {
     }
 
     /**
-     * @notice Write off a defaulted advance — reduces totalAdvanced so the
+     * @notice Write off a defaulted advance - reduces totalAdvanced so the
      *         pool's totalAssets accurately reflects the loss.
      * @dev    Only callable by the authorised TradeEscrow on markDefault().
      * @param  tradeId   Defaulted trade identifier

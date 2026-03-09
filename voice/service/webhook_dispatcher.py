@@ -170,7 +170,7 @@ async def dispatch_webhook(event_type: str, payload: Dict[str, Any]) -> int:
 
     Args:
         event_type: One of VALID_EVENTS (e.g. "PREPARING_SHIPMENT")
-        payload: Arbitrary dict — will include {"event": event_type, ...}
+        payload: Arbitrary dict - will include {"event": event_type, ...}
 
     Returns:
         Number of webhooks that were dispatched to.
@@ -186,7 +186,7 @@ async def dispatch_webhook(event_type: str, payload: Dict[str, Any]) -> int:
 
     # Fire all deliveries concurrently (non-blocking)
     tasks = [asyncio.create_task(_deliver(wh, payload)) for wh in targets]
-    # Don't await — let them run in the background
+    # Don't await - let them run in the background
     for t in tasks:
         t.add_done_callback(lambda _t: None)  # suppress unhandled exception warnings
 
@@ -202,9 +202,9 @@ def dispatch_webhook_sync(event_type: str, payload: Dict[str, Any]) -> int:
     """
     try:
         loop = asyncio.get_running_loop()
-        # We're inside an async context — schedule it
+        # We're inside an async context - schedule it
         loop.create_task(dispatch_webhook(event_type, payload))
         return -1  # can't know count synchronously
     except RuntimeError:
-        # No running event loop — create one
+        # No running event loop - create one
         return asyncio.run(dispatch_webhook(event_type, payload))

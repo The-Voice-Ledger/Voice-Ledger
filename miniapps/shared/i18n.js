@@ -1,5 +1,5 @@
 /**
- * Voice Ledger Mini-App — i18n (English + Amharic)
+ * Voice Ledger Mini-App - i18n (English + Amharic)
  *
  * Usage:
  *   <script src="/miniapps/shared/i18n.js"></script>

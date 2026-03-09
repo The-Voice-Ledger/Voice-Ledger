@@ -89,7 +89,7 @@ def run():
             print(f"  ✅ {table}.{col} ({sql_type})")
             added += 1
 
-    print(f"\nDone — {added} added, {skipped} skipped.")
+    print(f"\nDone - {added} added, {skipped} skipped.")
 
 
 if __name__ == "__main__":

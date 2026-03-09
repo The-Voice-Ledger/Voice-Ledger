@@ -282,7 +282,7 @@ class VoiceUploadResponse(BaseModel):
     workflow: Optional[Dict[str, Any]] = None  # Workflow state info
     session_id: Optional[str] = None  # Workflow session ID
     workflow_completed: bool = False  # True when workflow finishes
-    # Observability — fallback visibility
+    # Observability - fallback visibility
     response_source: Optional[str] = None  # "agent" | "fallback_nlu" | "fallback_failed"
     agent_error: Optional[str] = None  # Error string when agent fails
     fallback_error: Optional[str] = None  # Error string when fallback also fails
@@ -486,7 +486,7 @@ async def upload_voice(
                     logger.warning(f"⚠️ FALLBACK ACTIVE for voice from user {user_id}: {type(agent_err).__name__}")
 
             # =================================================================
-            # LEGACY PATH — conversational AI (fallback for anonymous or
+            # LEGACY PATH - conversational AI (fallback for anonymous or
             # when AGENT_ENABLED=false or agent fails/returns no response)
             # =================================================================
             if not agent_handled:
@@ -603,7 +603,7 @@ async def upload_voice(
             "needs_clarification": not ready_to_execute,
             "needs_auth": conv_result.get('needs_auth', False),
             "telegram_bot_url": conv_result.get('telegram_bot_url'),
-            # Observability — fallback visibility
+            # Observability - fallback visibility
             "response_source": conv_result.get('response_source'),
             "agent_error": conv_result.get('agent_error'),
             "fallback_error": conv_result.get('fallback_error'),

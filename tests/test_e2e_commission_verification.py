@@ -89,7 +89,7 @@ def test_commission_flow():
         print(f"✓ Using user: {user.telegram_username or user.telegram_first_name}")
         print(f"  DID: {user.did[:30]}...")
         
-        # Ensure farmer identity exists (production gap — see FARMER-IDENTITY-GAP)
+        # Ensure farmer identity exists (production gap - see FARMER-IDENTITY-GAP)
         _ensure_farmer_identity(db, user)
         
         # Create batch via command handler (automatically creates commission event)

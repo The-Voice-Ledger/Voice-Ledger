@@ -602,7 +602,7 @@ async def handle_confirm_pool_payment(
         if commitment.status not in ("COMMITTED", "PAYMENT_PENDING"):
             return {
                 "message": (
-                    f"❌ Cannot confirm payment — commitment status is "
+                    f"❌ Cannot confirm payment - commitment status is "
                     f"{commitment.status}."
                 )
             }
@@ -702,7 +702,7 @@ async def handle_confirm_pool_receipt(
             else None
         )
         if not offering or user.organization_id != offering.cooperative_id:
-            return {"message": "❌ Access denied — not your cooperative's container."}
+            return {"message": "❌ Access denied - not your cooperative's container."}
 
         if commitment.status != "PAID":
             return {
@@ -719,7 +719,7 @@ async def handle_confirm_pool_receipt(
         return {
             "message": (
                 f"✅ *Receipt Confirmed*\n\n"
-                f"Commitment #{commitment.id} — "
+                f"Commitment #{commitment.id} - "
                 f"${commitment.total_amount:,.2f}\n"
                 f"Shipment preparation can begin."
             ),

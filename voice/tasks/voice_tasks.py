@@ -542,8 +542,41 @@ def process_voice_command_task(
                                                 send_batch_verification_qr(int(user_id), _batch_info)
                                             )
                                             logger.info(f"📦 Post-commission QR sent to {user_id}: {_qr_ok}")
+
+                                            # Send full DPP package (summary + QR + PDF + buttons)
+                                            try:
+                                                from voice.telegram.notifier import send_dpp_package
+                                                _dpp_ok = loop.run_until_complete(
+                                                    send_dpp_package(int(user_id), _batch_data.get("batch_id"))
+                                                )
+                                                logger.info(f"📄 Post-commission DPP package sent to {user_id}: {_dpp_ok}")
+                                            except Exception as _dpp_err:
+                                                logger.warning(f"DPP package send failed (non-critical): {_dpp_err}")
                                     except Exception as _qr_err:
                                         logger.error(f"Failed to send post-commission QR: {_qr_err}", exc_info=True)
+
+                                # ── Post get_dpp DPP package ──
+                                if any(
+                                    tc.tool_name == "get_dpp" and tc.success
+                                    for tc in agent_result.tool_calls
+                                ):
+                                    try:
+                                        _dpp_tc = next(
+                                            tc for tc in agent_result.tool_calls
+                                            if tc.tool_name == "get_dpp" and tc.success
+                                        )
+                                        _bid = (
+                                            _dpp_tc.result_data.get("batch_id")
+                                            if _dpp_tc.result_data else None
+                                        )
+                                        if _bid:
+                                            from voice.telegram.notifier import send_dpp_package
+                                            _dpp_ok = loop.run_until_complete(
+                                                send_dpp_package(int(user_id), _bid)
+                                            )
+                                            logger.info(f"📋 Agent get_dpp package sent to {user_id} for {_bid}: {_dpp_ok}")
+                                    except Exception as _dpp_pkg_err:
+                                        logger.warning(f"Agent DPP package send failed (non-critical): {_dpp_pkg_err}")
 
                                 pending = asyncio.all_tasks(loop)
                                 if pending:
@@ -593,7 +626,7 @@ def process_voice_command_task(
                 # Fall through to legacy conversational AI path
         
         # =====================================================================
-        # LEGACY PATH — conversational AI + single-shot NLU fallback
+        # LEGACY PATH - conversational AI + single-shot NLU fallback
         # (Kept for backward compatibility; disable with AGENT_ENABLED=true)
         # =====================================================================
         
@@ -601,7 +634,7 @@ def process_voice_command_task(
         _agent_was_enabled = os.getenv("AGENT_ENABLED", "false").lower() == "true"
         _fallback_banner = ""
         if _agent_was_enabled and agent_error_detail:
-            _fallback_banner = "⚠️ [Fallback mode — AI agent unavailable]\n\n"
+            _fallback_banner = "⚠️ [Fallback mode - AI agent unavailable]\n\n"
         
         # Route to conversational AI based on user language (NEW: multi-turn conversation)
         try:
@@ -904,6 +937,18 @@ def process_voice_command_task(
                                 )
                                 if success:
                                     logger.info(f"Notification sent successfully to {target_id}")
+
+                                    # Send full DPP package (summary + QR + PDF + buttons)
+                                    try:
+                                        from voice.telegram.notifier import send_dpp_package
+                                        _bid = db_result.get("batch_id")
+                                        if _bid:
+                                            _dpp_ok = loop.run_until_complete(
+                                                send_dpp_package(target_id, _bid)
+                                            )
+                                            logger.info(f"📄 DPP package sent to {target_id}: {_dpp_ok}")
+                                    except Exception as _dpp_err:
+                                        logger.warning(f"DPP package send failed (non-critical): {_dpp_err}")
                                 else:
                                     logger.error(f"Failed to send notification to {target_id}")
                             finally:

@@ -441,7 +441,7 @@ When user wants to create (batch, RFQ, offer), start appropriate workflow.
                     "ready_to_execute": False
                 }
         
-        # Handle backward compatibility — normalise all three keys so every
+        # Handle backward compatibility - normalise all three keys so every
         # caller can use whichever key it prefers.
         if 'message' in result and 'message_text' not in result:
             # Old-format response: only 'message' present

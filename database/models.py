@@ -245,6 +245,14 @@ class CoffeeBatch(Base):
     has_photo_evidence = Column(Boolean, default=False)
     verifying_organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
     
+    # Quality assessment fields (populated during cooperative verification)
+    cupping_score = Column(Float, nullable=True)       # SCA protocol, 0-100
+    moisture_pct = Column(Float, nullable=True)         # Moisture %, ideal 10-12
+    screen_size = Column(String(20), nullable=True)     # e.g. "15+", "14-16"
+    defect_count = Column(Integer, nullable=True)       # Total defects per 350g sample
+    defect_category = Column(String(20), nullable=True) # SCA Category 1 / Category 2 / None
+    sensory_notes = Column(JSON, nullable=True)         # {aroma, acidity, body, flavor, aftertaste, balance, ...}
+    
     qr_code_base64 = Column(Text, nullable=True)  # Base64 encoded PNG of DPP QR code
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -615,12 +623,12 @@ class RFQAcceptance(Base):
     payment_dispute_reason = Column(Text, nullable=True)
     payment_disputed_at = Column(DateTime, nullable=True)
 
-    # Blockchain settlement — buyer payment leg
+    # Blockchain settlement - buyer payment leg
     settlement_tx_hash = Column(String(66), nullable=True)
     settlement_recorded_at = Column(DateTime, nullable=True)
     settlement_blockchain_confirmed = Column(Boolean, default=False)
 
-    # Blockchain settlement — cooperative payout leg
+    # Blockchain settlement - cooperative payout leg
     coop_payout_tx_hash = Column(String(66), nullable=True)
     coop_payout_at = Column(DateTime, nullable=True)
     coop_payout_confirmed = Column(Boolean, default=False)
@@ -812,12 +820,12 @@ class BuyerCommitment(Base):
     payment_dispute_reason = Column(Text, nullable=True)
     payment_disputed_at = Column(DateTime, nullable=True)
 
-    # Blockchain settlement — buyer payment leg
+    # Blockchain settlement - buyer payment leg
     settlement_tx_hash = Column(String(66), nullable=True)
     settlement_recorded_at = Column(DateTime, nullable=True)
     settlement_blockchain_confirmed = Column(Boolean, default=False)
 
-    # Blockchain settlement — cooperative payout leg
+    # Blockchain settlement - cooperative payout leg
     coop_payout_tx_hash = Column(String(66), nullable=True)
     coop_payout_at = Column(DateTime, nullable=True)
     coop_payout_confirmed = Column(Boolean, default=False)

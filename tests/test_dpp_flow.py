@@ -143,7 +143,7 @@ def _run_dpp_flow(batch_id):
     # Verify digital twin
     print("🔍 Step 4: Verifying digital twin...")
     twin = get_batch_twin(batch_id)
-    assert twin is not None, "Digital twin not found — batch missing from DB"
+    assert twin is not None, "Digital twin not found - batch missing from DB"
     print(f"   ✅ Digital twin found")
     print(f"      - Batch ID: {twin['batchId']}")
     print(f"      - Token ID: {twin['tokenId']}")
@@ -238,7 +238,7 @@ def _run_dpp_flow(batch_id):
     print("   4. Print QR codes for physical packaging")
     print()
     
-    # Test passed — no return value (pytest expects None)
+    # Test passed - no return value (pytest expects None)
 
 
 if __name__ == "__main__":
