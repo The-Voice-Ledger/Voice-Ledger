@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
@@ -135,14 +135,15 @@ function CardDeck({ features }) {
 /* ── Main landing page ──────────────────────────────────────────── */
 
 export default function Landing() {
-  const { t } = useTranslation()
-  const { isAuthenticated, user, syncFromStorage } = useAuthStore()
+  const { syncFromStorage } = useAuthStore()
 
-  // Force sync from localStorage on component mount
-  React.useEffect(() => {
+  useEffect(() => {
     console.log('🔍 Landing.jsx: Component mounted, calling syncFromStorage...')
     syncFromStorage()
   }, [syncFromStorage])
+
+  const { t } = useTranslation()
+  const { isAuthenticated, user } = useAuthStore()
 
   // Debug: Check localStorage and auth state
   const token = localStorage.getItem('voice-ledger-auth')
