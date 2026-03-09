@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -179,6 +179,14 @@ export default function Tracking() {
   }
 
   const totalEvents = (shipment?.events?.length || 0) + (shipment?.milestones?.length || 0)
+
+  // Auto-search if sscc query param is provided (e.g. linked from Marketplace or Compliance)
+  useEffect(() => {
+    if (searchParams.get('sscc')) {
+      handleSearch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">

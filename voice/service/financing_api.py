@@ -150,23 +150,35 @@ async def get_fee_stats():
 
 
 # ─────────────────────────────────────────
-# WRITE endpoints (require API key)
+# WRITE endpoints (require API key or JWT)
 # ─────────────────────────────────────────
 
-def _check_api_key(api_key: Optional[str]):
+def _check_auth(api_key: Optional[str], authorization: Optional[str]):
+    """Accept either x-api-key header or valid JWT Bearer token."""
     import os
+    # 1) Check API key
     expected = os.getenv("VOICE_LEDGER_API_KEY", "")
-    if not api_key or api_key != expected:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if api_key and expected and api_key == expected:
+        return
+    # 2) Check JWT Bearer token
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            from voice.web.auth import verify_jwt_token
+            verify_jwt_token(authorization.replace("Bearer ", ""))
+            return
+        except Exception:
+            pass
+    raise HTTPException(status_code=401, detail="Authentication required (API key or JWT)")
 
 
 @router.post("/trade/request-advance", response_model=TxResponse)
 async def request_advance(
     body: RequestAdvanceBody,
     x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Seller requests an advance against a shipped container."""
-    _check_api_key(x_api_key)
+    _check_auth(x_api_key, authorization)
     tx = _get_mgr().request_advance(
         token_id=body.token_id,
         token_amount=body.token_amount,
@@ -184,9 +196,10 @@ async def request_advance(
 async def confirm_delivery(
     body: ConfirmDeliveryBody,
     x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Buyer confirms delivery and repays the pool."""
-    _check_api_key(x_api_key)
+    _check_auth(x_api_key, authorization)
     tx = _get_mgr().confirm_delivery(body.trade_id)
     if tx:
         return TxResponse(success=True, tx_hash=tx, message="Delivery confirmed, pool repaid")
@@ -197,9 +210,10 @@ async def confirm_delivery(
 async def cancel_trade(
     trade_id: int,
     x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Cancel a trade (seller returns advance, gets token back)."""
-    _check_api_key(x_api_key)
+    _check_auth(x_api_key, authorization)
     tx = _get_mgr().cancel_trade(trade_id)
     if tx:
         return TxResponse(success=True, tx_hash=tx, message="Trade cancelled")
@@ -210,9 +224,10 @@ async def cancel_trade(
 async def mark_default(
     trade_id: int,
     x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None),
 ):
     """Mark an overdue trade as defaulted."""
-    _check_api_key(x_api_key)
+    _check_auth(x_api_key, authorization)
     tx = _get_mgr().mark_default(trade_id)
     if tx:
         return TxResponse(success=True, tx_hash=tx, message="Trade marked as defaulted")

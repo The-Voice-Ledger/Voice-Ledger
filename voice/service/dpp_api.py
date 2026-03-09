@@ -377,7 +377,7 @@ def _build_article9(batch_id: str) -> EUDRArticle9:
             batch_id=batch_id,
             commodity_description=f"{db_batch.variety or 'Coffee'} - {db_batch.process_method or 'Unknown'}",
             quantity_kg=db_batch.quantity_kg or 0,
-            country_of_production=db_batch.origin_country or db_batch.farmer.country_code or "ET",
+            country_of_production=db_batch.origin_country or (db_batch.farmer.country_code if db_batch.farmer else None) or "ET",
             region_of_production=db_batch.origin_region,
             geolocation_latitude=coords.get("latitude"),
             geolocation_longitude=coords.get("longitude"),
@@ -398,7 +398,7 @@ def _build_article9(batch_id: str) -> EUDRArticle9:
             compliance_level=eudr_section.get("complianceLevel", "Unknown"),
             gtin=db_batch.gtin,
             blockchain_event_count=len([e for e in events if e.blockchain_tx_hash]),
-            dpp_url=f"/api/dpp/batch/{batch_id}",
+            dpp_url=f"/dpp/{batch_id}",
         )
 
 

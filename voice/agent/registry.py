@@ -1704,6 +1704,7 @@ class ToolRegistry:
     ) -> Tuple[str, Dict[str, Any]]:
         """Check EUDR compliance for a list of batch IDs."""
         from voice.epcis.validators import validate_eudr_compliance
+        from database.models import CoffeeBatch
 
         batch_ids = args.get("batch_ids", [])
         if not batch_ids:
@@ -1711,25 +1712,62 @@ class ToolRegistry:
 
         is_valid, error_msg = validate_eudr_compliance(batch_ids, db)
 
+        # Build per-batch details for the frontend
+        batch_results = []
+        all_gps = True
+        all_deforestation = True
+        all_photo_verified = True
+        batches = db.query(CoffeeBatch).filter(
+            CoffeeBatch.batch_id.in_(batch_ids)
+        ).all()
+        for b in batches:
+            farmer = b.farmer
+            has_gps = bool(farmer and farmer.latitude is not None and farmer.longitude is not None)
+            photo_verified = bool(farmer and farmer.photo_latitude is not None and farmer.gps_verified_at is not None)
+            deforestation_ok = bool(farmer and farmer.deforestation_compliant is True)
+            risk = farmer.deforestation_risk if farmer else None
+
+            if not has_gps:
+                all_gps = False
+            if not photo_verified:
+                all_photo_verified = False
+            if not deforestation_ok:
+                all_deforestation = False
+
+            batch_results.append({
+                "batch_id": b.batch_id,
+                "has_gps": has_gps,
+                "photo_verified": photo_verified,
+                "deforestation_risk": risk,
+                "compliant": has_gps and deforestation_ok,
+            })
+
+        # Individual check flags (for the checks checklist)
+        checks = {
+            "gps_coordinates": all_gps,
+            "photo_verification": all_photo_verified,
+            "deforestation_clear": all_deforestation,
+        }
+
+        data = {
+            "compliant": is_valid,
+            "checks": checks,
+            "batch_count": len(batch_ids),
+            "batch_ids": batch_ids,
+            "batch_results": batch_results,
+        }
+
         if is_valid:
             return (
                 f"All {len(batch_ids)} batch(es) are EUDR compliant. "
                 "GPS photo-verified and deforestation checks passed for all farmers.",
-                {
-                    "compliant": True,
-                    "batch_count": len(batch_ids),
-                    "batch_ids": batch_ids,
-                },
+                data,
             )
         else:
+            data["error"] = error_msg
             return (
                 f"EUDR compliance issue: {error_msg}",
-                {
-                    "compliant": False,
-                    "batch_count": len(batch_ids),
-                    "batch_ids": batch_ids,
-                    "error": error_msg,
-                },
+                data,
             )
 
     def _check_mass_balance(

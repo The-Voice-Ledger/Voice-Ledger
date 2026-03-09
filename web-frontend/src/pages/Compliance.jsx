@@ -15,6 +15,7 @@ const LEVEL_COLORS = {
   Silver: 'bg-stone-100 text-stone-700 border-stone-300',
   Bronze: 'bg-amber-100 text-amber-800 border-amber-300',
   'Non-Compliant': 'bg-red-100 text-red-700 border-red-300',
+  Unknown: 'bg-stone-50 text-stone-500 border-stone-200',
 }
 
 function LevelBadge({ level }) {
@@ -304,7 +305,7 @@ export default function Compliance() {
 
                   {data?.deforestation_risk != null && (
                     <div className="mt-3 text-sm text-stone-600">
-                      {t('comp_deforestation_risk')}: <strong>{(data.deforestation_risk * 100).toFixed(1)}%</strong>
+                      {t('comp_deforestation_risk')}: <strong>{typeof data.deforestation_risk === 'number' ? `${(data.deforestation_risk * 100).toFixed(1)}%` : data.deforestation_risk}</strong>
                     </div>
                   )}
                 </div>
@@ -325,6 +326,7 @@ export default function Compliance() {
                       <tr>
                         <th className="px-4 py-3">{t('comp_col_batch')}</th>
                         <th className="px-4 py-3">{t('comp_col_gps')}</th>
+                        <th className="px-4 py-3">Photo Verified</th>
                         <th className="px-4 py-3">{t('comp_col_deforestation')}</th>
                         <th className="px-4 py-3">{t('comp_col_status')}</th>
                       </tr>
@@ -341,8 +343,17 @@ export default function Compliance() {
                             )}
                           </td>
                           <td className="px-4 py-3">
+                            {b.photo_verified ? (
+                              <LuCheck className="w-4 h-4 text-forest-600" />
+                            ) : (
+                              <LuX className="w-4 h-4 text-red-500" />
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
                             {b.deforestation_risk != null
-                              ? `${(b.deforestation_risk * 100).toFixed(1)}%`
+                              ? (typeof b.deforestation_risk === 'number'
+                                  ? `${(b.deforestation_risk * 100).toFixed(1)}%`
+                                  : b.deforestation_risk)
                               : '-'}
                           </td>
                           <td className="px-4 py-3">
