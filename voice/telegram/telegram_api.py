@@ -1465,7 +1465,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     timeout=30
                 )
             elif 'reply_keyboard' in response:
-                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                # ReplyKeyboardMarkup - used for contact-sharing / location buttons
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
                 keyboard_rows = [
@@ -2497,7 +2497,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     timeout=30
                 )
             elif 'reply_keyboard' in response:
-                # ReplyKeyboardMarkup — used for contact-sharing / location buttons
+                # ReplyKeyboardMarkup - used for contact-sharing / location buttons
                 import requests
                 bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
                 keyboard_rows = [
@@ -2641,7 +2641,7 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                 )
         
         else:
-            # No active workflow — try AI agent first, then legacy keyword routing
+            # No active workflow - try AI agent first, then legacy keyword routing
             response_message = None
 
             # =================================================================
@@ -2737,6 +2737,21 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                                     logger.info(
                                         f"📦 Post-commission QR sent to {user_id}: {_qr_sent}"
                                     )
+
+                                    # Also send DPP PDF document
+                                    try:
+                                        from voice.telegram.notifier import send_batch_dpp_pdf
+                                        _pdf_sent = await send_batch_dpp_pdf(
+                                            int(user_id),
+                                            _batch_data.get("batch_id"),
+                                        )
+                                        logger.info(
+                                            f"📄 Post-commission DPP PDF sent to {user_id}: {_pdf_sent}"
+                                        )
+                                    except Exception as _pdf_err:
+                                        logger.warning(
+                                            f"DPP PDF send failed (non-critical): {_pdf_err}"
+                                        )
                             except Exception as _qr_err:
                                 logger.error(
                                     f"Failed to send post-commission QR to {user_id}: {_qr_err}",
@@ -2749,13 +2764,13 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                     logger.warning(f"⚠️ FALLBACK ACTIVE for text from {user_id}: {_agent_error_detail}")
 
             # =================================================================
-            # LEGACY PATH — keyword routing + RAG + conversational AI
+            # LEGACY PATH - keyword routing + RAG + conversational AI
             # Used when AGENT_ENABLED=false or agent fails/returns no response
             # =================================================================
             _fallback_banner = ""
             if not agent_handled and _os.getenv("AGENT_ENABLED", "false").lower() == "true":
-                # Agent was enabled but didn't handle — show fallback banner
-                _fallback_banner = "⚠️ <i>[Fallback mode — AI agent unavailable]</i>\n\n"
+                # Agent was enabled but didn't handle - show fallback banner
+                _fallback_banner = "⚠️ <i>[Fallback mode - AI agent unavailable]</i>\n\n"
 
             if not agent_handled:
                 if any(kw in text.lower() for kw in ['record batch', 'new batch', 'record harvest', 'create batch', 'log batch', 'record coffee']):

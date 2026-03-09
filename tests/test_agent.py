@@ -192,7 +192,7 @@ class TestAgentExecutor:
         # Mock Redis (no history)
         mock_redis.return_value = None
         
-        # Mock OpenAI response — just text, no tool calls
+        # Mock OpenAI response - just text, no tool calls
         mock_msg = MagicMock()
         mock_msg.tool_calls = None
         mock_msg.content = "Hello! How can I help you with your coffee today?"
@@ -572,7 +572,7 @@ class TestComplianceTools:
         registry = ToolRegistry()
         handler = registry.get("check_mass_balance")
 
-        # Mock db (not needed for mass balance — pure math)
+        # Mock db (not needed for mass balance - pure math)
         mock_db = MagicMock()
 
         message, data = handler(

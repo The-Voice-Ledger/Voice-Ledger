@@ -615,12 +615,12 @@ class RFQAcceptance(Base):
     payment_dispute_reason = Column(Text, nullable=True)
     payment_disputed_at = Column(DateTime, nullable=True)
 
-    # Blockchain settlement — buyer payment leg
+    # Blockchain settlement - buyer payment leg
     settlement_tx_hash = Column(String(66), nullable=True)
     settlement_recorded_at = Column(DateTime, nullable=True)
     settlement_blockchain_confirmed = Column(Boolean, default=False)
 
-    # Blockchain settlement — cooperative payout leg
+    # Blockchain settlement - cooperative payout leg
     coop_payout_tx_hash = Column(String(66), nullable=True)
     coop_payout_at = Column(DateTime, nullable=True)
     coop_payout_confirmed = Column(Boolean, default=False)
@@ -812,12 +812,12 @@ class BuyerCommitment(Base):
     payment_dispute_reason = Column(Text, nullable=True)
     payment_disputed_at = Column(DateTime, nullable=True)
 
-    # Blockchain settlement — buyer payment leg
+    # Blockchain settlement - buyer payment leg
     settlement_tx_hash = Column(String(66), nullable=True)
     settlement_recorded_at = Column(DateTime, nullable=True)
     settlement_blockchain_confirmed = Column(Boolean, default=False)
 
-    # Blockchain settlement — cooperative payout leg
+    # Blockchain settlement - cooperative payout leg
     coop_payout_tx_hash = Column(String(66), nullable=True)
     coop_payout_at = Column(DateTime, nullable=True)
     coop_payout_confirmed = Column(Boolean, default=False)

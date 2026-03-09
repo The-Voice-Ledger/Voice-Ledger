@@ -16,13 +16,13 @@ import {FeeDistributor} from "../src/FeeDistributor.sol";
  *         Then wires permissions (setEscrow on pool + distributor).
  *
  *         Required env vars:
- *           USDC_ADDRESS                     — USDC token on target chain
- *           COFFEE_BATCH_TOKEN_ADDRESS       — Existing CoffeeBatchToken
- *           EPCIS_EVENT_ANCHOR_ADDRESS       — Existing EPCISEventAnchor
- *           PROVENANCE_RECEIVER_ADDRESS      — Existing ProvenanceDataReceiver
- *           SETTLEMENT_CONTRACT_ADDRESS      — Existing SettlementContract
- *           TREASURY_ADDRESS                 — Protocol treasury wallet
- *           RESERVE_FUND_ADDRESS             — Reserve fund wallet
+ *           USDC_ADDRESS                     - USDC token on target chain
+ *           COFFEE_BATCH_TOKEN_ADDRESS       - Existing CoffeeBatchToken
+ *           EPCIS_EVENT_ANCHOR_ADDRESS       - Existing EPCISEventAnchor
+ *           PROVENANCE_RECEIVER_ADDRESS      - Existing ProvenanceDataReceiver
+ *           SETTLEMENT_CONTRACT_ADDRESS      - Existing SettlementContract
+ *           TREASURY_ADDRESS                 - Protocol treasury wallet
+ *           RESERVE_FUND_ADDRESS             - Reserve fund wallet
  *
  * @dev    Run: forge script script/DeployDeFiPool.s.sol --rpc-url $RPC_URL
  *              --broadcast --verify -vvvv

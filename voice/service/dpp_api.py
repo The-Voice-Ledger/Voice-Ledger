@@ -6,12 +6,12 @@ so that customs brokers and LSPs can access it without needing the
 standalone DPP resolver service.
 
 Endpoints:
-  GET /api/dpp/batch/{batch_id}               — Full / summary / QR DPP
-  GET /api/dpp/batch/{batch_id}/verify         — Blockchain verification status
-  GET /api/dpp/container/{container_sscc}       — Container-level DPP with child batches
-  GET /api/dpp/batches                         — List all batches with DPP links
-  GET /api/eudr/compliance/{batch_id}          — Flat Article 9 fields for customs filing
-  GET /api/eudr/container/{container_sscc}     — Container-level EUDR compliance package
+  GET /api/dpp/batch/{batch_id}               - Full / summary / QR DPP
+  GET /api/dpp/batch/{batch_id}/verify         - Blockchain verification status
+  GET /api/dpp/container/{container_sscc}       - Container-level DPP with child batches
+  GET /api/dpp/batches                         - List all batches with DPP links
+  GET /api/eudr/compliance/{batch_id}          - Flat Article 9 fields for customs filing
+  GET /api/eudr/container/{container_sscc}     - Container-level EUDR compliance package
 
 Created: March 2026 (LSP & Customs Clearance Integration)
 """
@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from database import get_db, get_all_batches, get_batch_by_batch_id, get_batch_events
@@ -140,6 +141,67 @@ async def get_batch_dpp(
         return {"batchId": dpp["batchId"], "qrCode": dpp.get("qrCode")}
 
     return dpp
+
+
+@router.get("/api/dpp/batch/{batch_id}/pdf")
+async def get_batch_dpp_pdf(batch_id: str):
+    """
+    Download the Digital Product Passport as a branded PDF.
+
+    Returns a PDF file with all batch, compliance, traceability, and
+    blockchain data rendered in a professional layout.
+    """
+    try:
+        from dpp.dpp_pdf import build_and_render_pdf
+        pdf_bytes = build_and_render_pdf(batch_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+    except Exception as exc:
+        logger.exception("Error generating PDF for %s", batch_id)
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")
+
+    filename = f"DPP_{batch_id}.pdf"
+    return Response(
+        content=bytes(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/passport/{batch_id}", response_class=HTMLResponse)
+async def public_passport_page(batch_id: str):
+    """
+    Public shareable HTML page for a batch's Digital Product Passport.
+
+    Designed to be the landing page when someone scans a QR code.  It
+    renders a self-contained, mobile-friendly HTML document with all
+    the key DPP data and a link to download the full PDF.
+    """
+    batch = load_batch_data(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail=f"Batch {batch_id} not found")
+
+    # Derive real compliance values
+    deforestation_risk = "none"
+    eudr_compliant = True
+    if batch.farmer:
+        f = batch.farmer
+        risk = (f.deforestation_risk or "UNKNOWN").lower()
+        deforestation_risk = risk if risk in ("low", "medium", "high", "unknown") else "none"
+        eudr_compliant = (
+            f.deforestation_compliant is True
+            and f.latitude is not None
+            and f.longitude is not None
+        )
+
+    try:
+        dpp = build_dpp(batch_id=batch_id, deforestation_risk=deforestation_risk, eudr_compliant=eudr_compliant)
+    except Exception as exc:
+        logger.exception("Error building DPP for passport page %s", batch_id)
+        raise HTTPException(status_code=500, detail=f"Error building DPP: {exc}")
+
+    html = _render_passport_html(dpp)
+    return HTMLResponse(content=html)
 
 
 @router.get("/api/dpp/batch/{batch_id}/verify")
@@ -279,7 +341,7 @@ async def list_batches() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# EUDR compliance endpoints — flat Article 9 fields for customs brokers
+# EUDR compliance endpoints - flat Article 9 fields for customs brokers
 # ---------------------------------------------------------------------------
 
 def _build_article9(batch_id: str) -> EUDRArticle9:
@@ -346,7 +408,7 @@ async def get_eudr_compliance(batch_id: str) -> EUDRArticle9:
     Return flattened EUDR Article 9 fields for a single batch.
 
     Designed for customs brokers to pull directly into their due diligence
-    statement templates — every field maps 1:1 to an Article 9 requirement.
+    statement templates - every field maps 1:1 to an Article 9 requirement.
     """
     return _build_article9(batch_id)
 
@@ -388,7 +450,7 @@ async def get_container_eudr(container_sscc: str) -> ContainerEUDR:
             try:
                 batch_records.append(_build_article9(bid))
             except HTTPException:
-                logger.warning("Skipping batch %s — not found", bid)
+                logger.warning("Skipping batch %s - not found", bid)
 
         # Determine overall compliance level (weakest link)
         level_order = {"Non-Compliant": 0, "Bronze": 1, "Silver": 2, "Gold": 3}
@@ -404,3 +466,181 @@ async def get_container_eudr(container_sscc: str) -> ContainerEUDR:
             overall_compliance_level=worst_level if batch_records else "Unknown",
             batches=batch_records,
         )
+
+
+# ---------------------------------------------------------------------------
+# HTML passport renderer (self-contained, mobile-friendly)
+# ---------------------------------------------------------------------------
+
+import html as _html
+
+
+def _esc(val) -> str:
+    """HTML-escape a value, returning 'N/A' for None."""
+    if val is None:
+        return "N/A"
+    return _html.escape(str(val))
+
+
+def _render_passport_html(dpp: Dict[str, Any]) -> str:
+    """Return a self-contained HTML page for a DPP."""
+    prod = dpp.get("productInformation", {})
+    trace = dpp.get("traceability", {})
+    origin = trace.get("origin", {})
+    farmer = origin.get("farmer", {})
+    eudr = dpp.get("eudrCompliance", {})
+    dd = dpp.get("dueDiligence", {})
+    bc = dpp.get("blockchain", {})
+    qr = dpp.get("qrCode", {})
+    don = dpp.get("donAttestation", {})
+    risk = eudr.get("riskAssessment", {})
+    geo = eudr.get("geolocation", {}).get("farmLocation", {})
+    coords = geo.get("coordinates", {})
+
+    batch_id = _esc(dpp.get("batchId"))
+    comp_level = _esc(eudr.get("complianceLevel", "Unknown"))
+    comp_status = _esc(eudr.get("complianceStatus", "UNKNOWN"))
+
+    level_colors = {
+        "Gold": "#DAA520", "Silver": "#C0C0C0",
+        "Bronze": "#CD7F32", "Non-Compliant": "#DC3545",
+    }
+    badge_color = level_colors.get(eudr.get("complianceLevel", ""), "#6c757d")
+
+    events_html = ""
+    for ev in trace.get("events", [])[:15]:
+        ts = (_esc(ev.get("timestamp")) or "")[:19].replace("T", " ")
+        events_html += (
+            f'<div class="ev">'
+            f'<span class="ev-time">{ts}</span>'
+            f'<span class="ev-type">{_esc(ev.get("eventType"))}</span>'
+            f'<span class="ev-step">{_esc(ev.get("bizStep"))}</span>'
+            f'</div>'
+        )
+
+    anchors_html = ""
+    for a in bc.get("anchors", [])[:10]:
+        tx = _esc(a.get("transactionHash", "pending"))
+        anchors_html += f'<div class="anchor">{tx}</div>'
+
+    don_html = ""
+    if don and don.get("attestationExists"):
+        don_html = f"""
+        <div class="section">
+            <h2>Chainlink DON Attestation</h2>
+            <div class="row"><span class="lbl">Farm ID</span><span>{_esc(don.get('farmId'))}</span></div>
+            <div class="row"><span class="lbl">Risk Level</span><span>{_esc(don.get('riskLabel'))}</span></div>
+            <div class="row"><span class="lbl">EUDR Compliant</span><span>{_esc(don.get('eudrCompliant'))}</span></div>
+            <div class="row"><span class="lbl">Tree Loss</span><span>{_esc(don.get('treeLossHectares'))} ha</span></div>
+        </div>"""
+
+    qr_img = qr.get("imageUrl", "")
+    qr_block = ""
+    if qr_img:
+        qr_block = f'<div class="qr"><img src="{qr_img}" alt="QR Code" width="160" height="160"></div>'
+
+    dd_risk = dd.get("riskAssessment", {})
+    defo_check = risk.get("deforestationCheck", {})
+    defo_rows = ""
+    if defo_check:
+        defo_rows = f"""
+            <div class="row"><span class="lbl">Tree Cover Loss</span><span>{_esc(defo_check.get('treeCoverLossHectares'))} ha</span></div>
+            <div class="row"><span class="lbl">Compliant</span><span>{_esc(defo_check.get('compliant'))}</span></div>
+            <div class="row"><span class="lbl">Data Source</span><span>{_esc(defo_check.get('dataSource'))}</span></div>
+            <div class="row"><span class="lbl">Confidence</span><span>{_esc(defo_check.get('confidence'))}</span></div>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DPP - {batch_id}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f4f6f5;color:#212529;padding:16px}}
+.card{{max-width:640px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}}
+.hero{{background:linear-gradient(135deg,#228B22,#2E8B57);color:#fff;padding:24px;text-align:center}}
+.hero h1{{font-size:1.4rem;margin-bottom:4px}}
+.hero .batch{{font-size:.95rem;opacity:.9}}
+.hero .meta{{font-size:.75rem;opacity:.7;margin-top:6px}}
+.badge{{display:inline-block;padding:4px 14px;border-radius:20px;color:#fff;font-weight:700;font-size:.85rem;margin-top:8px;background:{badge_color}}}
+.section{{padding:16px 24px;border-bottom:1px solid #eee}}
+.section h2{{font-size:1rem;color:#228B22;margin-bottom:10px}}
+.row{{display:flex;justify-content:space-between;padding:4px 0;font-size:.85rem}}
+.row .lbl{{color:#6c757d;flex:0 0 45%}}
+.ev{{display:flex;gap:8px;font-size:.8rem;padding:3px 0;border-bottom:1px solid #f0f0f0}}
+.ev-time{{color:#6c757d;flex:0 0 130px}}
+.ev-type{{font-weight:600}}
+.ev-step{{color:#6c757d}}
+.anchor{{font-size:.75rem;color:#6c757d;word-break:break-all;padding:2px 0}}
+.qr{{text-align:center;padding:20px}}
+.qr img{{border-radius:8px}}
+.actions{{text-align:center;padding:16px}}
+.actions a{{display:inline-block;padding:10px 24px;background:#228B22;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:.9rem}}
+.actions a:hover{{background:#1a6e1a}}
+.footer-note{{text-align:center;padding:12px 24px;font-size:.7rem;color:#aaa}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="hero">
+    <h1>Digital Product Passport</h1>
+    <div class="batch">{batch_id}</div>
+    <div class="meta">Passport {_esc(dpp.get('passportId'))} &middot; v{_esc(dpp.get('version'))}</div>
+    <div class="badge">{comp_level}</div>
+  </div>
+
+  <div class="section">
+    <h2>Product Information</h2>
+    <div class="row"><span class="lbl">Product</span><span>{_esc(prod.get('productName'))}</span></div>
+    <div class="row"><span class="lbl">Variety</span><span>{_esc(prod.get('variety'))}</span></div>
+    <div class="row"><span class="lbl">Processing</span><span>{_esc(prod.get('processMethod'))}</span></div>
+    <div class="row"><span class="lbl">Quantity</span><span>{_esc(prod.get('quantity'))} {_esc(prod.get('unit'))}</span></div>
+    <div class="row"><span class="lbl">GTIN</span><span>{_esc(prod.get('gtin'))}</span></div>
+  </div>
+
+  <div class="section">
+    <h2>Traceability &amp; Origin</h2>
+    <div class="row"><span class="lbl">Country</span><span>{_esc(origin.get('country'))}</span></div>
+    <div class="row"><span class="lbl">Region</span><span>{_esc(origin.get('region'))}</span></div>
+    <div class="row"><span class="lbl">Farm</span><span>{_esc(origin.get('farmName'))}</span></div>
+    <div class="row"><span class="lbl">Farmer</span><span>{_esc(farmer.get('name'))}</span></div>
+    <div class="row"><span class="lbl">DID</span><span style="font-size:.75rem;word-break:break-all">{_esc(farmer.get('did'))}</span></div>
+  </div>
+
+  <div class="section">
+    <h2>EUDR Compliance</h2>
+    <div class="row"><span class="lbl">Status</span><span>{comp_status}</span></div>
+    <div class="row"><span class="lbl">GPS Source</span><span>{_esc(geo.get('source', geo.get('status', 'N/A')))}</span></div>
+    {"<div class='row'><span class='lbl'>Latitude</span><span>" + _esc(coords.get('latitude')) + "</span></div>" if coords else ""}
+    {"<div class='row'><span class='lbl'>Longitude</span><span>" + _esc(coords.get('longitude')) + "</span></div>" if coords else ""}
+    <div class="row"><span class="lbl">Deforestation Risk</span><span>{_esc(risk.get('deforestationRisk'))}</span></div>
+    {defo_rows}
+  </div>
+
+  {don_html}
+
+  <div class="section">
+    <h2>Due Diligence</h2>
+    <div class="row"><span class="lbl">EUDR Compliant</span><span>{_esc(dd.get('eudrCompliant'))}</span></div>
+    <div class="row"><span class="lbl">Risk</span><span>{_esc(dd_risk.get('deforestationRisk'))}</span></div>
+    <div class="row"><span class="lbl">Methodology</span><span>{_esc(dd_risk.get('methodology'))}</span></div>
+  </div>
+
+  {"<div class='section'><h2>Supply Chain Events</h2>" + events_html + "</div>" if events_html else ""}
+
+  {"<div class='section'><h2>Blockchain Anchors</h2>" + anchors_html + "</div>" if anchors_html else ""}
+
+  {qr_block}
+
+  <div class="actions">
+    <a href="/api/dpp/batch/{batch_id}/pdf">Download PDF</a>
+  </div>
+
+  <div class="footer-note">
+    Generated by Voice Ledger &middot; Data sourced from on-chain records, GPS-verified farm locations,
+    and satellite deforestation analysis (Global Forest Watch).
+  </div>
+</div>
+</body>
+</html>"""

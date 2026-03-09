@@ -1,5 +1,5 @@
 /**
- * Voice Ledger Oracle — Chainlink CRE Workflow
+ * Voice Ledger Oracle - Chainlink CRE Workflow
  *
  * A single CRE workflow with three trigger→handler pairs:
  *
@@ -193,7 +193,7 @@ const fetchGfwTreeLoss = (
   config: Config,
   geostoreId: string,
 ): GfwTreeLoss => {
-  // NOTE: Do NOT alias umd_tree_cover_loss__year to "year" — GFW treats
+  // NOTE: Do NOT alias umd_tree_cover_loss__year to "year" - GFW treats
   // it as an invalid layer name.
   const sql =
     "SELECT umd_tree_cover_loss__year, " +
@@ -223,7 +223,7 @@ const fetchGfwTreeLoss = (
     tree_loss_ha: number;
   }> = body.data || [];
 
-  // Sum and scale to integer (×1e4) — same scaling as our API
+  // Sum and scale to integer (×1e4) - same scaling as our API
   const totalLossHa = records.reduce(
     (sum: number, r: { tree_loss_ha: number }) => sum + (r.tree_loss_ha || 0),
     0,
@@ -236,14 +236,14 @@ const fetchGfwTreeLoss = (
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// TRIGGER 1 — Proof of Provenance (Cron)
+// TRIGGER 1 - Proof of Provenance (Cron)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const onProvenanceCron = (
   runtime: Runtime<Config>,
   _payload: CronPayload,
 ): string => {
-  runtime.log("[Trigger 1] Proof of Provenance — cron fired");
+  runtime.log("[Trigger 1] Proof of Provenance - cron fired");
 
   // ── 1. Fetch metrics with median consensus across DON nodes ──
   const httpClient = new HTTPClient();
@@ -264,7 +264,7 @@ const onProvenanceCron = (
     .result();
 
   runtime.log(
-    `[Trigger 1] DON consensus reached — ${metrics.totalFarmers} farmers, ` +
+    `[Trigger 1] DON consensus reached - ${metrics.totalFarmers} farmers, ` +
       `${metrics.totalBatches} batches, ${metrics.eudrCompliantPercent}% EUDR compliant`,
   );
 
@@ -327,7 +327,7 @@ const onProvenanceCron = (
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// TRIGGER 2 — Event-Reactive Compliance (LogTrigger)
+// TRIGGER 2 - Event-Reactive Compliance (LogTrigger)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const onEventAnchored = (
@@ -378,7 +378,7 @@ const onEventAnchored = (
     .result();
 
   runtime.log(
-    `[Trigger 2] Batch details retrieved — ${batchDetails.quantityKg}kg ` +
+    `[Trigger 2] Batch details retrieved - ${batchDetails.quantityKg}kg ` +
       `${batchDetails.variety || "coffee"} from ${batchDetails.origin || "Ethiopia"}`,
   );
 
@@ -405,7 +405,7 @@ const onEventAnchored = (
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// TRIGGER 3 — EUDR Deforestation Oracle (HTTP)
+// TRIGGER 3 - EUDR Deforestation Oracle (HTTP)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const onDeforestationRequest = (
@@ -433,7 +433,7 @@ const onDeforestationRequest = (
     .result();
 
   runtime.log(
-    `[Trigger 3] API result — risk: ${apiResult.riskLevelCode}, ` +
+    `[Trigger 3] API result - risk: ${apiResult.riskLevelCode}, ` +
       `compliant: ${apiResult.eudrCompliant}, loss: ${apiResult.treeLossHectaresScaled / 10000} ha, ` +
       `geostore: ${apiResult.geostoreId}`,
   );
@@ -450,7 +450,7 @@ const onDeforestationRequest = (
     .result();
 
   runtime.log(
-    `[Trigger 3] GFW spot-check — raw loss: ${gfwResult.totalTreeLossHaScaled / 10000} ha ` +
+    `[Trigger 3] GFW spot-check - raw loss: ${gfwResult.totalTreeLossHaScaled / 10000} ha ` +
       `(${gfwResult.recordCount} yearly records)`,
   );
 
@@ -466,11 +466,11 @@ const onDeforestationRequest = (
 
   if (!lossMatch || !complianceMatch) {
     runtime.log(
-      `[Trigger 3] ⚠ SPOT CHECK MISMATCH — ` +
+      `[Trigger 3] ⚠ SPOT CHECK MISMATCH - ` +
         `API loss: ${apiResult.treeLossHectaresScaled}, GFW loss: ${gfwResult.totalTreeLossHaScaled}, ` +
         `API compliant: ${apiResult.eudrCompliant}, spot-check compliant: ${spotCheckCompliant}`,
     );
-    // Refuse to attest — return dispute without writing on-chain
+    // Refuse to attest - return dispute without writing on-chain
     return JSON.stringify({
       farmId: apiResult.farmId,
       attested: false,
@@ -480,7 +480,7 @@ const onDeforestationRequest = (
     });
   }
 
-  runtime.log("[Trigger 3] ✓ Spot-check PASSED — API and GFW agree");
+  runtime.log("[Trigger 3] ✓ Spot-check PASSED - API and GFW agree");
 
   // ── 5. ABI-encode deforestation attestation ──
   const encodedPayload = encodeAbiParameters(
@@ -543,7 +543,7 @@ const onDeforestationRequest = (
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Workflow initialisation — register all three triggers
+// Workflow initialisation - register all three triggers
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const initWorkflow = (config: Config) => {
@@ -562,13 +562,13 @@ const initWorkflow = (config: Config) => {
   const httpCap = new HTTPCapability();
 
   return [
-    // Trigger 1 — Proof of Provenance (cron)
+    // Trigger 1 - Proof of Provenance (cron)
     handler(
       cronCap.trigger({ schedule: config.schedule }),
       onProvenanceCron,
     ),
 
-    // Trigger 2 — Event Watcher (log trigger on EPCISEventAnchor)
+    // Trigger 2 - Event Watcher (log trigger on EPCISEventAnchor)
     handler(
       evmClient.logTrigger({
         addresses: [hexToBase64(primaryEvm.epcisEventAnchorAddress)],
@@ -576,7 +576,7 @@ const initWorkflow = (config: Config) => {
       onEventAnchored,
     ),
 
-    // Trigger 3 — Deforestation Oracle (HTTP trigger)
+    // Trigger 3 - Deforestation Oracle (HTTP trigger)
     handler(httpCap.trigger({}), onDeforestationRequest),
   ];
 };

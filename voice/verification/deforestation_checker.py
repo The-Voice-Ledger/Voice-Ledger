@@ -175,7 +175,7 @@ class DeforestationChecker:
         Returns tree loss statistics by year.
         """
         # SQL query to get tree cover loss after 2020
-        # NOTE: Do NOT alias umd_tree_cover_loss__year to "year" — GFW treats it
+        # NOTE: Do NOT alias umd_tree_cover_loss__year to "year" - GFW treats it
         # as an invalid layer name.  Use the full column name everywhere.
         sql_query = (
             "SELECT umd_tree_cover_loss__year, "

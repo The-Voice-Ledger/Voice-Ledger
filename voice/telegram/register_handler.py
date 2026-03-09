@@ -59,7 +59,7 @@ class ConversationStates:
         return False
 
     def __getitem__(self, user_id: int) -> Dict[str, Any]:
-        """Get session data — returns cached reference so mutations persist"""
+        """Get session data - returns cached reference so mutations persist"""
         if user_id in self._cache:
             return self._cache[user_id]
         session = get_session(user_id)

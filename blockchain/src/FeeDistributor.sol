@@ -69,7 +69,7 @@ contract FeeDistributor {
     /// @notice USDC token
     IERC20 public usdc;
 
-    /// @notice Financing pool — investor yield is sent here
+    /// @notice Financing pool - investor yield is sent here
     address public financingPool;
 
     /// @notice Voice Ledger protocol treasury

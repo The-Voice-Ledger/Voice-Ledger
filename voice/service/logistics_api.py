@@ -3,11 +3,11 @@ Logistics & Webhook API Router
 
 Provides endpoints for LSP integration and webhook management:
 
-  POST /api/webhooks/register          — Register a webhook URL + subscribed events
-  GET  /api/webhooks                   — List registered webhooks
-  DELETE /api/webhooks/{webhook_id}    — Remove a webhook registration
-  POST /api/logistics/milestone        — Ingest a tracking milestone from an LSP
-  GET  /api/logistics/shipment/{sscc}  — Current shipment status + event timeline
+  POST /api/webhooks/register          - Register a webhook URL + subscribed events
+  GET  /api/webhooks                   - List registered webhooks
+  DELETE /api/webhooks/{webhook_id}    - Remove a webhook registration
+  POST /api/logistics/milestone        - Ingest a tracking milestone from an LSP
+  GET  /api/logistics/shipment/{sscc}  - Current shipment status + event timeline
 
 Created: March 2026 (LSP & Customs Clearance Integration)
 """
@@ -135,11 +135,11 @@ async def register_webhook_endpoint(body: WebhookRegisterRequest):
     Register a webhook URL to receive event notifications.
 
     Supported events:
-    - PREPARING_SHIPMENT — container ready for logistics pickup
-    - SHIPPED — container has departed origin
-    - DELIVERED — container received at destination
-    - PAYMENT_CONFIRMED — payment received and confirmed
-    - MILESTONE_RECEIVED — an LSP milestone was ingested
+    - PREPARING_SHIPMENT - container ready for logistics pickup
+    - SHIPPED - container has departed origin
+    - DELIVERED - container received at destination
+    - PAYMENT_CONFIRMED - payment received and confirmed
+    - MILESTONE_RECEIVED - an LSP milestone was ingested
     """
     try:
         wh = register_webhook(

@@ -3,7 +3,7 @@ Agent Tool Definitions
 
 Each tool is an OpenAI function-calling schema that maps to an existing
 handler in voice/command_integration.py. The agent decides which tool(s)
-to call based on the user's natural language — no manual intent classification.
+to call based on the user's natural language - no manual intent classification.
 
 Adding a new supply chain action = adding a new dict to SUPPLY_CHAIN_TOOLS.
 """
@@ -135,7 +135,7 @@ RECORD_TRANSFORMATION = {
     "function": {
         "name": "record_transformation",
         "description": (
-            "Process coffee — roasting, milling, drying, hulling. "
+            "Process coffee - roasting, milling, drying, hulling. "
             "Changes the physical/chemical properties of the batch. "
             "Use when user describes a processing activity on an existing batch."
         ),
@@ -240,7 +240,7 @@ SPLIT_BATCH = {
         "description": (
             "Split one batch into multiple smaller portions. "
             "Use when user says 'split', 'divide', 'separate'. "
-            "NOT for processing — use record_transformation for that."
+            "NOT for processing - use record_transformation for that."
         ),
         "parameters": {
             "type": "object",
@@ -275,7 +275,7 @@ SPLIT_BATCH = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: query_batches  (READ — no mutation)
+# Tool: query_batches  (READ - no mutation)
 # ---------------------------------------------------------------------------
 QUERY_BATCHES = {
     "type": "function",
@@ -314,7 +314,7 @@ QUERY_BATCHES = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: search_knowledge  (RAG — documentation search)
+# Tool: search_knowledge  (RAG - documentation search)
 # ---------------------------------------------------------------------------
 SEARCH_KNOWLEDGE = {
     "type": "function",
@@ -340,11 +340,11 @@ SEARCH_KNOWLEDGE = {
 
 
 # ===========================================================================
-# MARKETPLACE TOOLS (Agent #3 — RFQ system for buyers & cooperatives)
+# MARKETPLACE TOOLS (Agent #3 - RFQ system for buyers & cooperatives)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: create_rfq  (WRITE — buyer creates request for quote)
+# Tool: create_rfq  (WRITE - buyer creates request for quote)
 # ---------------------------------------------------------------------------
 CREATE_RFQ = {
     "type": "function",
@@ -389,7 +389,7 @@ CREATE_RFQ = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: browse_rfqs  (READ — cooperative browses open requests)
+# Tool: browse_rfqs  (READ - cooperative browses open requests)
 # ---------------------------------------------------------------------------
 BROWSE_RFQS = {
     "type": "function",
@@ -425,7 +425,7 @@ BROWSE_RFQS = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: submit_offer  (WRITE — cooperative offers on an RFQ)
+# Tool: submit_offer  (WRITE - cooperative offers on an RFQ)
 # ---------------------------------------------------------------------------
 SUBMIT_OFFER = {
     "type": "function",
@@ -445,7 +445,7 @@ SUBMIT_OFFER = {
                 },
                 "rfq_number": {
                     "type": "string",
-                    "description": "RFQ number (e.g. RFQ-000001) — alternative to rfq_id",
+                    "description": "RFQ number (e.g. RFQ-000001) - alternative to rfq_id",
                 },
                 "quantity_offered_kg": {
                     "type": "number",
@@ -467,7 +467,7 @@ SUBMIT_OFFER = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: accept_offer  (WRITE — buyer accepts a cooperative's offer)
+# Tool: accept_offer  (WRITE - buyer accepts a cooperative's offer)
 # ---------------------------------------------------------------------------
 ACCEPT_OFFER = {
     "type": "function",
@@ -508,7 +508,7 @@ ACCEPT_OFFER = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: list_my_offers  (READ — cooperative views their offers)
+# Tool: list_my_offers  (READ - cooperative views their offers)
 # ---------------------------------------------------------------------------
 LIST_MY_OFFERS = {
     "type": "function",
@@ -534,11 +534,11 @@ LIST_MY_OFFERS = {
 
 
 # ===========================================================================
-# COMPLIANCE TOOLS (Agent #4 — EUDR & supply chain validation)
+# COMPLIANCE TOOLS (Agent #4 - EUDR & supply chain validation)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: check_eudr_compliance  (READ — validate EUDR requirements)
+# Tool: check_eudr_compliance  (READ - validate EUDR requirements)
 # ---------------------------------------------------------------------------
 CHECK_EUDR_COMPLIANCE = {
     "type": "function",
@@ -567,7 +567,7 @@ CHECK_EUDR_COMPLIANCE = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: check_mass_balance  (READ — validate mass balance)
+# Tool: check_mass_balance  (READ - validate mass balance)
 # ---------------------------------------------------------------------------
 CHECK_MASS_BALANCE = {
     "type": "function",
@@ -622,11 +622,11 @@ CHECK_MASS_BALANCE = {
 
 
 # ===========================================================================
-# VERIFICATION TOOLS (Agent #6 — batch verification workflow)
+# VERIFICATION TOOLS (Agent #6 - batch verification workflow)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: list_pending_verifications  (READ — show unverified batches)
+# Tool: list_pending_verifications  (READ - show unverified batches)
 # ---------------------------------------------------------------------------
 LIST_PENDING_VERIFICATIONS = {
     "type": "function",
@@ -658,7 +658,7 @@ LIST_PENDING_VERIFICATIONS = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: verify_batch  (WRITE — mark a batch as verified)
+# Tool: verify_batch  (WRITE - mark a batch as verified)
 # ---------------------------------------------------------------------------
 VERIFY_BATCH = {
     "type": "function",
@@ -687,7 +687,7 @@ VERIFY_BATCH = {
                 "quality_notes": {
                     "type": "string",
                     "description": (
-                        "Quality assessment notes — grade, moisture content, "
+                        "Quality assessment notes - grade, moisture content, "
                         "defects, overall condition"
                     ),
                 },
@@ -699,11 +699,11 @@ VERIFY_BATCH = {
 
 
 # ===========================================================================
-# DPP TOOLS (Agent #5 — Digital Product Passport generation & lookup)
+# DPP TOOLS (Agent #5 - Digital Product Passport generation & lookup)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: get_dpp  (READ — retrieve Digital Product Passport for a batch)
+# Tool: get_dpp  (READ - retrieve Digital Product Passport for a batch)
 # ---------------------------------------------------------------------------
 GET_DPP = {
     "type": "function",
@@ -731,7 +731,7 @@ GET_DPP = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: get_container_dpp  (READ — aggregated DPP for a container/SSCC)
+# Tool: get_container_dpp  (READ - aggregated DPP for a container/SSCC)
 # ---------------------------------------------------------------------------
 GET_CONTAINER_DPP = {
     "type": "function",
@@ -759,7 +759,7 @@ GET_CONTAINER_DPP = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: trace_lineage  (READ — recursive supply chain traceability)
+# Tool: trace_lineage  (READ - recursive supply chain traceability)
 # ---------------------------------------------------------------------------
 TRACE_LINEAGE = {
     "type": "function",
@@ -792,7 +792,7 @@ TRACE_LINEAGE = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: validate_dpp  (READ — check if a DPP is valid/complete)
+# Tool: validate_dpp  (READ - check if a DPP is valid/complete)
 # ---------------------------------------------------------------------------
 VALIDATE_DPP = {
     "type": "function",
@@ -819,11 +819,11 @@ VALIDATE_DPP = {
 
 
 # ===========================================================================
-# BLOCKCHAIN TOOLS (Agent #7 — on-chain verification & token lookup)
+# BLOCKCHAIN TOOLS (Agent #7 - on-chain verification & token lookup)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: check_blockchain_anchor  (READ — verify batch is anchored on-chain)
+# Tool: check_blockchain_anchor  (READ - verify batch is anchored on-chain)
 # ---------------------------------------------------------------------------
 CHECK_BLOCKCHAIN_ANCHOR = {
     "type": "function",
@@ -851,7 +851,7 @@ CHECK_BLOCKCHAIN_ANCHOR = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: get_token_info  (READ — look up ERC-1155 batch token metadata)
+# Tool: get_token_info  (READ - look up ERC-1155 batch token metadata)
 # ---------------------------------------------------------------------------
 GET_TOKEN_INFO = {
     "type": "function",
@@ -879,7 +879,7 @@ GET_TOKEN_INFO = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: verify_batch_hash  (READ — verify batch data hasn't been tampered)
+# Tool: verify_batch_hash  (READ - verify batch data hasn't been tampered)
 # ---------------------------------------------------------------------------
 VERIFY_BATCH_HASH = {
     "type": "function",
@@ -887,7 +887,7 @@ VERIFY_BATCH_HASH = {
         "name": "verify_batch_hash",
         "description": (
             "Verify a batch's data integrity by comparing its current hash "
-            "against what was anchored on-chain. Detects tampering — if the "
+            "against what was anchored on-chain. Detects tampering - if the "
             "batch data was modified after anchoring, the hashes won't match. "
             "Use when user asks 'has this batch been tampered with', "
             "'verify integrity', 'check hash', 'is the data authentic'."
@@ -907,11 +907,11 @@ VERIFY_BATCH_HASH = {
 
 
 # ===========================================================================
-# CONTAINER MARKETPLACE TOOLS (Agent #3b — fractional container sales)
+# CONTAINER MARKETPLACE TOOLS (Agent #3b - fractional container sales)
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
-# Tool: browse_containers  (READ — list available containers)
+# Tool: browse_containers  (READ - list available containers)
 # ---------------------------------------------------------------------------
 BROWSE_CONTAINERS = {
     "type": "function",
@@ -947,7 +947,7 @@ BROWSE_CONTAINERS = {
 
 
 # ---------------------------------------------------------------------------
-# Tool: purchase_container  (WRITE — buyer buys a portion of a container)
+# Tool: purchase_container  (WRITE - buyer buys a portion of a container)
 # ---------------------------------------------------------------------------
 PURCHASE_CONTAINER = {
     "type": "function",
@@ -1070,7 +1070,7 @@ LIST_MY_COMMITMENTS = {
 # Settlement / Payment tools (Agent #8)
 # ===========================================================================
 
-# Tool: confirm_payment  (WRITE — buyer confirms bank transfer)
+# Tool: confirm_payment  (WRITE - buyer confirms bank transfer)
 # ──────────────────────────────────────────────────────────────────────────────
 CONFIRM_PAYMENT = {
     "type": "function",
@@ -1103,7 +1103,7 @@ CONFIRM_PAYMENT = {
     },
 }
 
-# Tool: check_payment_status  (READ — check payment + settlement status)
+# Tool: check_payment_status  (READ - check payment + settlement status)
 # ──────────────────────────────────────────────────────────────────────────────
 CHECK_PAYMENT_STATUS = {
     "type": "function",
@@ -1131,7 +1131,7 @@ CHECK_PAYMENT_STATUS = {
     },
 }
 
-# Tool: record_cooperative_payout  (WRITE — admin records coop payout on-chain)
+# Tool: record_cooperative_payout  (WRITE - admin records coop payout on-chain)
 # ──────────────────────────────────────────────────────────────────────────────
 RECORD_COOPERATIVE_PAYOUT = {
     "type": "function",
@@ -1160,7 +1160,7 @@ RECORD_COOPERATIVE_PAYOUT = {
     },
 }
 
-# Tool: confirm_payment_received  (WRITE — cooperative confirms receipt)
+# Tool: confirm_payment_received  (WRITE - cooperative confirms receipt)
 # ──────────────────────────────────────────────────────────────────────────────
 CONFIRM_PAYMENT_RECEIVED = {
     "type": "function",
@@ -1319,7 +1319,7 @@ CHECK_DON_ATTESTATION = {
         "description": (
             "Read a DON-attested deforestation result from the blockchain. "
             "Returns the Chainlink DON's attestation including risk level, "
-            "EUDR compliance status, and tree loss data — all verified by "
+            "EUDR compliance status, and tree loss data - all verified by "
             "multiple oracle nodes and written on-chain. Use when user asks "
             "'is my farm compliant', 'what did the DON say about my farm', "
             "'check attestation status', 'EUDR status from blockchain'."

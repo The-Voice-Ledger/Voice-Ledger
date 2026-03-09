@@ -1,5 +1,5 @@
 """
-Voice Ledger — Chainlink CRE Provenance API
+Voice Ledger - Chainlink CRE Provenance API
 
 Three endpoints that CRE DON nodes call to fetch supply-chain data.
 Designed to be run from the project root:
@@ -7,9 +7,9 @@ Designed to be run from the project root:
     uvicorn chainlink.api.provenance_api:app --host 0.0.0.0 --port 8100
 
 Endpoints:
-    GET  /api/provenance              — aggregated supply chain metrics (Trigger 1)
-    GET  /api/batch/{batch_id}        — single batch details (Trigger 2)
-    GET  /api/deforestation/{farm_id} — deforestation check for farm (Trigger 3)
+    GET  /api/provenance              - aggregated supply chain metrics (Trigger 1)
+    GET  /api/batch/{batch_id}        - single batch details (Trigger 2)
+    GET  /api/deforestation/{farm_id} - deforestation check for farm (Trigger 3)
 
 Author: Voice Ledger × Chainlink CRE
 Date:   February 2026
@@ -35,7 +35,7 @@ from database.models import FarmerIdentity, CoffeeBatch, EPCISEvent
 from voice.verification.deforestation_checker import DeforestationChecker
 
 # ---------------------------------------------------------------------------
-# APIRouter (mountable into any FastAPI app — e.g. the main Railway service)
+# APIRouter (mountable into any FastAPI app - e.g. the main Railway service)
 # ---------------------------------------------------------------------------
 provenance_router = APIRouter(tags=["CRE Provenance"])
 
@@ -43,7 +43,7 @@ provenance_router = APIRouter(tags=["CRE Provenance"])
 # Standalone FastAPI app (for local dev: uvicorn chainlink.api.provenance_api:app --port 8100)
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Voice Ledger — CRE Provenance API",
+    title="Voice Ledger - CRE Provenance API",
     description="Data endpoints consumed by Chainlink DON nodes for Proof of Provenance",
     version="1.0.0",
 )
@@ -66,7 +66,7 @@ def _get_db():
 
 
 # ────────────────────────────────────────────────────────────────
-# Trigger 1 — Proof of Provenance aggregate metrics
+# Trigger 1 - Proof of Provenance aggregate metrics
 # ────────────────────────────────────────────────────────────────
 
 @provenance_router.get("/api/provenance")
@@ -119,7 +119,7 @@ def get_provenance_metrics():
 
 
 # ────────────────────────────────────────────────────────────────
-# Trigger 2 — Batch details (called after LogTrigger fires)
+# Trigger 2 - Batch details (called after LogTrigger fires)
 # ────────────────────────────────────────────────────────────────
 
 @provenance_router.get("/api/batch/{batch_id}")
@@ -196,7 +196,7 @@ def get_batch_details(batch_id: str):
 
 
 # ────────────────────────────────────────────────────────────────
-# Trigger 3 — Deforestation oracle (on-demand via HTTP trigger)
+# Trigger 3 - Deforestation oracle (on-demand via HTTP trigger)
 # ────────────────────────────────────────────────────────────────
 
 @provenance_router.get("/api/deforestation/{farm_id}")

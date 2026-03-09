@@ -30,7 +30,7 @@ class ToolRegistry:
     
     def _register_defaults(self):
         """Register the built-in supply chain tools."""
-        # Write tools — delegate to command_integration.py handlers
+        # Write tools - delegate to command_integration.py handlers
         self._tools["record_commission"] = self._wrap_commission
         self._tools["record_shipment"] = self._wrap_shipment
         self._tools["record_receipt"] = self._wrap_receipt
@@ -39,7 +39,7 @@ class ToolRegistry:
         self._tools["unpack_batches"] = self._wrap_unpack
         self._tools["split_batch"] = self._wrap_split
         
-        # Read tools — new capabilities the old pipeline didn't have
+        # Read tools - new capabilities the old pipeline didn't have
         self._tools["query_batches"] = self._query_batches
         self._tools["search_knowledge"] = self._search_knowledge
         
@@ -1186,7 +1186,7 @@ class ToolRegistry:
 
         # ── Post-commission CRE hook ──
         # If the farmer has GPS coords, automatically request a DON
-        # deforestation attestation. Best-effort — never blocks commission.
+        # deforestation attestation. Best-effort - never blocks commission.
         try:
             self._auto_request_don_attestation(db, user_id, data)
         except Exception as e:
@@ -1280,7 +1280,7 @@ class ToolRegistry:
         return handle_split_batch(db, entities, user_id=user_id, user_did=user_did)
     
     # ------------------------------------------------------------------
-    # Read tool implementations (new — not in old pipeline)
+    # Read tool implementations (new - not in old pipeline)
     # ------------------------------------------------------------------
     
     def _query_batches(
@@ -1937,7 +1937,7 @@ class ToolRegistry:
                 {"error": str(e)},
             )
 
-        # Extract contributor data — recursive DPP has 'contributors' not 'chainOfCustody'
+        # Extract contributor data - recursive DPP has 'contributors' not 'chainOfCustody'
         contributors = lineage.get("traceability", {}).get("contributors", [])
         trace_method = lineage.get("traceability", {}).get("traceMethod", "")
         product_info = lineage.get("productInformation", {})
@@ -2271,7 +2271,7 @@ class ToolRegistry:
 
         if not on_chain:
             return (
-                f"Batch {batch.batch_id} is not anchored on-chain yet — "
+                f"Batch {batch.batch_id} is not anchored on-chain yet - "
                 "cannot verify hash integrity.",
                 {"batch_id": batch.batch_id, "anchored": False, "verified": None},
             )
@@ -2286,7 +2286,7 @@ class ToolRegistry:
 
         if match:
             return (
-                f"✅ Batch {batch.batch_id} data integrity verified — "
+                f"✅ Batch {batch.batch_id} data integrity verified - "
                 "hash matches blockchain record. No tampering detected.",
                 {
                     "batch_id": batch.batch_id,
@@ -2297,7 +2297,7 @@ class ToolRegistry:
             )
         else:
             return (
-                f"⚠️ Batch {batch.batch_id} hash MISMATCH — data may have "
+                f"⚠️ Batch {batch.batch_id} hash MISMATCH - data may have "
                 "been modified since it was anchored on-chain.",
                 {
                     "batch_id": batch.batch_id,
@@ -2350,7 +2350,7 @@ class ToolRegistry:
             return (
                 f"📋 Deforestation check completed for farm {farm_id} "
                 f"({'✅ EUDR compliant' if compliant else '❌ Not compliant'}). "
-                f"Note: contract not deployed — result not written on-chain.",
+                f"Note: contract not deployed - result not written on-chain.",
                 result,
             )
         else:
@@ -2463,7 +2463,7 @@ class ToolRegistry:
         farmer = db.query(FarmerIdentity).filter_by(did=user.did).first()
         if not farmer or not farmer.latitude or not farmer.longitude:
             logger.debug(
-                "Skipping CRE auto-attestation — farmer %s has no GPS",
+                "Skipping CRE auto-attestation - farmer %s has no GPS",
                 farmer.farmer_id if farmer else "?",
             )
             return

@@ -1,5 +1,5 @@
 """
-test_provenance_api.py — Unit tests for the CRE Provenance API
+test_provenance_api.py - Unit tests for the CRE Provenance API
 
 Run from project root:
     python -m pytest chainlink/test/test_provenance_api.py -v
@@ -75,7 +75,7 @@ class TestDeforestationEndpoint:
 
     def test_deforestation_endpoint_returns_scaled_values(self):
         """If a farm with GPS exists, verify scaled integer fields."""
-        # This test requires a farm in the DB — skip if none
+        # This test requires a farm in the DB - skip if none
         resp = client.get("/api/deforestation/FARM-001")
         if resp.status_code == 404:
             pytest.skip("FARM-001 not in database")

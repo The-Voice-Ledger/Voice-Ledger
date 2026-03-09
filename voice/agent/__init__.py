@@ -3,7 +3,7 @@ Voice Ledger AI Agent
 
 Tool-calling agent that replaces the rigid NLU → switch/case pipeline.
 Instead of classifying into 7 hardcoded intents, the agent reasons about
-which tools to call and what arguments to pass — using OpenAI function-calling.
+which tools to call and what arguments to pass - using OpenAI function-calling.
 
 Architecture:
     Voice → STT → Agent(tools=[...]) → tool calls → results → response

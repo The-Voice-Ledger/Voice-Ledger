@@ -1,9 +1,9 @@
 """
-Settlement Manager — Record off-chain bank-transfer settlements on Base Sepolia.
+Settlement Manager - Record off-chain bank-transfer settlements on Base Sepolia.
 
 Two settlement legs are supported:
-  1. **Buyer settlement** — buyer pays into WAGA's European bank account.
-  2. **Cooperative payout** — WAGA forwards funds to the Ethiopian cooperative.
+  1. **Buyer settlement** - buyer pays into WAGA's European bank account.
+  2. **Cooperative payout** - WAGA forwards funds to the Ethiopian cooperative.
 
 Both legs call ``SettlementContract.settleCommissioning()`` with different
 settlement-ID ranges so they never collide:
@@ -138,7 +138,7 @@ class SettlementManager:
         return result
 
     # ------------------------------------------------------------------
-    # Public API — buyer settlements
+    # Public API - buyer settlements
     # ------------------------------------------------------------------
 
     def record_settlement(
@@ -187,7 +187,7 @@ class SettlementManager:
         return result
 
     # ------------------------------------------------------------------
-    # Public API — cooperative payouts
+    # Public API - cooperative payouts
     # ------------------------------------------------------------------
 
     def record_cooperative_payout_for_acceptance(

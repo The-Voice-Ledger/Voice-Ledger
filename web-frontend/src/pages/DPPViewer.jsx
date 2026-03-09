@@ -1,7 +1,7 @@
 import { useSearchParams, Link, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle, LuPrinter } from 'react-icons/lu'
+import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle, LuDownload, LuExternalLink } from 'react-icons/lu'
 import { fetchDPP } from '../api/marketplace'
 
 /* ── Skeleton loader ───────────────────────────────────────────── */
@@ -198,26 +198,30 @@ export default function DPPViewer() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
 
-                    {/* Print / Save as PDF */}
-                    <div className="mt-6">
-                      <button
-                        onClick={() => window.print()}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-sm px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95"
-                      >
-                        <LuPrinter className="w-4 h-4" />
-                        Save as PDF
-                      </button>
-                    </div>
-
-                    <style>{`
-                      @media print {
-                        nav, header, footer, form,
-                        .dpp-no-print { display: none !important; }
-                        body { background: white; }
-                        .dpp-print-card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
-                      }
-                    `}</style>
+                {/* Download PDF + View Passport */}
+                {(dpp.batch_id || dpp.id) && (
+                  <div className="mt-6 pt-6 border-t border-stone-100 -mx-6 -mb-6 px-6 pb-6 flex flex-wrap items-center justify-center gap-3">
+                    <a
+                      href={`/api/dpp/batch/${encodeURIComponent(dpp.batch_id || dpp.id)}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-white bg-stone-900 hover:bg-stone-800 px-5 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-sm"
+                    >
+                      <LuDownload className="w-4 h-4" />
+                      {t('dpp_download_pdf')}
+                    </a>
+                    <a
+                      href={`/passport/${encodeURIComponent(dpp.batch_id || dpp.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-sm px-5 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95"
+                    >
+                      <LuExternalLink className="w-4 h-4" />
+                      {t('dpp_view_passport')}
+                    </a>
                   </div>
                 )}
               </div>
@@ -237,9 +241,17 @@ export default function DPPViewer() {
                       <div className="absolute -left-8 top-0.5 w-7 h-7 rounded-full bg-forest-100 text-forest-700 flex items-center justify-center text-xs font-bold shrink-0 z-10">
                         {i + 1}
                       </div>
-                      <div>
-                        <div className="font-medium text-stone-800">{step.event_type || step.type}</div>
-                        <div className="text-xs text-stone-500">{step.description || step.batch_id}</div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-stone-800">{step.eventType || step.event_type || step.type || 'Event'}</div>
+                        <div className="text-xs text-stone-500">
+                          {step.bizStep && <span className="capitalize">{step.bizStep}</span>}
+                          {step.bizStep && step.timestamp && <span> - </span>}
+                          {step.timestamp && <span>{new Date(step.timestamp).toLocaleDateString()}</span>}
+                          {!step.bizStep && !step.timestamp && (step.description || step.batch_id || '')}
+                        </div>
+                        {step.eventHash && (
+                          <div className="text-[10px] font-mono text-stone-400 mt-0.5 truncate">{step.eventHash}</div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -274,7 +286,7 @@ function Field({ label, value, highlight }) {
     <div>
       <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1">{label}</dt>
       <dd className={`text-sm font-medium ${highlight ? 'text-forest-700 font-bold' : 'text-stone-700'}`}>
-        {value || '—'}
+        {value || '-'}
       </dd>
     </div>
   )

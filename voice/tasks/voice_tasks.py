@@ -542,6 +542,16 @@ def process_voice_command_task(
                                                 send_batch_verification_qr(int(user_id), _batch_info)
                                             )
                                             logger.info(f"📦 Post-commission QR sent to {user_id}: {_qr_ok}")
+
+                                            # Also send DPP PDF document
+                                            try:
+                                                from voice.telegram.notifier import send_batch_dpp_pdf
+                                                _pdf_ok = loop.run_until_complete(
+                                                    send_batch_dpp_pdf(int(user_id), _batch_data.get("batch_id"))
+                                                )
+                                                logger.info(f"📄 Post-commission DPP PDF sent to {user_id}: {_pdf_ok}")
+                                            except Exception as _pdf_err:
+                                                logger.warning(f"DPP PDF send failed (non-critical): {_pdf_err}")
                                     except Exception as _qr_err:
                                         logger.error(f"Failed to send post-commission QR: {_qr_err}", exc_info=True)
 
@@ -593,7 +603,7 @@ def process_voice_command_task(
                 # Fall through to legacy conversational AI path
         
         # =====================================================================
-        # LEGACY PATH — conversational AI + single-shot NLU fallback
+        # LEGACY PATH - conversational AI + single-shot NLU fallback
         # (Kept for backward compatibility; disable with AGENT_ENABLED=true)
         # =====================================================================
         
@@ -601,7 +611,7 @@ def process_voice_command_task(
         _agent_was_enabled = os.getenv("AGENT_ENABLED", "false").lower() == "true"
         _fallback_banner = ""
         if _agent_was_enabled and agent_error_detail:
-            _fallback_banner = "⚠️ [Fallback mode — AI agent unavailable]\n\n"
+            _fallback_banner = "⚠️ [Fallback mode - AI agent unavailable]\n\n"
         
         # Route to conversational AI based on user language (NEW: multi-turn conversation)
         try:
@@ -904,6 +914,18 @@ def process_voice_command_task(
                                 )
                                 if success:
                                     logger.info(f"Notification sent successfully to {target_id}")
+
+                                    # Also send DPP PDF document
+                                    try:
+                                        from voice.telegram.notifier import send_batch_dpp_pdf
+                                        _bid = db_result.get("batch_id")
+                                        if _bid:
+                                            _pdf_ok = loop.run_until_complete(
+                                                send_batch_dpp_pdf(target_id, _bid)
+                                            )
+                                            logger.info(f"📄 DPP PDF sent to {target_id}: {_pdf_ok}")
+                                    except Exception as _pdf_err:
+                                        logger.warning(f"DPP PDF send failed (non-critical): {_pdf_err}")
                                 else:
                                     logger.error(f"Failed to send notification to {target_id}")
                             finally:

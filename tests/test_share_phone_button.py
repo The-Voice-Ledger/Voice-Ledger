@@ -113,7 +113,7 @@ def test_voice_responses_keyboard_builder_supports_request_contact():
 
 if __name__ == '__main__':
     print("\n" + "=" * 60)
-    print("Share Phone Button — Unit Tests")
+    print("Share Phone Button - Unit Tests")
     print("=" * 60)
 
     test_voice_responses_keyboard_builder_supports_request_contact()
@@ -122,6 +122,6 @@ if __name__ == '__main__':
     try:
         test_location_state_returns_reply_keyboard_with_request_contact()
     except Exception as e:
-        print(f"⚠️  Test 1 requires a database — skipping in unit mode: {e}")
+        print(f"⚠️  Test 1 requires a database - skipping in unit mode: {e}")
 
     print("\n✅ All runnable tests passed!")

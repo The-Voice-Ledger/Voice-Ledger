@@ -1,4 +1,4 @@
-# Chainlink CRE Integration — Voice Ledger Oracle
+# Chainlink CRE Integration - Voice Ledger Oracle
 
 ## Quick Start
 
@@ -40,19 +40,19 @@ bun install
 ### 3. Simulate Each Trigger
 
 ```bash
-# Trigger 1 — Proof of Provenance (Cron)
+# Trigger 1 - Proof of Provenance (Cron)
 cre workflow simulate \
   --workflow-file main.ts \
   --config-file config.json \
   --trigger-index 0
 
-# Trigger 2 — Event Watcher (LogTrigger)
+# Trigger 2 - Event Watcher (LogTrigger)
 cre workflow simulate \
   --workflow-file main.ts \
   --config-file config.json \
   --trigger-index 1
 
-# Trigger 3 — Deforestation Oracle (HTTP)
+# Trigger 3 - Deforestation Oracle (HTTP)
 cre workflow simulate \
   --workflow-file main.ts \
   --config-file config.json \
@@ -65,7 +65,7 @@ cre workflow simulate \
 The `ProvenanceDataReceiver.sol` contract lives in the main Foundry suite at `blockchain/src/` alongside all other Voice Ledger contracts.
 
 ```bash
-# From project root — build all contracts with Foundry
+# From project root - build all contracts with Foundry
 cd blockchain && forge build
 
 # Deploy to Base Sepolia

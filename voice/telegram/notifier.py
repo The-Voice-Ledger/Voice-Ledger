@@ -138,14 +138,14 @@ async def send_batch_verification_qr(chat_id: int, batch_info: Dict[str, Any]) -
     # Get GLN for display
     gln = batch_info.get('gln', 'Not assigned')
     
-    # Use HTML parse mode — MarkdownV2 requires escaping dozens of
+    # Use HTML parse mode - MarkdownV2 requires escaping dozens of
     # special characters (. - ! ( ) etc.) which is fragile with
     # dynamic data like GTINs and GLNs.
     import html as _html
     _e = lambda v: _html.escape(str(v))  # shorthand for HTML-escaping
 
     caption = (
-        f"📦 <b>Batch Created — Awaiting Verification</b>\n\n"
+        f"📦 <b>Batch Created - Awaiting Verification</b>\n\n"
         f"<b>Batch ID:</b> <code>{_e(batch_id)}</code>\n"
         f"🏷️ <b>GTIN:</b> <code>{_e(gtin)}</code>\n"
         f"📍 <b>GLN:</b> <code>{_e(gln)}</code>\n"
@@ -232,3 +232,71 @@ def send_error_notification(chat_id: int, error: str) -> bool:
     """
     message = f"❌ *Error Processing Voice Command*\n\n{error}"
     return send_telegram_notification(chat_id, message)
+
+
+async def send_batch_dpp_pdf(chat_id: int, batch_id: str) -> bool:
+    """
+    Generate and send the Digital Product Passport PDF via Telegram.
+
+    Called after a successful batch commission so the farmer receives a
+    downloadable PDF they can share with cooperatives or customs brokers.
+
+    Args:
+        chat_id: Telegram user/chat ID
+        batch_id: Batch identifier (e.g. "BATCH-2025-001")
+
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    import httpx
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not set - cannot send DPP PDF")
+        return False
+
+    try:
+        from dpp.dpp_pdf import build_and_render_pdf
+
+        pdf_bytes = build_and_render_pdf(batch_id)
+    except Exception as e:
+        logger.error(f"Failed to generate DPP PDF for {batch_id}: {e}")
+        return False
+
+    import html as _html
+    _e = lambda v: _html.escape(str(v))
+
+    caption = (
+        f"📄 <b>Digital Product Passport</b>\n\n"
+        f"<b>Batch:</b> <code>{_e(batch_id)}</code>\n"
+        f"Your full DPP is attached as a PDF.  Share it with "
+        f"cooperatives, customs brokers, or buyers for instant "
+        f"traceability verification."
+    )
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+
+    try:
+        files = {
+            "document": (f"DPP_{batch_id}.pdf", pdf_bytes, "application/pdf"),
+        }
+        data = {
+            "chat_id": chat_id,
+            "caption": caption,
+            "parse_mode": "HTML",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, data=data, files=files)
+
+        if response.status_code == 200:
+            logger.info(f"DPP PDF sent to {chat_id} for batch {batch_id}")
+            return True
+        else:
+            logger.error(
+                f"Telegram sendDocument error: {response.status_code} - {response.text}"
+            )
+            return False
+    except Exception as e:
+        logger.error(f"Failed to send DPP PDF to {chat_id}: {e}")
+        return False

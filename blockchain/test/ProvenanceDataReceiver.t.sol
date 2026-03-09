@@ -186,7 +186,7 @@ contract ProvenanceDataReceiverTest is Test {
         assertFalse(receiver.isFarmCompliant("FARM-002"));
         assertEq(receiver.attestedFarmCount(), 1);
 
-        // Updated attestation — farm is now compliant
+        // Updated attestation - farm is now compliant
         bytes memory payload2 = abi.encode(
             "FARM-002", int64(9000000), int64(38000000), uint8(0), true, uint256(2000), uint256(1700000001)
         );

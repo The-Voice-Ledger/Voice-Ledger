@@ -4,9 +4,9 @@ Agent REST API Router
 Exposes the AgentExecutor over HTTP for the web frontend SPA.
 
 Endpoints:
-  POST /api/agent/text   — Send a text message, get agent response
-  POST /api/agent/voice  — Send audio file, get agent response + optional TTS
-  GET  /api/agent/health — Health check
+  POST /api/agent/text   - Send a text message, get agent response
+  POST /api/agent/voice  - Send audio file, get agent response + optional TTS
+  GET  /api/agent/health - Health check
 
 Auth model:
   - Anonymous users can use READ-only tools (browse_rfqs, query_batches, …)

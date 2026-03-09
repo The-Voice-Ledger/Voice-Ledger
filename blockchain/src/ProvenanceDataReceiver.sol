@@ -6,8 +6,8 @@ pragma solidity ^0.8.20;
  * @notice Receives DON-signed reports from the Voice Ledger CRE workflow.
  *
  *         Two report types:
- *           0x01 — Proof of Provenance metrics (from CronTrigger)
- *           0x02 — Deforestation attestation   (from HTTPTrigger)
+ *           0x01 - Proof of Provenance metrics (from CronTrigger)
+ *           0x02 - Deforestation attestation   (from HTTPTrigger)
  *
  *         In production, this contract would inherit from Chainlink's
  *         KeystoneClient to validate DON signatures via the KeystoneRouter.
