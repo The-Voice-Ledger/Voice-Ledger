@@ -136,22 +136,7 @@ function CardDeck({ features }) {
 
 export default function Landing() {
   const { t } = useTranslation()
-  const { isAuthenticated, user, syncFromStorage } = useAuthStore()
-
-  // Force sync from localStorage on component mount
-  React.useEffect(() => {
-    console.log('🔍 Landing.jsx: Component mounted, calling syncFromStorage...')
-    syncFromStorage()
-  }, [syncFromStorage])
-
-  // Debug: Check localStorage and auth state
-  const token = localStorage.getItem('voice-ledger-auth')
-  console.log('🔍 Landing.jsx Debug:')
-  console.log('  - localStorage token exists:', !!token)
-  console.log('  - localStorage token value:', token ? token.substring(0, 50) + '...' : 'null')
-  console.log('  - isAuthenticated:', isAuthenticated)
-  console.log('  - user:', user)
-  console.log('  - should show login button:', !isAuthenticated)
+  const { isAuthenticated, user } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('supply')
   const [activeTab2, setActiveTab2] = useState('supply')
