@@ -1815,6 +1815,14 @@ class ToolRegistry:
         dd = dpp.get("dueDiligence", {})
         bc = dpp.get("blockchain", {})
         don = dpp.get("donAttestation", {})
+        eudr = dpp.get("eudrCompliance", {})
+        geo_coords = (
+            eudr.get("geolocation", {})
+            .get("farmLocation", {})
+            .get("coordinates", {})
+        )
+        farm_lat = geo_coords.get("latitude")
+        farm_lon = geo_coords.get("longitude")
 
         don_line = ""
         if don.get("attestationExists"):
@@ -1847,9 +1855,9 @@ class ToolRegistry:
                 "farmer_name": origin.get("farmer", {}).get("name"),
                 "cooperative": dpp.get("cooperative") or self._get_batch_cooperative(batch_id, db),
                 "certifications": [c.get("type") for c in dpp.get("sustainability", {}).get("certifications", [])],
-                "latitude": origin.get("latitude"),
-                "longitude": origin.get("longitude"),
-                "gps_coordinates": f"{origin.get('latitude', '?')}, {origin.get('longitude', '?')}",
+                "latitude": farm_lat,
+                "longitude": farm_lon,
+                "gps_coordinates": f"{farm_lat or '?'}, {farm_lon or '?'}",
                 "eudr_compliant": dd.get("eudrCompliant"),
                 "deforestation_risk": dd.get("riskAssessment", {}).get("deforestationRisk"),
                 "blockchain_anchored": bc.get("anchors") and len(bc.get("anchors", [])) > 0,
