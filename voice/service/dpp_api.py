@@ -533,11 +533,41 @@ def _render_passport_html(dpp: Dict[str, Any]) -> str:
             <div class="row"><span class="lbl">EUDR Compliant</span><span>{_esc(don.get('eudrCompliant'))}</span></div>
             <div class="row"><span class="lbl">Tree Loss</span><span>{_esc(don.get('treeLossHectares'))} ha</span></div>
         </div>"""
+    else:
+        don_note = _esc((don or {}).get("note", "DON attestation pending"))
+        don_html = f"""
+        <div class="section">
+            <h2>Chainlink DON Attestation</h2>
+            <div class="row"><span class="lbl">Status</span><span>{don_note}</span></div>
+        </div>"""
 
     qr_img = qr.get("imageUrl", "")
     qr_block = ""
     if qr_img:
         qr_block = f'<div class="qr"><img src="{qr_img}" alt="QR Code" width="160" height="160"></div>'
+
+    # Quality assessment section
+    qa = dpp.get("qualityAssessment", {})
+    qa_status = qa.get("status", "PENDING_VERIFICATION")
+    if qa_status == "ASSESSED":
+        qa_rows = ""
+        if qa.get("cuppingScore") is not None:
+            qa_rows += f'<div class="row"><span class="lbl">Cupping Score (SCA)</span><span>{_esc(qa.get("cuppingScore"))}</span></div>'
+        if qa.get("moisturePct") is not None:
+            qa_rows += f'<div class="row"><span class="lbl">Moisture</span><span>{_esc(qa.get("moisturePct"))}%</span></div>'
+        if qa.get("screenSize"):
+            qa_rows += f'<div class="row"><span class="lbl">Screen Size</span><span>{_esc(qa.get("screenSize"))}</span></div>'
+        if qa.get("defectCount") is not None:
+            cat = _esc(qa.get("defectCategory") or "")
+            qa_rows += f'<div class="row"><span class="lbl">Defects</span><span>{_esc(qa.get("defectCount"))} {cat}</span></div>'
+        sensory = qa.get("sensoryNotes", {})
+        for attr, val in (sensory or {}).items():
+            qa_rows += f'<div class="row"><span class="lbl">{_esc(attr.title())}</span><span>{_esc(val)}</span></div>'
+        if qa.get("assessedAt"):
+            qa_rows += f'<div class="row"><span class="lbl">Assessed</span><span>{_esc(qa["assessedAt"][:19].replace("T", " "))}</span></div>'
+        qa_html = f'<div class="section"><h2>Quality Assessment</h2>{qa_rows}</div>'
+    else:
+        qa_html = '<div class="section"><h2>Quality Assessment</h2><div class="row"><span class="lbl">Status</span><span>Pending cooperative verification</span></div></div>'
 
     dd_risk = dd.get("riskAssessment", {})
     defo_check = risk.get("deforestationCheck", {})
@@ -607,6 +637,8 @@ body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     <div class="row"><span class="lbl">Farmer</span><span>{_esc(farmer.get('name'))}</span></div>
     <div class="row"><span class="lbl">DID</span><span style="font-size:.75rem;word-break:break-all">{_esc(farmer.get('did'))}</span></div>
   </div>
+
+  {qa_html}
 
   <div class="section">
     <h2>EUDR Compliance</h2>

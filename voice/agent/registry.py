@@ -2095,6 +2095,20 @@ class ToolRegistry:
         batch.verified_at = datetime.utcnow()
         batch.verification_used = True
 
+        # Persist quality assessment data if provided
+        if args.get("cupping_score") is not None:
+            batch.cupping_score = float(args["cupping_score"])
+        if args.get("moisture_pct") is not None:
+            batch.moisture_pct = float(args["moisture_pct"])
+        if args.get("screen_size"):
+            batch.screen_size = str(args["screen_size"])
+        if args.get("defect_count") is not None:
+            batch.defect_count = int(args["defect_count"])
+        if args.get("defect_category"):
+            batch.defect_category = str(args["defect_category"])
+        if args.get("sensory_notes"):
+            batch.sensory_notes = args["sensory_notes"]
+
         # Try to issue verification credential
         credential_issued = False
         if user.organization_id and batch.created_by_did:

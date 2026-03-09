@@ -190,6 +190,34 @@ def render_dpp_pdf(dpp: Dict[str, Any]) -> bytes:
     pdf._label_value("GLN", farmer.get("gln"))
 
     # ------------------------------------------------------------------
+    # 2b. Quality Assessment
+    # ------------------------------------------------------------------
+    qa = dpp.get("qualityAssessment", {})
+    pdf._section_title("Quality Assessment")
+    qa_status = qa.get("status", "PENDING_VERIFICATION")
+    pdf._label_value("Status", qa_status)
+    if qa_status == "ASSESSED":
+        if qa.get("cuppingScore") is not None:
+            pdf._label_value("Cupping Score (SCA)", qa.get("cuppingScore"))
+        if qa.get("moisturePct") is not None:
+            pdf._label_value("Moisture", f"{qa.get('moisturePct')}%")
+        if qa.get("screenSize"):
+            pdf._label_value("Screen Size", qa.get("screenSize"))
+        if qa.get("defectCount") is not None:
+            cat = qa.get("defectCategory") or ""
+            pdf._label_value("Defects", f"{qa.get('defectCount')} ({cat})" if cat else str(qa.get('defectCount')))
+        sensory = qa.get("sensoryNotes", {})
+        if sensory:
+            for attr, val in sensory.items():
+                pdf._label_value(f"  {attr.title()}", val)
+        if qa.get("assessedAt"):
+            pdf._label_value("Assessed At", qa["assessedAt"][:19].replace("T", " "))
+        if qa.get("assessedBy"):
+            pdf._label_value("Assessed By", qa["assessedBy"])
+    else:
+        pdf._label_value("Note", "Quality data will be added after cooperative verification")
+
+    # ------------------------------------------------------------------
     # 3. EUDR Compliance
     # ------------------------------------------------------------------
     eudr = dpp.get("eudrCompliance", {})

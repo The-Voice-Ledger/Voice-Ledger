@@ -393,6 +393,21 @@ async def _process_verification(
     batch.verification_notes = notes
     batch.verifying_organization_id = session.get('organization_id')
     
+    # Persist quality assessment data if provided
+    quality = session.get('quality', {})
+    if quality.get('cupping_score') is not None:
+        batch.cupping_score = float(quality['cupping_score'])
+    if quality.get('moisture_pct') is not None:
+        batch.moisture_pct = float(quality['moisture_pct'])
+    if quality.get('screen_size'):
+        batch.screen_size = str(quality['screen_size'])
+    if quality.get('defect_count') is not None:
+        batch.defect_count = int(quality['defect_count'])
+    if quality.get('defect_category'):
+        batch.defect_category = str(quality['defect_category'])
+    if quality.get('sensory_notes'):
+        batch.sensory_notes = quality['sensory_notes']
+    
     db.commit()
     
     # Mint batch token AFTER verification (cooperative custodial model)

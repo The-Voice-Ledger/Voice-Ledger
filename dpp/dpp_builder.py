@@ -461,6 +461,13 @@ def load_batch_data(batch_id: str):
         _ = batch.process_method
         _ = batch.farm_name
         _ = batch.qr_code_base64
+        # Quality assessment fields
+        _ = batch.cupping_score
+        _ = batch.moisture_pct
+        _ = batch.screen_size
+        _ = batch.defect_count
+        _ = batch.defect_category
+        _ = batch.sensory_notes
         
         # Expunge all related objects from session so they can be used outside
         db.expunge_all()
@@ -516,6 +523,26 @@ def build_dpp(
         "processMethod": process_method or batch.process_method,
         "gtin": batch.gtin
     }
+    
+    # Build quality assessment section (populated during cooperative verification)
+    quality_assessment = {
+        "status": "ASSESSED" if batch.cupping_score is not None else "PENDING_VERIFICATION",
+    }
+    if batch.cupping_score is not None:
+        quality_assessment["cuppingScore"] = batch.cupping_score
+        quality_assessment["scaProtocol"] = "SCA Cupping Protocol (0-100)"
+    if batch.moisture_pct is not None:
+        quality_assessment["moisturePct"] = batch.moisture_pct
+    if batch.screen_size:
+        quality_assessment["screenSize"] = batch.screen_size
+    if batch.defect_count is not None:
+        quality_assessment["defectCount"] = batch.defect_count
+        quality_assessment["defectCategory"] = batch.defect_category
+    if batch.sensory_notes:
+        quality_assessment["sensoryNotes"] = batch.sensory_notes
+    if batch.verified_at:
+        quality_assessment["assessedAt"] = batch.verified_at.isoformat()
+        quality_assessment["assessedBy"] = batch.verified_by_did
     
     # Build traceability section from database
     traceability = {
@@ -672,6 +699,7 @@ def build_dpp(
         "productInformation": product_info,
         "traceability": traceability,
         "sustainability": sustainability,
+        "qualityAssessment": quality_assessment,
         "dueDiligence": due_diligence,
         "eudrCompliance": eudr_compliance,
         "donAttestation": don_attestation,  # Chainlink DON-attested deforestation

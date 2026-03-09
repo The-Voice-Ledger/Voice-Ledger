@@ -245,6 +245,14 @@ class CoffeeBatch(Base):
     has_photo_evidence = Column(Boolean, default=False)
     verifying_organization_id = Column(Integer, ForeignKey("organizations.id"), index=True)
     
+    # Quality assessment fields (populated during cooperative verification)
+    cupping_score = Column(Float, nullable=True)       # SCA protocol, 0-100
+    moisture_pct = Column(Float, nullable=True)         # Moisture %, ideal 10-12
+    screen_size = Column(String(20), nullable=True)     # e.g. "15+", "14-16"
+    defect_count = Column(Integer, nullable=True)       # Total defects per 350g sample
+    defect_category = Column(String(20), nullable=True) # SCA Category 1 / Category 2 / None
+    sensory_notes = Column(JSON, nullable=True)         # {aroma, acidity, body, flavor, aftertaste, balance, ...}
+    
     qr_code_base64 = Column(Text, nullable=True)  # Base64 encoded PNG of DPP QR code
     
     created_at = Column(DateTime, default=datetime.utcnow)

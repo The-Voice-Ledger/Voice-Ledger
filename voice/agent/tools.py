@@ -691,6 +691,50 @@ VERIFY_BATCH = {
                         "defects, overall condition"
                     ),
                 },
+                "cupping_score": {
+                    "type": "number",
+                    "description": (
+                        "SCA cupping score (0-100). Specialty grade is 80+. "
+                        "Extract from manager's quality assessment."
+                    ),
+                },
+                "moisture_pct": {
+                    "type": "number",
+                    "description": (
+                        "Moisture percentage of the green coffee (e.g. 11.5). "
+                        "Ideal range is 10-12%."
+                    ),
+                },
+                "screen_size": {
+                    "type": "string",
+                    "description": (
+                        "Bean screen size, e.g. '15+', '14-16', '17/18'. "
+                        "Measured by sieve number."
+                    ),
+                },
+                "defect_count": {
+                    "type": "integer",
+                    "description": (
+                        "Total defect count per 350g sample. "
+                        "Specialty grade allows max 5 full defects."
+                    ),
+                },
+                "defect_category": {
+                    "type": "string",
+                    "description": (
+                        "SCA defect category: 'Specialty' (0-5 defects), "
+                        "'Premium' (6-8), 'Exchange' (9-23), "
+                        "'Below Standard' (24-86), or 'Off Grade' (86+)."
+                    ),
+                },
+                "sensory_notes": {
+                    "type": "object",
+                    "description": (
+                        "Sensory evaluation scores. Keys: aroma, acidity, "
+                        "body, flavor, aftertaste, balance, uniformity, "
+                        "clean_cup, sweetness, overall. Values are numbers."
+                    ),
+                },
             },
             "required": ["batch_id"],
         },
