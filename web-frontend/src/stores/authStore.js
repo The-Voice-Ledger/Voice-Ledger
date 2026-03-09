@@ -1,31 +1,33 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 /**
  * Auth store - JWT token + user info persisted to localStorage.
  */
-const useAuthStore = create((set) => ({
-  token: localStorage.getItem('vl_token') || null,
-  user: JSON.parse(localStorage.getItem('vl_user') || 'null'),
-  isAuthenticated: !!localStorage.getItem('vl_token'),
+const useAuthStore = create(
+  persist(
+    (set) => ({
+      token: null,
+      user: null,
+      isAuthenticated: false,
 
-  login: (token, user) => {
-    localStorage.setItem('vl_token', token)
-    localStorage.setItem('vl_user', JSON.stringify(user))
-    set({ token, user, isAuthenticated: true })
-  },
+      login: (token, user) => {
+        set({ token, user, isAuthenticated: true })
+      },
 
-  logout: () => {
-    localStorage.removeItem('vl_token')
-    localStorage.removeItem('vl_user')
-    set({ token: null, user: null, isAuthenticated: false })
-  },
-}))
-
-// Listen for auth-expired events (from api client)
-if (typeof window !== 'undefined') {
-  window.addEventListener('vl:auth-expired', () => {
-    useAuthStore.getState().logout()
-  })
-}
+      logout: () => {
+        set({ token: null, user: null, isAuthenticated: false })
+      },
+    }),
+    {
+      name: 'voice-ledger-auth',
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
+  )
+)
 
 export default useAuthStore
