@@ -14,7 +14,7 @@ import logging
 import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
-from database.models import UserIdentity, Organization, SessionLocal
+from database.models import UserIdentity, Organization, SessionLocal, RFQ, RFQOffer
 from voice.telegram.voice_responses import escape_markdown
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,11 @@ async def handle_rfq_callback(user_id: int, callback_data: str, username: str = 
         elif callback_data == 'myrfqs':
             # Handle "My RFQs" button
             return await handle_myrfqs_command(user_id, username)
+            
+        elif callback_data.startswith('view_offers_'):
+            # Handle "View Offers for RFQ" button - extract RFQ ID from callback
+            rfq_id = callback_data.split('_', 2)[2]  # Get RFQ ID from "view_offers_{rfq['id']}"
+            return await handle_view_offers(user_id, rfq_id, username)
             
         elif callback_data.startswith('offer_'):
             # Handle "Offer for RFQ" button - extract RFQ number from callback
@@ -585,6 +590,97 @@ async def handle_confirm_input(user_id: int, text: str, session: Dict) -> Dict[s
             ),
             'keyboard': [[{'text': '/rfq - Try Again'}]]
         }
+
+
+async def handle_view_offers(user_id: int, rfq_id: str, username: str = None) -> Dict[str, Any]:
+    """
+    Handle "View Offers for RFQ" callback.
+    
+    Args:
+        user_id: Telegram user ID
+        rfq_id: RFQ ID to view offers for
+        username: Optional username for user lookup
+        
+    Returns:
+        Dict with message and optional keyboard
+    """
+    logger.info(f"🔍 handle_view_offers called: user_id={user_id}, rfq_id={rfq_id}, username={username}")
+    
+    db = SessionLocal()
+    try:
+        # Authenticate user
+        user = db.query(UserIdentity).filter(
+            UserIdentity.telegram_user_id == str(user_id)
+        ).first()
+        
+        if not user:
+            logger.info(f"❌ User not found: {user_id}")
+            return {
+                'message': (
+                    "❌ *Not Registered*\n\n"
+                    "You must register first to use the marketplace.\n"
+                    "Use /register to get started."
+                ),
+                'parse_mode': 'Markdown'
+            }
+        
+        # Find the specific RFQ
+        rfq = db.query(RFQ).filter(
+            RFQ.id == int(rfq_id)
+        ).first()
+        
+        if not rfq:
+            logger.info(f"❌ RFQ not found: {rfq_id}")
+            return {
+                'message': '❌ RFQ not found',
+                'parse_mode': 'Markdown'
+            }
+        
+        # Get offers for this RFQ
+        offers = db.query(RFQOffer).filter(
+            RFQOffer.rfq_id == rfq.id
+        ).order_by(RFQOffer.created_at.desc()).all()
+        
+        logger.info(f"📊 Found {len(offers)} offers for RFQ {rfq.rfq_number}")
+        
+        if not offers:
+            logger.info(f"❌ No offers found for RFQ {rfq.rfq_number}")
+            return {
+                'message': f'📋 *No offers yet for RFQ {rfq.rfq_number}*\n\nClick "Create Offer" below to submit one.',
+                'parse_mode': 'Markdown'
+            }
+        
+        # Build message with offers
+        message = f'📋 *Offers for RFQ {rfq.rfq_number}*\n\n'
+        
+        for i, offer in enumerate(offers, 1):
+            price_per_kg = offer.price_per_kg if offer.price_per_kg else 'Negotiable'
+            message += (
+                f'*{i}. Offer {offer.offer_number}*\n'
+                f'💰 Price: ${price_per_kg}/kg\n'
+                f'📦 Available: {offer.quantity_offered_kg} kg\n'
+                f'� Delivery: {offer.delivery_timeline or "TBD"}\n\n'
+            )
+        
+        logger.info(f"✅ Built message with {len(offers)} offers")
+        
+        result = {
+            'message': message,
+            'parse_mode': 'Markdown',
+            'inline_keyboard': [[{'text': '🔙 Back to My RFQs', 'callback_data': 'myrfqs'}]]
+        }
+        
+        logger.info(f"🔚 Returning result: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Error viewing offers for RFQ {rfq_id}: {e}", exc_info=True)
+        return {
+            'message': '❌ Error loading offers',
+            'parse_mode': 'Markdown'
+        }
+    finally:
+        db.close()
 
 
 async def handle_offers_command(user_id: int, username: str) -> Dict[str, Any]:

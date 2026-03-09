@@ -3019,7 +3019,7 @@ async def handle_callback_query(update_data: Dict[str, Any]) -> Dict[str, Any]:
             return {"ok": True, "message": "Verification callback handled"}
         
         # Handle RFQ-related callbacks
-        if callback_data in ('myoffers', 'offers', 'rfq', 'myrfqs') or callback_data.startswith('offer_'):
+        if callback_data in ('myoffers', 'offers', 'rfq', 'myrfqs') or callback_data.startswith('offer_') or callback_data.startswith('view_offers_'):
             from voice.telegram.rfq_handler import handle_rfq_callback
             
             # Get username from callback query for user lookup
