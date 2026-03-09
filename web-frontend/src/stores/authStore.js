@@ -31,6 +31,30 @@ const useAuthStore = create(
         })
         return state
       },
+
+      // Force sync from localStorage (for Railway deployment)
+      syncFromStorage: () => {
+        console.log('🔍 AuthStore.syncFromStorage called')
+        // Zustand persist handles this automatically, but we can trigger rehydration
+        const persistedState = localStorage.getItem('voice-ledger-auth')
+        if (persistedState) {
+          try {
+            const parsed = JSON.parse(persistedState)
+            console.log('🔍 AuthStore.syncFromStorage - parsed from localStorage:', {
+              token: parsed.state?.token ? parsed.state.token.substring(0, 20) + '...' : null,
+              user: parsed.state?.user,
+              isAuthenticated: parsed.state?.isAuthenticated
+            })
+            set({
+              token: parsed.state?.token || null,
+              user: parsed.state?.user || null,
+              isAuthenticated: parsed.state?.isAuthenticated || false
+            })
+          } catch (error) {
+            console.error('🔍 AuthStore.syncFromStorage - error parsing:', error)
+          }
+        }
+      },
     }),
     {
       name: 'voice-ledger-auth',
