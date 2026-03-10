@@ -163,8 +163,8 @@
           '<span class="batch-tag tag-status status-' + st + '">' + (b.display_status||b.status||'') + '</span></div>' +
           '<div class="batch-origin">' + (b.origin||b.producer||'') + '</div>' +
           '<div class="batch-meta">' +
-          (b.grade ? '<span class="batch-tag tag-grade">' + b.grade + '</span>' : '') +
-          (b.weight ? '<span class="batch-tag tag-weight">' + b.weight + ' kg</span>' : '') +
+          (b.quality_grade ? '<span class="batch-tag tag-grade">' + b.quality_grade + '</span>' : '') +
+          (b.quantity_kg ? '<span class="batch-tag tag-weight">' + b.quantity_kg + ' kg</span>' : '') +
           '</div></div>';
       }).join('');
     }
@@ -178,14 +178,18 @@
         const res = await fetch('/api/miniapp/batch/' + encodeURIComponent(id) + '?user_id=' + (user?.id || 0), { headers: { 'X-Telegram-User-Id': String(user?.id || 0) } });
         if (!res.ok) throw new Error('Server ' + res.status);
         const b = await res.json();
+        
+        // Handle nested structure from API
+        const batchData = b.batch || b;
+        
         let html = '<div class="detail-section"><h3>' + vlI18n.t('batch_info') + '</h3>';
-        html += infoRow('Batch ID', b.batch_id || b.id);
-        html += infoRow(vlI18n.t('batch_status'), b.display_status || b.status);
-        html += infoRow(vlI18n.t('batch_origin'), b.origin || '');
-        html += infoRow(vlI18n.t('batch_grade'), b.grade || '');
-        html += infoRow(vlI18n.t('batch_quantity'), b.weight ? b.weight + ' kg' : '');
-        html += infoRow(vlI18n.t('batch_variety'), b.variety || '');
-        html += '</div>';
+        html += infoRow('Batch ID', batchData.batch_id);
+        html += infoRow(vlI18n.t('batch_status'), batchData.display_status);
+        html += infoRow(vlI18n.t('batch_origin'), batchData.origin || '');
+        html += infoRow(vlI18n.t('batch_grade'), batchData.quality_grade || '');
+        html += infoRow(vlI18n.t('batch_quantity'), batchData.quantity_kg ? batchData.quantity_kg + ' kg' : '');
+        html += infoRow(vlI18n.t('batch_variety'), batchData.variety || '');
+        html += '</div>';   
         if (b.events && b.events.length) {
           html += '<div class="detail-section"><h3>' + vlI18n.t('batch_timeline') + '</h3>';
           b.events.forEach(ev => {
