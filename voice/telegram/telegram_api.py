@@ -2625,11 +2625,15 @@ async def process_natural_text_query(update_data: Dict[str, Any]) -> Dict[str, A
                         )
 
                         if agent_result.response:
+                            # Escape markdown entities to prevent parsing errors
+                            from voice.telegram.voice_responses import escape_markdown
+                            escaped_response = escape_markdown(agent_result.response)
+                            
                             processor = get_processor()
                             await processor.send_notification(
                                 channel_name='telegram',
                                 user_id=user_id,
-                                message=agent_result.response,
+                                message=escaped_response,
                                 parse_mode='Markdown',
                                 send_voice=True,
                                 language=language,
