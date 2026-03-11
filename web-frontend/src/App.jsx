@@ -11,14 +11,22 @@ import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
 
+/* Lightweight footer for the chat page so it doesn't overwhelm the input */
+function MiniFooter() {
+  return (
+    <footer className="bg-stone-100 border-t border-stone-200 py-4 text-center text-xs text-stone-400">
+      © {new Date().getFullYear()} WAGA Coffee · Powered by The Voice Ledger
+    </footer>
+  )
+}
+
 export default function App() {
   const { pathname } = useLocation()
-  const hideFooter = pathname === '/assistant'
 
   return (
     <div className="flex flex-col min-h-dvh bg-stone-50 text-stone-900">
       <Navbar />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/assistant" element={<Assistant />} />
@@ -32,8 +40,7 @@ export default function App() {
           <Route path="/tracking" element={<Tracking />} />
         </Routes>
       </main>
-      {/* Footer on all pages except Assistant (chat fills viewport) */}
-      {!hideFooter && <Footer />}
+      {pathname === '/assistant' ? <MiniFooter /> : <Footer />}
     </div>
   )
 }

@@ -68,19 +68,19 @@ function FooterCircuitBg() {
 const SOCIALS = [
   {
     label: 'Telegram',
-    href: 'https://t.me/voice_ledger_bot',
+    href: 'https://t.me/wagatoken',
     Icon: TelegramIcon,
     hoverColor: 'hover:bg-[#229ED9]/20 hover:text-[#229ED9]',
   },
   {
     label: 'LinkedIn',
-    href: 'https://www.linkedin.com/company/the-voice-ledger',
+    href: 'https://www.linkedin.com/company/the-waga-protocol/',
     Icon: LinkedInIcon,
     hoverColor: 'hover:bg-[#0A66C2]/20 hover:text-[#0A66C2]',
   },
   {
     label: 'X',
-    href: 'https://x.com/TheVoiceLedger',
+    href: 'https://x.com/Wagatoken',
     Icon: XIcon,
     hoverColor: 'hover:bg-white/15 hover:text-white',
   },
