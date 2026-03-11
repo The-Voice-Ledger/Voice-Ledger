@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Landing from './pages/Landing'
@@ -12,10 +12,13 @@ import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
 
 export default function App() {
+  const { pathname } = useLocation()
+  const hideFooter = pathname === '/assistant'
+
   return (
     <div className="flex flex-col min-h-dvh bg-stone-50 text-stone-900">
       <Navbar />
-      <main className="flex-1">
+      <main className="flex-1 flex flex-col">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/assistant" element={<Assistant />} />
@@ -29,8 +32,8 @@ export default function App() {
           <Route path="/tracking" element={<Tracking />} />
         </Routes>
       </main>
-      {/* Footer on all pages */}
-      <Footer />
+      {/* Footer on all pages except Assistant (chat fills viewport) */}
+      {!hideFooter && <Footer />}
     </div>
   )
 }

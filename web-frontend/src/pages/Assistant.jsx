@@ -469,7 +469,7 @@ export default function Assistant() {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-stone-200 bg-white px-3 sm:px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+      <div className="border-t border-stone-200 bg-white px-3 sm:px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shrink-0">
         <form onSubmit={handleSubmit} className="flex items-center gap-1.5 sm:gap-2">
           {/* Voice button */}
           <button
