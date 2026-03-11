@@ -3,7 +3,8 @@
  * based on response_type from the agent.
  */
 
-import { LuCircleCheck, LuCircleX, LuCheck, LuX, LuPackage, LuSprout, LuLink, LuUsers, LuShip, LuLogIn } from 'react-icons/lu'
+import { IconCircleCheck, IconCircleX, IconCheck, IconX, IconPackage, IconSprout, IconLink, IconUsers, IconShip, IconLogIn } from '../svg/Icons'
+import TechCardBg from '../svg/TechCardBg'
 import { Link } from 'react-router-dom'
 
 // ── Needs Auth (anonymous user tried a write action) ──────────────────
@@ -11,7 +12,7 @@ export function NeedsAuthCard() {
   return (
     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm space-y-2">
       <div className="font-semibold text-amber-800 flex items-center gap-1.5">
-        <LuLogIn className="w-4 h-4" /> Sign in required
+        <IconLogIn className="w-4 h-4" /> Sign in required
       </div>
       <p className="text-stone-600">This action requires a registered account. You can:</p>
       <div className="flex flex-wrap gap-2 mt-1">
@@ -19,7 +20,7 @@ export function NeedsAuthCard() {
           to="/login"
           className="inline-flex items-center gap-1.5 text-xs font-semibold bg-stone-900 text-white rounded-full px-4 py-2 hover:bg-stone-800 transition"
         >
-          <LuLogIn className="w-3.5 h-3.5" /> Sign In
+          <IconLogIn className="w-3.5 h-3.5" /> Sign In
         </Link>
         <a
           href="https://t.me/voice_ledger_bot"
@@ -73,13 +74,13 @@ export function EUDRComplianceCard({ data }) {
     <div className="mt-2 rounded-lg border p-3 text-sm"
       style={{ borderColor: compliant ? '#258c25' : '#dc2626', background: compliant ? '#f0faf0' : '#fef2f2' }}>
       <div className="flex items-center gap-2 font-semibold" style={{ color: compliant ? '#258c25' : '#dc2626' }}>
-        {compliant ? <LuCircleCheck className="w-4 h-4" /> : <LuCircleX className="w-4 h-4" />} {compliant ? 'EUDR Compliant' : 'Not Compliant'}
+        {compliant ? <IconCircleCheck className="w-4 h-4" /> : <IconCircleX className="w-4 h-4" />} {compliant ? 'EUDR Compliant' : 'Not Compliant'}
       </div>
       {Object.keys(checks).length > 0 && (
         <ul className="mt-2 space-y-1 text-stone-700">
           {Object.entries(checks).map(([k, v]) => (
             <li key={k} className="flex gap-2">
-              <span>{v ? <LuCheck className="w-3 h-3 inline" /> : <LuX className="w-3 h-3 inline" />}</span>
+              <span>{v ? <IconCheck className="w-3 h-3 inline" /> : <IconX className="w-3 h-3 inline" />}</span>
               <span className="capitalize">{k.replaceAll('_', ' ')}</span>
             </li>
           ))}
@@ -104,7 +105,7 @@ export function BatchListCard({ data }) {
       {batches.map((b, i) => (
         <div key={b.batch_id || b.id || i} className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
           <div className="font-semibold text-stone-800 truncate flex items-center gap-1.5">
-            <LuPackage className="w-4 h-4 shrink-0" /> {b.batch_id || b.id}
+            <IconPackage className="w-4 h-4 shrink-0" /> {b.batch_id || b.id}
           </div>
           <div className="text-stone-600 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
             {b.origin && <span>{b.origin}</span>}
@@ -124,8 +125,9 @@ export function DPPCard({ data }) {
   if (!dpp) return null
 
   return (
-    <div className="mt-2 rounded-lg border border-forest-200 bg-forest-50 p-3 text-sm space-y-1">
-      <div className="font-semibold text-forest-700 flex items-center gap-1.5"><LuSprout className="w-4 h-4" /> Digital Product Passport</div>
+    <div className="mt-2 relative overflow-hidden rounded-lg border border-forest-200 bg-forest-50 p-3 text-sm space-y-1">
+      <TechCardBg variant="circuit" className="!text-forest-400" />
+      <div className="relative z-10 font-semibold text-forest-700 flex items-center gap-1.5"><IconSprout className="w-4 h-4" /> Digital Product Passport</div>
       {dpp.batch_id && <div><span className="text-stone-500">Batch:</span> {dpp.batch_id}</div>}
       {dpp.origin && <div><span className="text-stone-500">Origin:</span> {dpp.origin}</div>}
       {dpp.variety && <div><span className="text-stone-500">Variety:</span> {dpp.variety}</div>}
@@ -150,9 +152,10 @@ export function DPPCard({ data }) {
 export function BlockchainCard({ data }) {
   const anchored = data?.anchored ?? data?.on_chain ?? data?.verified
   return (
-    <div className="mt-2 rounded-lg border border-stone-200 bg-white p-3 text-sm space-y-1">
-      <div className="font-semibold text-stone-800 flex items-center gap-1.5">
-        <LuLink className="w-4 h-4" /> Blockchain {anchored ? 'Anchored' : 'Not Anchored'}
+    <div className="mt-2 relative overflow-hidden rounded-lg border border-stone-200 bg-white p-3 text-sm space-y-1">
+      <TechCardBg variant="chain" />
+      <div className="relative z-10 font-semibold text-stone-800 flex items-center gap-1.5">
+        <IconLink className="w-4 h-4" /> Blockchain {anchored ? 'Anchored' : 'Not Anchored'}
       </div>
       {data?.tx_hash && (
         <div className="truncate">
@@ -177,7 +180,7 @@ export function DONAttestationCard({ data }) {
     return (
       <div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
         <div className="font-semibold text-stone-600 flex items-center gap-1.5">
-          <LuSprout className="w-4 h-4" /> No DON Attestation Found
+          <IconSprout className="w-4 h-4" /> No DON Attestation Found
         </div>
         <p className="text-stone-500 mt-1">Request one with &ldquo;check deforestation for {data?.farm_id || 'this farm'}&rdquo;</p>
       </div>
@@ -187,7 +190,7 @@ export function DONAttestationCard({ data }) {
   return (
     <div className={`mt-2 rounded-lg border p-3 text-sm space-y-1.5 ${riskBg[risk] || riskBg.UNKNOWN}`}>
       <div className="font-semibold text-stone-800 flex items-center gap-1.5">
-        <LuSprout className="w-4 h-4" /> DON Deforestation Attestation
+        <IconSprout className="w-4 h-4" /> DON Deforestation Attestation
       </div>
       {data?.farm_id && <div><span className="text-stone-500">Farm:</span> {data.farm_id}</div>}
       <div className="flex items-center gap-2">
@@ -197,9 +200,9 @@ export function DONAttestationCard({ data }) {
       <div className="flex items-center gap-2">
         <span className="text-stone-500">EUDR:</span>
         {compliant ? (
-          <span className="text-green-600 flex items-center gap-1"><LuCircleCheck className="w-3.5 h-3.5" /> Compliant</span>
+          <span className="text-green-600 flex items-center gap-1"><IconCircleCheck className="w-3.5 h-3.5" /> Compliant</span>
         ) : (
-          <span className="text-red-600 flex items-center gap-1"><LuCircleX className="w-3.5 h-3.5" /> Non-compliant</span>
+          <span className="text-red-600 flex items-center gap-1"><IconCircleX className="w-3.5 h-3.5" /> Non-compliant</span>
         )}
       </div>
       {data?.tree_loss_hectares != null && (
@@ -219,7 +222,7 @@ export function DONMetricsCard({ data }) {
     return (
       <div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
         <div className="font-semibold text-stone-600 flex items-center gap-1.5">
-          <LuLink className="w-4 h-4" /> DON Metrics Not Available
+          <IconLink className="w-4 h-4" /> DON Metrics Not Available
         </div>
         <p className="text-stone-500 mt-1">The CRE cron trigger writes these every 5 minutes.</p>
       </div>
@@ -229,7 +232,7 @@ export function DONMetricsCard({ data }) {
   return (
     <div className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm space-y-1.5">
       <div className="font-semibold text-indigo-800 flex items-center gap-1.5">
-        <LuLink className="w-4 h-4" /> DON-Attested Supply Chain Metrics
+        <IconLink className="w-4 h-4" /> DON-Attested Supply Chain Metrics
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         <div><span className="text-stone-500">Farmers:</span> {data.total_farmers?.toLocaleString()}</div>
@@ -254,7 +257,7 @@ export function DONRequestCard({ data }) {
   return (
     <div className={`mt-2 rounded-lg border p-3 text-sm space-y-1 ${isSuccess ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
       <div className={`font-semibold flex items-center gap-1.5 ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
-        {isSuccess ? <LuCircleCheck className="w-4 h-4" /> : <LuCircleX className="w-4 h-4" />}
+        {isSuccess ? <IconCircleCheck className="w-4 h-4" /> : <IconCircleX className="w-4 h-4" />}
         DON Attestation {isSuccess ? 'Requested' : 'Failed'}
       </div>
       <div><span className="text-stone-500">Status:</span> {status.replace(/_/g, ' ')}</div>
@@ -266,9 +269,9 @@ export function DONRequestCard({ data }) {
         <div className="flex items-center gap-2">
           <span className="text-stone-500">EUDR:</span>
           {data.attestation.eudrCompliant ? (
-            <span className="text-green-600 flex items-center gap-1"><LuCircleCheck className="w-3.5 h-3.5" /> Compliant</span>
+            <span className="text-green-600 flex items-center gap-1"><IconCircleCheck className="w-3.5 h-3.5" /> Compliant</span>
           ) : (
-            <span className="text-red-600 flex items-center gap-1"><LuCircleX className="w-3.5 h-3.5" /> Non-compliant</span>
+            <span className="text-red-600 flex items-center gap-1"><IconCircleX className="w-3.5 h-3.5" /> Non-compliant</span>
           )}
         </div>
       )}
@@ -287,7 +290,7 @@ export function VerificationListCard({ data }) {
         <div key={v.batch_id || v.id || i} className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm">
           <div className="flex justify-between">
             <span className="font-semibold text-yellow-800 flex items-center gap-1.5">
-              <LuPackage className="w-4 h-4 shrink-0" /> {v.batch_id || v.id}
+              <IconPackage className="w-4 h-4 shrink-0" /> {v.batch_id || v.id}
             </span>
             <span className="text-xs text-yellow-600">{v.status || 'Pending'}</span>
           </div>
@@ -310,7 +313,7 @@ export function ContainerCard({ data }) {
     return (
       <div className="mt-2 rounded-lg border border-forest-200 bg-forest-50 p-3 text-sm space-y-1">
         <div className="font-semibold text-forest-700 flex items-center gap-1.5">
-          <LuPackage className="w-4 h-4" /> Purchase Confirmed
+          <IconPackage className="w-4 h-4" /> Purchase Confirmed
         </div>
         <div><span className="text-stone-500">Acceptance:</span> {data.acceptance_number}</div>
         <div><span className="text-stone-500">Container:</span> {data.container_sscc}</div>
@@ -391,7 +394,7 @@ export function PoolListCard({ data }) {
             <div className="flex justify-between items-start">
               <div>
                 <span className="font-semibold text-stone-900 flex items-center gap-1.5">
-                  <LuShip className="w-4 h-4 shrink-0" />
+                  <IconShip className="w-4 h-4 shrink-0" />
                   {p.cooperative_name || p.cooperative || 'Pool'}
                 </span>
                 <span className="text-xs text-stone-500 font-mono">{p.container_sscc || ''}</span>
@@ -422,7 +425,7 @@ export function PoolListCard({ data }) {
               </div>
             </div>
             <div className="flex items-center gap-3 text-[10px] text-stone-400 mt-1.5">
-              <span className="flex items-center gap-0.5"><LuUsers className="w-3 h-3" /> {p.buyer_count ?? 0} buyers</span>
+              <span className="flex items-center gap-0.5"><IconUsers className="w-3 h-3" /> {p.buyer_count ?? 0} buyers</span>
               {p.remaining_kg != null && <span>{p.remaining_kg.toLocaleString()} kg remaining</span>}
             </div>
           </div>
@@ -437,7 +440,7 @@ export function CommitConfirmCard({ data }) {
   return (
     <div className="mt-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
       <div className="font-semibold text-green-700 flex items-center gap-1.5">
-        <LuCircleCheck className="w-4 h-4" /> Commitment Confirmed
+        <IconCircleCheck className="w-4 h-4" /> Commitment Confirmed
       </div>
       {data?.commitment_id && <div><span className="text-stone-500">ID:</span> #{data.commitment_id}</div>}
       {data?.quantity_kg && <div><span className="text-stone-500">Quantity:</span> {data.quantity_kg} kg</div>}
@@ -485,7 +488,7 @@ export function PaymentConfirmCard({ data }) {
   return (
     <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-sm space-y-1">
       <div className="flex items-center gap-2 font-semibold text-green-700">
-        <LuCircleCheck className="w-4 h-4" /> Payment Confirmed
+        <IconCircleCheck className="w-4 h-4" /> Payment Confirmed
       </div>
       {data?.commitment_id && <div><span className="text-stone-500">Commitment:</span> #{data.commitment_id}</div>}
       {data?.acceptance_number && <div><span className="text-stone-500">Acceptance:</span> {data.acceptance_number}</div>}
@@ -493,7 +496,7 @@ export function PaymentConfirmCard({ data }) {
       {data?.status && <div><span className="text-stone-500">Status:</span> {data.status || data.payment_status}</div>}
       {data?.settlement_tx && (
         <div className="mt-2 text-xs text-stone-600 truncate">
-          <LuLink className="inline w-3 h-3 mr-1" />
+          <IconLink className="inline w-3 h-3 mr-1" />
           <span className="font-mono break-all">{data.settlement_tx.slice(0, 20)}…</span>
         </div>
       )}
@@ -517,13 +520,13 @@ export function PaymentStatusCard({ data }) {
       <div><span className="text-stone-500">Coop confirmed:</span> {ok(data?.coop_confirmed)}</div>
       {data?.settlement_tx && (
         <div className="text-xs text-stone-600 mt-1 truncate">
-          <LuLink className="inline w-3 h-3 mr-1" />
+          <IconLink className="inline w-3 h-3 mr-1" />
           Buyer TX: <span className="font-mono break-all">{data.settlement_tx.slice(0, 20)}…</span>
         </div>
       )}
       {data?.coop_payout_tx && (
         <div className="text-xs text-stone-600 truncate">
-          <LuLink className="inline w-3 h-3 mr-1" />
+          <IconLink className="inline w-3 h-3 mr-1" />
           Coop payout TX: <span className="font-mono break-all">{data.coop_payout_tx.slice(0, 20)}…</span>
         </div>
       )}
@@ -539,13 +542,13 @@ export function CoopPayoutCard({ data }) {
   return (
     <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm space-y-1">
       <div className="flex items-center gap-2 font-semibold text-blue-700">
-        <LuShip className="w-4 h-4" /> Cooperative Payout Recorded
+        <IconShip className="w-4 h-4" /> Cooperative Payout Recorded
       </div>
       {data?.cooperative && <div><span className="text-stone-500">Cooperative:</span> {data.cooperative}</div>}
       {data?.amount != null && <div><span className="text-stone-500">Amount:</span> ${Number(data.amount).toLocaleString()}</div>}
       {data?.tx_hash && (
         <div className="mt-1 text-xs text-stone-600">
-          <LuLink className="inline w-3 h-3 mr-1" />
+          <IconLink className="inline w-3 h-3 mr-1" />
           <span className="font-mono">{data.tx_hash.slice(0, 20)}…</span>
         </div>
       )}

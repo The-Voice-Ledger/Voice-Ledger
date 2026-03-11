@@ -2,23 +2,26 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
-  LuLandmark, LuRefreshCw, LuMessageCircle, LuTrendingUp,
-  LuChartBar, LuWallet, LuArrowRight, LuInfo, LuShieldCheck,
-} from 'react-icons/lu'
+  IconLandmark, IconRefreshCw, IconMessageCircle, IconTrendingUp,
+  IconChartBar, IconWallet, IconArrowRight, IconInfo, IconShieldCheck,
+} from '../components/svg/Icons'
 import { getPoolStats, getFeeStats, getTrade } from '../api/financing'
 import useAuthStore from '../stores/authStore'
+import PageHeroBg from '../components/svg/PageHeroBg'
+import TechCardBg from '../components/svg/TechCardBg'
 
 /* ── Stat card ──────────────────────────────────────────────────── */
 
 function StatCard({ icon: Icon, label, value, sub, accent }) {
   return (
-    <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-1 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
-      <div className="flex items-center gap-2 text-xs text-stone-400 uppercase tracking-wider">
+    <div className="relative overflow-hidden bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-1 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+      <TechCardBg variant="finance" />
+      <div className="relative z-10 flex items-center gap-2 text-xs text-stone-400 uppercase tracking-wider">
         <Icon className={`w-4 h-4 ${accent || 'text-stone-400'}`} />
         {label}
       </div>
-      <p className="text-2xl font-bold text-stone-900">{value}</p>
-      {sub && <p className="text-xs text-stone-500">{sub}</p>}
+      <p className="relative z-10 text-2xl font-bold font-mono text-stone-900">{value}</p>
+      {sub && <p className="relative z-10 text-xs text-stone-500">{sub}</p>}
     </div>
   )
 }
@@ -80,7 +83,7 @@ function TradeLookup() {
   return (
     <div className="bg-white rounded-xl border border-stone-200 p-6">
       <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2 mb-3">
-        <LuChartBar className="w-4 h-4 text-stone-500" /> {t('fin_trade_lookup')}
+        <IconChartBar className="w-4 h-4 text-stone-500" /> {t('fin_trade_lookup')}
       </h3>
 
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -195,10 +198,11 @@ export default function Financing() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <PageHeroBg variant="financing" />
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-stone-900 flex items-center gap-2">
-            <LuLandmark className="w-6 h-6 shrink-0" /> {t('nav_financing')}
+          <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 flex items-center gap-2 page-header-accent">
+            <IconLandmark className="w-6 h-6 shrink-0" /> {t('nav_financing')}
           </h1>
           <p className="text-sm text-stone-500 mt-1">
             {t('fin_subtitle')}
@@ -210,13 +214,13 @@ export default function Financing() {
             disabled={loading}
             className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-700 transition"
           >
-            <LuRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> {t('mkt_refresh')}
+            <IconRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> {t('mkt_refresh')}
           </button>
           <Link
             to="/assistant"
             className="inline-flex items-center gap-1 text-sm bg-stone-900 text-white rounded-full px-4 py-1.5 hover:bg-stone-800 transition"
           >
-            <LuMessageCircle className="w-4 h-4" /> {t('fin_ask_assistant')}
+            <IconMessageCircle className="w-4 h-4" /> {t('fin_ask_assistant')}
           </Link>
         </div>
       </div>
@@ -235,28 +239,28 @@ export default function Financing() {
       {!loading && pool && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
           <StatCard
-            icon={LuLandmark}
+            icon={IconLandmark}
             label={t('fin_tvl')}
             value={fmtUsd(pool.total_assets_usdc)}
             sub={`${fmtUsd(pool.available_for_advance_usdc)} available`}
             accent="text-green-600"
           />
           <StatCard
-            icon={LuTrendingUp}
+            icon={IconTrendingUp}
             label={t('fin_utilisation')}
             value={fmtPct(pool.utilisation_pct)}
             sub={`${fmtUsd(pool.total_advanced_usdc)} advanced`}
             accent="text-blue-600"
           />
           <StatCard
-            icon={LuWallet}
+            icon={IconWallet}
             label={t('fin_share_price')}
             value={fmtUsd(pool.share_price_usdc)}
             sub={`${Number(pool.total_shares || 0).toLocaleString()} vlUSDC shares`}
             accent="text-purple-600"
           />
           <StatCard
-            icon={LuChartBar}
+            icon={IconChartBar}
             label={t('fin_fees_collected')}
             value={fmtUsd(pool.cumulative_fees_usdc)}
             sub={fees ? `${fmtUsd(fees.total_to_investors_usdc)} to investors` : ''}
@@ -268,7 +272,7 @@ export default function Financing() {
       {/* Pool unavailable */}
       {!loading && !pool && !error && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-8 flex items-start gap-3">
-          <LuInfo className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <IconInfo className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800">
             <p className="font-semibold mb-1">{t('fin_unavailable_title')}</p>
             <p>{t('fin_unavailable_desc')}</p>
@@ -280,7 +284,7 @@ export default function Financing() {
       {!loading && fees && (
         <div className="bg-white rounded-xl border border-stone-200 p-6 mb-8">
           <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2 mb-4">
-            <LuChartBar className="w-4 h-4 text-stone-500" /> {t('fin_fee_breakdown')}
+            <IconChartBar className="w-4 h-4 text-stone-500" /> {t('fin_fee_breakdown')}
           </h3>
           <div className="grid sm:grid-cols-3 gap-4">
             <FeeBar label={t('fin_fee_investors')} value={fees.total_to_investors_usdc} bps={fees.investor_bps} color="bg-green-500" />
@@ -298,7 +302,7 @@ export default function Financing() {
       {/* How it works */}
       <div className="bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
         <h3 className="text-sm font-bold text-stone-900 mb-3 flex items-center gap-2">
-          <LuShieldCheck className="w-4 h-4" /> {t('fin_how_title')}
+          <IconShieldCheck className="w-4 h-4" /> {t('fin_how_title')}
         </h3>
         <div className="relative grid sm:grid-cols-4 gap-4 text-center">
           {/* Connecting line */}
@@ -321,7 +325,7 @@ export default function Financing() {
             to="/assistant"
             className="inline-flex items-center gap-2 bg-stone-900 text-white font-semibold rounded-full px-6 py-2.5 hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all text-sm"
           >
-            <LuMessageCircle className="w-4 h-4" /> {t('fin_ask_assistant')} <LuArrowRight className="w-4 h-4" />
+            <IconMessageCircle className="w-4 h-4" /> {t('fin_ask_assistant')} <IconArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

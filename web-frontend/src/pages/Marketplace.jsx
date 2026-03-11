@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
-  LuHandshake, LuPackage, LuRefreshCw, LuMessageCircle,
-  LuUsers, LuShip, LuArrowRight, LuTrendingUp, LuBox,
-} from 'react-icons/lu'
+  IconHandshake, IconPackage, IconRefreshCw, IconMessageCircle,
+  IconUsers, IconShip, IconArrowRight, IconTrendingUp, IconBox,
+} from '../components/svg/Icons'
 import { listContainers, listPools, commitToPool } from '../api/marketplace'
 import useAuthStore from '../stores/authStore'
+import PageHeroBg from '../components/svg/PageHeroBg'
+import ContainerFillSvg from '../components/svg/ContainerFillSvg'
+import EmptyState from '../components/svg/EmptyState'
+import TechCardBg from '../components/svg/TechCardBg'
 
 /* ── Shared UI atoms ────────────────────────────────────────────── */
 
@@ -64,9 +68,10 @@ function SkeletonCard() {
 
 function PoolCard({ pool, onCommit }) {
   return (
-    <div className="bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-3 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+    <div className="relative overflow-hidden bg-white rounded-xl border border-stone-200 p-5 flex flex-col gap-3 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
+      <TechCardBg variant="dotgrid" />
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="relative z-10 flex items-start justify-between">
         <div>
           {pool.container_sscc ? (
             <Link to={`/tracking?sscc=${pool.container_sscc}`} className="text-xs text-stone-400 font-mono hover:text-stone-700 hover:underline transition">
@@ -84,7 +89,7 @@ function PoolCard({ pool, onCommit }) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-stone-500">
         {pool.variety && <span>Variety: <strong className="text-stone-700">{pool.variety}</strong></span>}
         {pool.grade && <span>Grade: <strong className="text-stone-700">{pool.grade}</strong></span>}
-        <span>Price: <strong className="text-stone-700">${pool.price_per_kg}/kg</strong></span>
+        <span>Price: <strong className="text-stone-700 font-mono">${pool.price_per_kg}/kg</strong></span>
         <span>Region: <strong className="text-stone-700">{pool.destination_region}</strong></span>
       </div>
 
@@ -94,12 +99,12 @@ function PoolCard({ pool, onCommit }) {
           <span>{pool.filled_kg?.toLocaleString()} / {pool.fill_target_kg?.toLocaleString()} kg</span>
           <span className="font-semibold text-stone-700">{pool.fill_pct ?? 0}%</span>
         </div>
-        <FillBar pct={pool.fill_pct ?? 0} />
+        <ContainerFillSvg pct={pool.fill_pct ?? 0} height={32} />
       </div>
 
       {/* Buyers + deadline */}
       <div className="flex items-center justify-between text-xs text-stone-400">
-        <span className="flex items-center gap-1"><LuUsers className="w-3.5 h-3.5" /> {pool.buyer_count ?? 0} buyers</span>
+        <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {pool.buyer_count ?? 0} buyers</span>
         {pool.deadline && <span>Deadline: {new Date(pool.deadline).toLocaleDateString()}</span>}
       </div>
 
@@ -109,7 +114,7 @@ function PoolCard({ pool, onCommit }) {
           onClick={() => onCommit(pool)}
           className="mt-1 w-full text-sm font-medium bg-stone-900 text-white rounded-lg py-2 hover:bg-stone-800 active:scale-[0.98] transition-all flex items-center justify-center gap-1"
         >
-          <LuShip className="w-4 h-4" /> Join this pool
+          <IconShip className="w-4 h-4" /> Join this pool
         </button>
       )}
     </div>
@@ -279,24 +284,25 @@ export default function Marketplace() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header with stats */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+      <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <PageHeroBg variant="marketplace" />
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-stone-900 flex items-center gap-2">
-            <LuHandshake className="w-6 h-6 shrink-0" /> {t('nav_marketplace')}
+          <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 flex items-center gap-2 page-header-accent">
+            <IconHandshake className="w-6 h-6 shrink-0" /> {t('nav_marketplace')}
           </h1>
           <p className="text-sm text-stone-500 mt-1">{t('mkt_subtitle')}</p>
           {/* Live stat chips */}
           {!loading && (
             <div className="flex flex-wrap gap-2 mt-3">
               <span className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 rounded-full px-2.5 py-1 font-medium">
-                <LuBox className="w-3 h-3" /> {containers.length} {t('mkt_containers_tab').toLowerCase()}
+                <IconBox className="w-3 h-3" /> {containers.length} {t('mkt_containers_tab').toLowerCase()}
               </span>
               <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 rounded-full px-2.5 py-1 font-medium">
-                <LuUsers className="w-3 h-3" /> {fillingPools} {t('mkt_active_pools')}
+                <IconUsers className="w-3 h-3" /> {fillingPools} {t('mkt_active_pools')}
               </span>
               {totalAvailableKg > 0 && (
                 <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 rounded-full px-2.5 py-1 font-medium">
-                  <LuTrendingUp className="w-3 h-3" /> {totalAvailableKg.toLocaleString()} kg {t('mkt_available')}
+                  <IconTrendingUp className="w-3 h-3" /> {totalAvailableKg.toLocaleString()} kg {t('mkt_available')}
                 </span>
               )}
             </div>
@@ -308,13 +314,13 @@ export default function Marketplace() {
             disabled={loading}
             className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-700 transition"
           >
-            <LuRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> {t('mkt_refresh')}
+            <IconRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> {t('mkt_refresh')}
           </button>
           <Link
             to="/assistant"
             className="inline-flex items-center gap-1 text-sm bg-stone-900 text-white rounded-full px-4 py-1.5 hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all"
           >
-            <LuMessageCircle className="w-4 h-4" /> {t('mkt_chat_buy')}
+            <IconMessageCircle className="w-4 h-4" /> {t('mkt_chat_buy')}
           </Link>
         </div>
       </div>
@@ -329,7 +335,7 @@ export default function Marketplace() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          <LuUsers className="w-4 h-4 inline mr-1 -mt-0.5" />
+          <IconUsers className="w-4 h-4 inline mr-1 -mt-0.5" />
           {t('mkt_pools_tab')} {!loading && <span className="ml-1 text-[10px] bg-stone-100 text-stone-500 rounded-full px-1.5 py-0.5">{pools.length}</span>}
         </button>
         <button
@@ -340,7 +346,7 @@ export default function Marketplace() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          <LuPackage className="w-4 h-4 inline mr-1 -mt-0.5" />
+          <IconPackage className="w-4 h-4 inline mr-1 -mt-0.5" />
           {t('mkt_containers_tab')} {!loading && <span className="ml-1 text-[10px] bg-stone-100 text-stone-500 rounded-full px-1.5 py-0.5">{containers.length}</span>}
         </button>
       </div>
@@ -359,12 +365,14 @@ export default function Marketplace() {
       {/* Pools Grid */}
       {!loading && tab === 'pools' && (
         pools.length === 0 ? (
-          <div className="bg-white rounded-xl border border-stone-200 text-center py-16 px-4">
-            <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-stone-100 flex items-center justify-center mb-4">
-              <LuUsers className="w-8 h-8 text-blue-400" />
-            </div>
-            <p className="text-sm font-medium text-stone-700">{t('mkt_no_pools')}</p>
-            <p className="text-xs text-stone-400 mt-1 max-w-xs mx-auto">{t('mkt_no_pools_hint')}</p>
+          <div className="bg-white rounded-xl border border-stone-200">
+            <EmptyState
+              variant="pools"
+              message={t('mkt_no_pools')}
+              sub={t('mkt_no_pools_hint')}
+              actionLabel={t('mkt_chat_buy')}
+              actionTo="/assistant"
+            />
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -383,13 +391,13 @@ export default function Marketplace() {
       {!loading && tab === 'containers' && (
         <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
           {containers.length === 0 ? (
-            <div className="text-center py-16 px-4">
-              <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-green-100 to-stone-100 flex items-center justify-center mb-4">
-                <LuPackage className="w-8 h-8 text-green-400" />
-              </div>
-              <p className="text-sm font-medium text-stone-700">{t('mkt_no_containers')}</p>
-              <p className="text-xs text-stone-400 mt-1">{t('mkt_no_containers_hint')}</p>
-            </div>
+            <EmptyState
+              variant="containers"
+              message={t('mkt_no_containers')}
+              sub={t('mkt_no_containers_hint')}
+              actionLabel={t('mkt_chat_buy')}
+              actionTo="/assistant"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -418,7 +426,7 @@ export default function Marketplace() {
                         <span className="font-medium text-stone-700">{c.available_quantity_kg?.toLocaleString()}</span>
                         <span className="text-stone-400"> / {c.total_quantity_kg?.toLocaleString()} kg</span>
                       </td>
-                      <td className="px-4 py-3 font-medium text-stone-900">${c.price_per_kg}/kg</td>
+                      <td className="px-4 py-3 font-medium font-mono text-stone-900">${c.price_per_kg}/kg</td>
                       <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                       <td className="px-4 py-3 text-right">
                         {c.available_quantity_kg > 0 && (
@@ -427,7 +435,7 @@ export default function Marketplace() {
                               onClick={() => setCommitPool(c)}
                               className="inline-flex items-center gap-1 text-xs font-medium bg-stone-900 text-white rounded-full px-3 py-1.5 hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all"
                             >
-                              <LuShip className="w-3.5 h-3.5" /> {t('mkt_buy')}
+                              <IconShip className="w-3.5 h-3.5" /> {t('mkt_buy')}
                             </button>
                           ) : (
                             <Link
@@ -451,7 +459,7 @@ export default function Marketplace() {
       {/* How it works - stepper with connecting lines */}
       <div className="mt-10 bg-gradient-to-br from-stone-50 to-stone-100/50 rounded-2xl p-6 sm:p-8 border border-stone-200">
         <h3 className="text-sm font-bold text-stone-900 mb-6 flex items-center gap-2">
-          <LuShip className="w-4 h-4" /> {t('mkt_how_title')}
+          <IconShip className="w-4 h-4" /> {t('mkt_how_title')}
         </h3>
         <div className="relative grid sm:grid-cols-4 gap-6 sm:gap-4">
           {/* Connecting line (desktop) */}
@@ -476,7 +484,7 @@ export default function Marketplace() {
             to="/assistant"
             className="inline-flex items-center gap-2 bg-stone-900 text-white font-semibold rounded-full px-6 py-2.5 hover:bg-stone-800 hover:scale-105 active:scale-95 transition-all text-sm shadow-md"
           >
-            <LuMessageCircle className="w-4 h-4" /> {t('mkt_ask_assistant')} <LuArrowRight className="w-4 h-4" />
+            <IconMessageCircle className="w-4 h-4" /> {t('mkt_ask_assistant')} <IconArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

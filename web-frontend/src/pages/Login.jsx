@@ -50,7 +50,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-12 mx-auto mb-2" />
-          <h1 className="text-2xl font-bold text-stone-900">{t('login_title')}</h1>
+          <h1 className="text-2xl font-bold text-stone-900 page-header-accent">{t('login_title')}</h1>
           <p className="text-sm text-stone-500 mt-1">
             {t('login_subtitle')}
           </p>

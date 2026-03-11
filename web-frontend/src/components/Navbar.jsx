@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { LuMenu, LuX, LuChevronDown } from 'react-icons/lu'
+import { IconMenu, IconX, IconChevronDown } from './svg/Icons'
 import useAuthStore from '../stores/authStore'
 import useChatStore from '../stores/chatStore'
 
@@ -67,7 +67,7 @@ export default function Navbar() {
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-7 w-auto" />
           <div className="hidden sm:flex flex-col leading-none">
-            <span className="text-sm font-bold tracking-tight text-stone-900">{t('brand')}</span>
+            <span className="text-sm font-bold tracking-tight text-stone-900 font-display">{t('brand')}</span>
             <span className="text-[9px] text-stone-400 tracking-wide">{t('powered_by')}</span>
           </div>
         </Link>
@@ -90,7 +90,7 @@ export default function Navbar() {
               }`}
             >
               {t('nav_tools')}
-              <LuChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} />
+              <IconChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {toolsOpen && (
@@ -151,7 +151,7 @@ export default function Navbar() {
             className="md:hidden p-1.5 rounded-lg text-stone-600 hover:bg-stone-100 transition"
             aria-label="Toggle menu"
           >
-            {menuOpen ? <LuX className="w-5 h-5" /> : <LuMenu className="w-5 h-5" />}
+            {menuOpen ? <IconX className="w-5 h-5" /> : <IconMenu className="w-5 h-5" />}
           </button>
         </div>
       </nav>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
-import { LuVolume2, LuLoader, LuCopy, LuCheck, LuChevronDown, LuCircleCheck, LuCircleX, LuWrench, LuSparkles } from 'react-icons/lu'
+import { IconVolume2, IconLoader, IconCopy, IconCheck, IconChevronDown, IconCircleCheck, IconCircleX, IconWrench, IconSparkles } from '../components/svg/Icons'
 import { getVoiceManager } from '../voice/VoiceManager'
 
 const WAGA_LOGO = 'https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa'
@@ -42,7 +42,7 @@ function CopyButton({ text }) {
       className="absolute top-2 right-2 p-1 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 hover:text-white transition opacity-0 group-hover/code:opacity-100"
       title="Copy code"
     >
-      {copied ? <LuCheck className="w-3.5 h-3.5" /> : <LuCopy className="w-3.5 h-3.5" />}
+      {copied ? <IconCheck className="w-3.5 h-3.5" /> : <IconCopy className="w-3.5 h-3.5" />}
     </button>
   )
 }
@@ -62,10 +62,10 @@ function ToolUsagePills({ tools, t }) {
         onClick={() => setOpen((o) => !o)}
         className="inline-flex items-center gap-1.5 text-[10px] text-stone-400 hover:text-stone-600 transition"
       >
-        <LuWrench className="w-3 h-3" />
+        <IconWrench className="w-3 h-3" />
         <span>{t('tools_used', { count: tools.length })}</span>
         {failed > 0 && <span className="text-red-400">({failed} failed)</span>}
-        <LuChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <IconChevronDown className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="flex flex-wrap gap-1 mt-1 animate-fade-in-up">
@@ -78,7 +78,7 @@ function ToolUsagePills({ tools, t }) {
                   : 'bg-red-100 text-red-700'
               }`}
             >
-              {tc.success ? <LuCircleCheck className="w-2.5 h-2.5" /> : <LuCircleX className="w-2.5 h-2.5" />}
+              {tc.success ? <IconCircleCheck className="w-2.5 h-2.5" /> : <IconCircleX className="w-2.5 h-2.5" />}
               {tc.tool_name}
             </span>
           ))}
@@ -200,7 +200,7 @@ function PlayButton({ audioBase64 }) {
               className="inline-flex items-center gap-1 px-2 py-1 rounded bg-stone-100 hover:bg-stone-200 transition"
               title="Play audio"
             >
-              <LuVolume2 className="w-3 h-3" />
+              <IconVolume2 className="w-3 h-3" />
               <span>Play</span>
             </button>
           ) : (
@@ -320,10 +320,10 @@ export default function Assistant() {
       <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-stone-200">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center">
-            <LuSparkles className="w-3.5 h-3.5 text-white" />
+            <IconSparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
-            <h1 className="text-base sm:text-lg font-semibold text-stone-900 leading-tight">{t('nav_assistant')}</h1>
+            <h1 className="text-base sm:text-lg font-semibold text-stone-900 leading-tight font-display tracking-tight">{t('nav_assistant')}</h1>
             <p className="text-[10px] text-stone-400 leading-tight">{t('assistant_subtitle')}</p>
           </div>
         </div>
@@ -397,7 +397,7 @@ export default function Assistant() {
                   {/* Assistant avatar */}
                   {msg.role === 'assistant' && (
                     <div className="shrink-0 w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center mt-1">
-                      <LuSparkles className="w-3.5 h-3.5 text-white" />
+                      <IconSparkles className="w-3.5 h-3.5 text-white" />
                     </div>
                   )}
 
@@ -445,7 +445,7 @@ export default function Assistant() {
           {isLoading && (
             <div className="flex gap-2.5 justify-start animate-fade-in-up">
               <div className="shrink-0 w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center">
-                <LuSparkles className="w-3.5 h-3.5 text-white" />
+                <IconSparkles className="w-3.5 h-3.5 text-white" />
               </div>
               <div className="bg-white border border-stone-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
                 <div className="flex gap-1.5">

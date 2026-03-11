@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  LuShieldCheck, LuCircleCheck, LuCircleX, LuCheck, LuX,
-  LuMessageCircle, LuPackage, LuFileText, LuSearch,
-} from 'react-icons/lu'
+  IconShieldCheck, IconCircleCheck, IconCircleX, IconCheck, IconX,
+  IconMessageCircle, IconPackage, IconFileText, IconSearch,
+} from '../components/svg/Icons'
 import { checkCompliance } from '../api/marketplace'
 import { getEudrCompliance, getContainerEudr } from '../api/logistics'
+import PageHeroBg from '../components/svg/PageHeroBg'
+import ComplianceShield from '../components/svg/ComplianceShield'
+import EmptyState from '../components/svg/EmptyState'
+import BlockchainPulse from '../components/svg/BlockchainPulse'
+import TechCardBg from '../components/svg/TechCardBg'
 
 /* ── Compliance level badge ─────────────────────────────────────── */
 
@@ -19,11 +24,7 @@ const LEVEL_COLORS = {
 }
 
 function LevelBadge({ level }) {
-  return (
-    <span className={`text-xs font-semibold rounded-full px-2.5 py-0.5 border ${LEVEL_COLORS[level] || 'bg-stone-100 text-stone-600 border-stone-200'}`}>
-      {level || 'Unknown'}
-    </span>
-  )
+  return <ComplianceShield level={level} size="sm" />
 }
 
 /* ── Article 9 detail card ──────────────────────────────────────── */
@@ -61,8 +62,9 @@ function Article9Card({ data }) {
   ]
 
   return (
-    <div className="bg-white rounded-xl border border-stone-200 p-6 space-y-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
-      <div className="flex items-center justify-between">
+    <div className="relative overflow-hidden bg-white rounded-xl border border-stone-200 p-6 space-y-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+      <TechCardBg variant="hex" />
+      <div className="relative z-10 flex items-center justify-between">
         <h3 className="text-sm font-bold text-stone-900">
           {data.batch_id}
         </h3>
@@ -83,7 +85,10 @@ function Article9Card({ data }) {
       {/* Proof links */}
       {(data.geolocation_proof_ipfs_cid || data.geolocation_proof_blockchain_tx) && (
         <div className="border-t border-stone-100 pt-3 space-y-1">
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider">{t('comp_verification_proofs')}</p>
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider flex items-center gap-1.5">
+            <BlockchainPulse size={16} />
+            {t('comp_verification_proofs')}
+          </p>
           {data.geolocation_proof_ipfs_cid && (
             <p className="text-xs text-stone-600">IPFS: <code className="text-[10px] font-mono">{data.geolocation_proof_ipfs_cid}</code></p>
           )}
@@ -197,9 +202,12 @@ export default function Compliance() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2 mb-2">
-        <LuShieldCheck className="w-6 h-6" /> {t('nav_compliance')}
-      </h1>
+      <div className="relative mb-2">
+        <PageHeroBg variant="compliance" />
+        <h1 className="text-2xl font-extrabold text-stone-900 flex items-center gap-2 page-header-accent">
+          <IconShieldCheck className="w-6 h-6" /> {t('nav_compliance')}
+        </h1>
+      </div>
       <p className="text-sm text-stone-500 mb-6">
         {t('comp_subtitle')}
       </p>
@@ -214,7 +222,7 @@ export default function Compliance() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          <LuShieldCheck className="w-4 h-4 inline mr-1 -mt-0.5" />
+          <IconShieldCheck className="w-4 h-4 inline mr-1 -mt-0.5" />
           {t('comp_tab_batch')}
         </button>
         <button
@@ -225,7 +233,7 @@ export default function Compliance() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          <LuFileText className="w-4 h-4 inline mr-1 -mt-0.5" />
+          <IconFileText className="w-4 h-4 inline mr-1 -mt-0.5" />
           {t('comp_tab_article9')}
         </button>
         <button
@@ -236,7 +244,7 @@ export default function Compliance() {
               : 'border-transparent text-stone-500 hover:text-stone-700'
           }`}
         >
-          <LuPackage className="w-4 h-4 inline mr-1 -mt-0.5" />
+          <IconPackage className="w-4 h-4 inline mr-1 -mt-0.5" />
           {t('comp_tab_container')}
         </button>
       </div>
@@ -283,7 +291,7 @@ export default function Compliance() {
                   }`}
                 >
                   <div className={`flex items-center gap-2 text-lg font-bold ${compliant ? 'text-forest-700' : 'text-red-700'}`}>
-                    {compliant ? <LuCircleCheck className="w-6 h-6" /> : <LuCircleX className="w-6 h-6" />}
+                    {compliant ? <IconCircleCheck className="w-6 h-6" /> : <IconCircleX className="w-6 h-6" />}
                     {compliant ? t('comp_eudr_compliant') : t('comp_eudr_not_compliant')}
                   </div>
 
@@ -293,9 +301,9 @@ export default function Compliance() {
                       {Object.entries(checks).map(([k, v]) => (
                         <li key={k} className="flex items-center gap-2">
                           {v ? (
-                            <LuCheck className="w-4 h-4 text-forest-600 shrink-0" />
+                            <IconCheck className="w-4 h-4 text-forest-600 shrink-0" />
                           ) : (
-                            <LuX className="w-4 h-4 text-red-500 shrink-0" />
+                            <IconX className="w-4 h-4 text-red-500 shrink-0" />
                           )}
                           <span className="capitalize">{k.replaceAll('_', ' ')}</span>
                         </li>
@@ -337,16 +345,16 @@ export default function Compliance() {
                           <td className="px-4 py-3 font-medium text-stone-700">{b.batch_id}</td>
                           <td className="px-4 py-3">
                             {b.has_gps ? (
-                              <LuCheck className="w-4 h-4 text-forest-600" />
+                              <IconCheck className="w-4 h-4 text-forest-600" />
                             ) : (
-                              <LuX className="w-4 h-4 text-red-500" />
+                              <IconX className="w-4 h-4 text-red-500" />
                             )}
                           </td>
                           <td className="px-4 py-3">
                             {b.photo_verified ? (
-                              <LuCheck className="w-4 h-4 text-forest-600" />
+                              <IconCheck className="w-4 h-4 text-forest-600" />
                             ) : (
-                              <LuX className="w-4 h-4 text-red-500" />
+                              <IconX className="w-4 h-4 text-red-500" />
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -374,18 +382,12 @@ export default function Compliance() {
 
           {/* Empty state */}
           {!result && !loading && (
-            <div className="text-center text-stone-400 py-16">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-100 via-stone-100 to-amber-100 flex items-center justify-center">
-                <LuShieldCheck className="w-10 h-10 text-stone-400" />
-              </div>
-              <p className="text-sm mb-4">{t('comp_batch_empty')}</p>
-              <Link
-                to="/assistant"
-                className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700 hover:scale-105 active:scale-95 transition-all"
-              >
-                <LuMessageCircle className="w-4 h-4" /> {t('comp_or_ask_assistant')}
-              </Link>
-            </div>
+            <EmptyState
+              variant="compliance"
+              message={t('comp_batch_empty')}
+              actionLabel={t('comp_or_ask_assistant')}
+              actionTo="/assistant"
+            />
           )}
         </>
       )}
@@ -399,7 +401,7 @@ export default function Compliance() {
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
-                <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input
                   type="text"
                   value={a9BatchId}
@@ -425,13 +427,11 @@ export default function Compliance() {
           {a9Data && <Article9Card data={a9Data} />}
 
           {!a9Data && !a9Loading && !a9Error && (
-            <div className="text-center text-stone-400 py-16">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-100 via-stone-100 to-green-100 flex items-center justify-center">
-                <LuFileText className="w-10 h-10 text-stone-400" />
-              </div>
-              <p className="text-sm mb-1">{t('comp_a9_empty')}</p>
-              <p className="text-xs text-stone-400">{t('comp_a9_empty_sub')}</p>
-            </div>
+            <EmptyState
+              variant="compliance"
+              message={t('comp_a9_empty')}
+              sub={t('comp_a9_empty_sub')}
+            />
           )}
         </>
       )}
@@ -445,7 +445,7 @@ export default function Compliance() {
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
-                <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                 <input
                   type="text"
                   value={containerSscc}
@@ -503,27 +503,25 @@ export default function Compliance() {
                   to={`/tracking?sscc=${encodeURIComponent(containerData.container_sscc)}`}
                   className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-800 transition"
                 >
-                  <LuPackage className="w-4 h-4" /> {t('comp_view_tracking')}
+                  <IconPackage className="w-4 h-4" /> {t('comp_view_tracking')}
                 </Link>
               </div>
             </div>
           )}
 
           {!containerData && !containerLoading && !containerError && (
-            <div className="text-center text-stone-400 py-16">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-100 via-stone-100 to-amber-100 flex items-center justify-center">
-                <LuPackage className="w-10 h-10 text-stone-400" />
-              </div>
-              <p className="text-sm mb-1">{t('comp_container_empty')}</p>
-              <p className="text-xs text-stone-400">{t('comp_container_empty_sub')}</p>
-            </div>
+            <EmptyState
+              variant="containers"
+              message={t('comp_container_empty')}
+              sub={t('comp_container_empty_sub')}
+            />
           )}
         </>
       )}
 
       {/* Explainer */}
       <div className="mt-12 bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
-        <h2 className="text-lg font-bold text-stone-800 mb-3">{t('comp_about_title')}</h2>
+        <h2 className="text-lg font-bold text-stone-800 mb-3 section-heading">{t('comp_about_title')}</h2>
         <div className="text-sm text-stone-600 space-y-2 leading-relaxed">
           <p>{t('comp_about_p1')}</p>
           <p>{t('comp_about_p2')}</p>

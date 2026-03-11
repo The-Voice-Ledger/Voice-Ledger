@@ -2,6 +2,10 @@
 
 /* Custom design tokens */
 @theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
   --color-coffee-50: #fdf8f0;
   --color-coffee-100: #f5ead6;
   --color-coffee-200: #e8d0a8;
@@ -96,6 +100,52 @@ body {
 }
 .animate-float-slower {
   animation: float-slower 18s ease-in-out infinite;
+}
+
+/* ── Typography utility classes ──────────────────────────── */
+
+/* Hero h1 — Space Grotesk, very tight tracking */
+.hero-heading {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+/* Section h2/h3 — Space Grotesk, moderate tight tracking */
+.section-heading {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Inner page header with gradient underline accent */
+.page-header-accent {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+/* Animated gradient shimmer on text */
+.text-gradient-animated {
+  background: linear-gradient(90deg, #d4ad6e, #6cc86c, #3daa3d, #d4ad6e);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-shift 8s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* Static gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, #c08e42, #258c25);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Ken Burns slow zoom for carousel slides */

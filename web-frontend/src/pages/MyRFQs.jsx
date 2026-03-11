@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router-dom'
-import { LuFileText, LuRefreshCw, LuMessageCircle } from 'react-icons/lu'
+import { IconFileText, IconRefreshCw, IconMessageCircle } from '../components/svg/Icons'
 import { listMyRFQs } from '../api/marketplace'
 import useAuthStore from '../stores/authStore'
+import PageHeroBg from '../components/svg/PageHeroBg'
+import EmptyState from '../components/svg/EmptyState'
 
 function StatusBadge({ status }) {
   const colors = {
@@ -47,9 +49,10 @@ export default function MyRFQs() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-stone-900 flex items-center gap-2">
-          <LuFileText className="w-6 h-6 shrink-0" /> {t('nav_my_rfqs')}
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <PageHeroBg variant="rfqs" />
+        <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 flex items-center gap-2 page-header-accent">
+          <IconFileText className="w-6 h-6 shrink-0" /> {t('nav_my_rfqs')}
         </h1>
         <div className="flex items-center gap-3">
           <button
@@ -57,13 +60,13 @@ export default function MyRFQs() {
             disabled={loading}
             className="inline-flex items-center gap-1 text-sm text-stone-500 hover:text-stone-700 transition"
           >
-            <LuRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            <IconRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <Link
             to="/assistant"
             className="inline-flex items-center gap-1 text-sm bg-stone-900 text-white rounded-full px-4 py-1.5 hover:bg-stone-800 transition"
           >
-            <LuMessageCircle className="w-4 h-4" /> Create RFQ
+            <IconMessageCircle className="w-4 h-4" /> Create RFQ
           </Link>
         </div>
       </div>
@@ -73,15 +76,34 @@ export default function MyRFQs() {
       )}
 
       {loading && (
-        <div className="text-center text-stone-400 py-16 text-sm">Loading your RFQs…</div>
+        <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+          <div className="animate-pulse">
+            <div className="bg-stone-50 px-4 py-3 flex gap-4">
+              {[80, 64, 56, 48, 64, 48, 40].map((w, i) => (
+                <div key={i} className="h-3 bg-stone-200 rounded" style={{ width: w }} />
+              ))}
+            </div>
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="px-4 py-3.5 flex gap-4 border-t border-stone-100">
+                {[72, 56, 48, 40, 60, 52, 32].map((w, j) => (
+                  <div key={j} className="h-3 bg-stone-100 rounded" style={{ width: w }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {!loading && (
         <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
           {rfqs.length === 0 ? (
-            <div className="text-center text-stone-400 py-12 text-sm">
-              You have no RFQs yet. <Link to="/assistant" className="text-stone-600 underline">Create one via the assistant</Link>.
-            </div>
+            <EmptyState
+              variant="rfqs"
+              message="You have no RFQs yet."
+              sub="Create one using the voice assistant or chat."
+              actionLabel="Create RFQ"
+              actionTo="/assistant"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

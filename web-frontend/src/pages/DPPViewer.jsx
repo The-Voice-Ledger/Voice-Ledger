@@ -1,7 +1,7 @@
 import { useSearchParams, Link, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LuSprout, LuSearch, LuLink, LuShieldCheck, LuMessageCircle, LuDownload, LuExternalLink } from 'react-icons/lu'
+import { IconSprout, IconSearch, IconLink, IconShieldCheck, IconMessageCircle, IconDownload, IconExternalLink } from '../components/svg/Icons'
 import { fetchDPP } from '../api/marketplace'
 
 /* ── Skeleton loader ───────────────────────────────────────────── */
@@ -72,8 +72,8 @@ export default function DPPViewer() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2 mb-2">
-        <LuSprout className="w-6 h-6" /> {t('nav_dpp')}
+      <h1 className="text-2xl font-extrabold text-stone-900 flex items-center gap-2 mb-2 page-header-accent">
+        <IconSprout className="w-6 h-6" /> {t('nav_dpp')}
       </h1>
       <p className="text-sm text-stone-500 mb-6">
         {t('dpp_subtitle')}
@@ -82,7 +82,7 @@ export default function DPPViewer() {
       {/* Search */}
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-8">
         <div className="relative flex-1">
-          <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
             value={batchId}
@@ -117,8 +117,8 @@ export default function DPPViewer() {
           {dpp && (
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300 dpp-print-card">
               <div className="bg-stone-50 border-b border-stone-100 px-6 py-4">
-                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
-                  <LuSprout className="w-5 h-5 text-forest-600" /> {t('dpp_title')}
+                <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2 section-heading">
+                  <IconSprout className="w-5 h-5 text-forest-600" /> {t('dpp_title')}
                 </h2>
               </div>
 
@@ -140,7 +140,7 @@ export default function DPPViewer() {
                     <div className="sm:col-span-2">
                       <dt className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1">GPS Location</dt>
                       <dd className="flex items-center gap-2 text-sm text-stone-700 font-medium">
-                        <LuShieldCheck className="w-4 h-4 text-forest-600" />
+                        <IconShieldCheck className="w-4 h-4 text-forest-600" />
                         {dpp.latitude && dpp.longitude ? `${dpp.latitude}, ${dpp.longitude}` : (dpp.gps_coordinates === '?, ?' ? 'Not available' : dpp.gps_coordinates)}
                       </dd>
                     </div>
@@ -210,7 +210,7 @@ export default function DPPViewer() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-sm font-medium text-white bg-stone-900 hover:bg-stone-800 px-5 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95 shadow-sm"
                     >
-                      <LuDownload className="w-4 h-4" />
+                      <IconDownload className="w-4 h-4" />
                       {t('dpp_download_pdf')}
                     </a>
                     <a
@@ -219,7 +219,7 @@ export default function DPPViewer() {
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-sm px-5 py-2.5 rounded-lg transition-all hover:scale-105 active:scale-95"
                     >
-                      <LuExternalLink className="w-4 h-4" />
+                      <IconExternalLink className="w-4 h-4" />
                       {t('dpp_view_passport')}
                     </a>
                   </div>
@@ -231,7 +231,7 @@ export default function DPPViewer() {
           {/* Lineage */}
           {dpp?.lineage && dpp.lineage.length > 0 && (
             <div className="bg-white rounded-xl border border-stone-200 p-6">
-              <h2 className="text-lg font-bold text-stone-800 mb-4">{t('dpp_lineage')}</h2>
+              <h2 className="text-lg font-bold text-stone-800 mb-4 section-heading">{t('dpp_lineage')}</h2>
               <div className="relative pl-8">
                 {/* Vertical line */}
                 <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-stone-200" />
@@ -266,14 +266,14 @@ export default function DPPViewer() {
       {!result && !loading && (
         <div className="text-center text-stone-400 py-16">
           <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-forest-100 via-stone-100 to-amber-100 flex items-center justify-center">
-            <LuSprout className="w-10 h-10 text-stone-400" />
+            <IconSprout className="w-10 h-10 text-stone-400" />
           </div>
           <p className="text-sm mb-4">{t('dpp_empty')}</p>
           <Link
             to="/assistant"
             className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700 hover:scale-105 active:scale-95 transition-all"
           >
-            <LuMessageCircle className="w-4 h-4" /> {t('dpp_or_ask_assistant')}
+            <IconMessageCircle className="w-4 h-4" /> {t('dpp_or_ask_assistant')}
           </Link>
         </div>
       )}

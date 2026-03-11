@@ -2,10 +2,15 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  LuShip, LuSearch, LuMessageCircle, LuPackageCheck, LuMapPin,
-  LuAnchor, LuCircleCheck, LuCircleDot, LuCircle, LuInfo,
-} from 'react-icons/lu'
+  IconShip, IconSearch, IconMessageCircle, IconPackageCheck, IconMapPin,
+  IconAnchor, IconCircleCheck, IconCircleDot, IconCircle, IconInfo,
+} from '../components/svg/Icons'
 import { getShipmentStatus } from '../api/logistics'
+import PageHeroBg from '../components/svg/PageHeroBg'
+import AnimatedTimeline from '../components/svg/AnimatedTimeline'
+import BlockchainPulse from '../components/svg/BlockchainPulse'
+import EmptyState from '../components/svg/EmptyState'
+import TechCardBg from '../components/svg/TechCardBg'
 
 /* ── Shimmer skeleton ───────────────────────────────────────────── */
 
@@ -36,13 +41,13 @@ function TrackingSkeleton() {
 /* ── Milestone icon / colour mapping ────────────────────────────── */
 
 const MILESTONE_META = {
-  PICKUP:                   { icon: LuPackageCheck, color: 'text-green-600',  bg: 'bg-green-100', label: 'Pickup' },
-  PORT_ARRIVAL_ORIGIN:      { icon: LuAnchor,       color: 'text-blue-600',   bg: 'bg-blue-100',  label: 'Port of Origin' },
-  VESSEL_DEPARTURE:         { icon: LuShip,         color: 'text-indigo-600', bg: 'bg-indigo-100', label: 'Vessel Departed' },
-  TRANSSHIPMENT:            { icon: LuShip,         color: 'text-purple-600', bg: 'bg-purple-100', label: 'Transshipment' },
-  PORT_ARRIVAL_DESTINATION: { icon: LuAnchor,       color: 'text-teal-600',   bg: 'bg-teal-100',  label: 'Port of Destination' },
-  CUSTOMS_CLEARED:          { icon: LuCircleCheck, color: 'text-amber-600',  bg: 'bg-amber-100', label: 'Customs Cleared' },
-  DELIVERED:                { icon: LuPackageCheck, color: 'text-green-700',  bg: 'bg-green-200', label: 'Delivered' },
+  PICKUP:                   { icon: IconPackageCheck, color: 'text-green-600',  bg: 'bg-green-100', label: 'Pickup' },
+  PORT_ARRIVAL_ORIGIN:      { icon: IconAnchor,       color: 'text-blue-600',   bg: 'bg-blue-100',  label: 'Port of Origin' },
+  VESSEL_DEPARTURE:         { icon: IconShip,         color: 'text-indigo-600', bg: 'bg-indigo-100', label: 'Vessel Departed' },
+  TRANSSHIPMENT:            { icon: IconShip,         color: 'text-purple-600', bg: 'bg-purple-100', label: 'Transshipment' },
+  PORT_ARRIVAL_DESTINATION: { icon: IconAnchor,       color: 'text-teal-600',   bg: 'bg-teal-100',  label: 'Port of Destination' },
+  CUSTOMS_CLEARED:          { icon: IconCircleCheck, color: 'text-amber-600',  bg: 'bg-amber-100', label: 'Customs Cleared' },
+  DELIVERED:                { icon: IconPackageCheck, color: 'text-green-700',  bg: 'bg-green-200', label: 'Delivered' },
 }
 
 const DELIVERY_COLORS = {
@@ -93,15 +98,18 @@ function Timeline({ milestones, events }) {
 
   return (
     <div className="relative pl-8">
-      {/* Vertical line */}
-      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-stone-200" />
+      {/* Animated SVG line replaces the static border */}
+      <AnimatedTimeline count={allEvents.length} currentIndex={allEvents.length - 1} />
+
+      {/* Faint static line as fallback */}
+      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-stone-100" />
 
       <div className="space-y-6">
         {allEvents.map((evt, i) => {
           const meta = evt.source === 'milestone'
             ? (MILESTONE_META[evt.milestone_type] || {})
             : {}
-          const Icon = meta.icon || (i === allEvents.length - 1 ? LuCircleDot : LuCircle)
+          const Icon = meta.icon || (i === allEvents.length - 1 ? IconCircleDot : IconCircle)
           const iconColor = meta.color || 'text-stone-400'
           const isLast = i === allEvents.length - 1
 
@@ -139,7 +147,7 @@ function Timeline({ milestones, events }) {
                 {/* Blockchain proof */}
                 {evt.blockchain_tx_hash && (
                   <p className="text-xs text-stone-400 mt-1 flex items-center gap-1">
-                    <LuCircleCheck className="w-3 h-3 text-green-500" />
+                    <BlockchainPulse size={16} />
                     <span className="font-mono truncate max-w-[200px]">{evt.blockchain_tx_hash}</span>
                   </p>
                 )}
@@ -191,9 +199,12 @@ export default function Tracking() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Header */}
-      <h1 className="text-2xl font-bold text-stone-900 flex items-center gap-2 mb-2">
-        <LuShip className="w-6 h-6" /> {t('nav_tracking')}
-      </h1>
+      <div className="relative mb-2">
+        <PageHeroBg variant="tracking" />
+        <h1 className="text-2xl font-extrabold text-stone-900 flex items-center gap-2 page-header-accent">
+          <IconShip className="w-6 h-6" /> {t('nav_tracking')}
+        </h1>
+      </div>
       <p className="text-sm text-stone-500 mb-6">
         {t('track_subtitle')}
       </p>
@@ -201,7 +212,7 @@ export default function Tracking() {
       {/* Search */}
       <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-8">
         <div className="relative flex-1">
-          <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input
             type="text"
             value={sscc}
@@ -230,8 +241,9 @@ export default function Tracking() {
       {shipment && (
         <div className="space-y-6">
           {/* Status header */}
-          <div className="bg-white rounded-xl border border-stone-200 p-5 hover:shadow-md transition-shadow">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative overflow-hidden bg-white rounded-xl border border-stone-200 p-5 hover:shadow-md transition-shadow">
+            <TechCardBg variant="shipment" />
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-stone-400 font-mono mb-1">{shipment.container_sscc}</p>
                 <div className="flex items-center gap-3">
@@ -251,9 +263,10 @@ export default function Tracking() {
           </div>
 
           {/* Timeline */}
-          <div className="bg-white rounded-xl border border-stone-200 p-6">
-            <h2 className="text-sm font-bold text-stone-900 flex items-center gap-2 mb-5">
-              <LuMapPin className="w-4 h-4 text-stone-500" /> {t('track_timeline')}
+          <div className="relative overflow-hidden bg-white rounded-xl border border-stone-200 p-6">
+            <TechCardBg variant="shipment" className="!text-stone-300" />
+            <h2 className="relative z-10 text-sm font-bold text-stone-900 flex items-center gap-2 mb-5">
+              <IconMapPin className="w-4 h-4 text-stone-500" /> {t('track_timeline')}
             </h2>
             <Timeline milestones={shipment.milestones} events={shipment.events} />
           </div>
@@ -264,7 +277,7 @@ export default function Tracking() {
               to={`/compliance?sscc=${encodeURIComponent(shipment.container_sscc)}`}
               className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-800 transition"
             >
-              <LuCircleCheck className="w-4 h-4" /> {t('track_view_compliance')}
+              <IconCircleCheck className="w-4 h-4" /> {t('track_view_compliance')}
             </Link>
           </div>
         </div>
@@ -272,24 +285,18 @@ export default function Tracking() {
 
       {/* Empty state */}
       {!shipment && !loading && !error && (
-        <div className="text-center text-stone-400 py-16">
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-blue-100 via-stone-100 to-teal-100 flex items-center justify-center">
-            <LuShip className="w-10 h-10 text-stone-400" />
-          </div>
-          <p className="text-sm mb-4">{t('track_empty')}</p>
-          <Link
-            to="/assistant"
-            className="inline-flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-700 hover:scale-105 active:scale-95 transition-all"
-          >
-            <LuMessageCircle className="w-4 h-4" /> {t('track_ask_assistant')}
-          </Link>
-        </div>
+        <EmptyState
+          variant="tracking"
+          message={t('track_empty')}
+          actionLabel={t('track_ask_assistant')}
+          actionTo="/assistant"
+        />
       )}
 
       {/* Explainer */}
       <div className="mt-12 bg-gradient-to-br from-stone-50 to-stone-100/60 rounded-xl p-6 border border-stone-200">
-        <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2">
-          <LuInfo className="w-5 h-5" /> {t('track_about_title')}
+        <h2 className="text-lg font-bold text-stone-800 mb-3 flex items-center gap-2 section-heading">
+          <IconInfo className="w-5 h-5" /> {t('track_about_title')}
         </h2>
         <div className="text-sm text-stone-600 space-y-2 leading-relaxed">
           <p>{t('track_about_p1')}</p>
