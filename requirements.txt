@@ -104,5 +104,7 @@ bcrypt==4.1.2              # Password hashing for admin auth
 chromadb==0.4.24
 PyPDF2==3.0.1
 
-# LiveKit packages moved to requirements-worker.txt
+# LiveKit agent/plugin packages moved to requirements-worker.txt
 # (avoids chromadb/onnxruntime conflict)
+# livekit-api is kept here — the main API needs it for token signing
+livekit-api>=1.1.0
