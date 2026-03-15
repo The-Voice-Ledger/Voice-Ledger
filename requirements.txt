@@ -60,6 +60,7 @@ pandas>=2.1.4
 # -----------------------------
 # Phase 1: Audio Processing
 pydub==0.25.1              # Audio format conversion (MP3/M4A → WAV)
+soundfile>=0.12.1          # Audio file I/O (used by audio_utils)
 numpy>=1.26.0              # Required by pandas/torch/onnxruntime
 aiofiles>=24.1.0           # Async file operations (>=24 required by livekit)
 
