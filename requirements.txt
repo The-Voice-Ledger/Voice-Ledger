@@ -7,7 +7,7 @@
 # Core / Testing
 # -----------------------------
 pytest==7.4.3
-requests==2.31.0
+requests>=2.31.0
 
 # -----------------------------
 # Lab 1: GS1 Identifiers & EPCIS Events
@@ -20,16 +20,16 @@ requests==2.31.0
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
-pydantic==2.5.0
+pydantic>=2.5.0
 python-dotenv==1.0.0
-openai==1.12.0
+openai>=1.12.0               # >=2 required by livekit-agents
 python-dateutil==2.8.2     # Natural language date parsing
 
 # -----------------------------
 # Lab 3: SSI (Self-Sovereign Identity)
 # -----------------------------
 PyNaCl==1.5.0              # Ed25519 signing
-cryptography==41.0.7       # Private key encryption
+cryptography>=41.0.7       # Private key encryption
 pyld==2.0.3                # JSON-LD canonicalization
 
 # -----------------------------
@@ -45,7 +45,7 @@ eth-account==0.13.7        # Account management and transaction signing
 # Lab 5: Digital Product Passports (DPP)
 # -----------------------------
 qrcode[pil]==8.0           # QR code generation (updated for credential export)
-Pillow==10.1.0             # Image processing
+Pillow>=10.1.0             # Image processing
 fpdf2==2.8.3               # Server-side PDF generation for DPP passports
 
 # -----------------------------
@@ -53,25 +53,25 @@ fpdf2==2.8.3               # Server-side PDF generation for DPP passports
 # -----------------------------
 streamlit==1.29.0
 plotly==5.18.0
-pandas==2.1.4
+pandas>=2.1.4
 
 # -----------------------------
 # Lab 7: Voice Interface Integration
 # -----------------------------
 # Phase 1: Audio Processing
 pydub==0.25.1              # Audio format conversion (MP3/M4A → WAV)
-soundfile==0.12.1          # Audio I/O with numpy arrays
-aiofiles==23.2.1           # Async file operations
+numpy>=1.26.0              # Required by pandas/torch/onnxruntime
+aiofiles>=24.1.0           # Async file operations (>=24 required by livekit)
 
 # Phase 2: Async Processing
 celery==5.4.0              # Distributed task queue
 redis==5.0.1               # Message broker + result backend
 
 # Phase 5: Bilingual ASR (English + Amharic)
-transformers==4.57.3       # HuggingFace models
-torch==2.8.0               # PyTorch for local inference
-torchaudio==2.8.0          # Audio preprocessing
-accelerate==1.10.1         # Optimized model loading
+transformers>=4.37.0       # HuggingFace models
+torch>=2.1.0               # PyTorch for local inference
+torchaudio>=2.1.0          # Audio preprocessing
+accelerate>=0.25.0         # Optimized model loading
 
 # -----------------------------
 # Lab 8: Multi-Channel Integration
@@ -86,7 +86,7 @@ python-telegram-bot==20.7  # Telegram Bot API
 # -----------------------------
 # Database (Neon PostgreSQL)
 # -----------------------------
-sqlalchemy[asyncio]==2.0.23
+sqlalchemy[asyncio]>=2.0.23
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 alembic==1.13.1
@@ -102,3 +102,13 @@ bcrypt==4.1.2              # Password hashing for admin auth
 # -----------------------------
 chromadb==0.4.24
 PyPDF2==3.0.1
+
+# -----------------------------
+# LiveKit Real-Time Voice Agent
+# -----------------------------
+livekit>=1.1.0
+livekit-agents>=1.4.0
+livekit-api>=1.1.0
+livekit-plugins-deepgram>=1.4.0
+livekit-plugins-openai>=1.4.0
+livekit-plugins-silero>=1.4.0

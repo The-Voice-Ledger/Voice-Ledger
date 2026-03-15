@@ -3,11 +3,14 @@ import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import { IconVolume2, IconLoader, IconCopy, IconCheck, IconChevronDown, IconCircleCheck, IconCircleX, IconWrench, IconSparkles } from '../components/svg/Icons'
 import { getVoiceManager } from '../voice/VoiceManager'
-
-const WAGA_LOGO = 'https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa'
-import useChatStore from '../stores/chatStore'
+import LiveVoicePanel from '../components/LiveVoicePanel'
+import ConstellationBg from '../components/svg/ConstellationBg'
 import useAuthStore from '../stores/authStore'
+import useChatStore from '../stores/chatStore'
 import { ResponseCard } from '../components/cards/ResponseCard'
+
+const WAGA_LOGO =
+  'https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa'
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 
@@ -284,10 +287,11 @@ export default function Assistant() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
   const {
-    messages, isLoading, isRecording, error,
-    sendMessage, sendVoiceMessage, stopRecording, clearChat,
+    messages, isLoading, error,
+    sendMessage, clearChat,
   } = useChatStore()
   const [input, setInput] = useState('')
+  const [voiceOpen, setVoiceOpen] = useState(false)
   const bottomRef = useRef(null)
   const scrollRef = useRef(null)
 
@@ -304,22 +308,15 @@ export default function Assistant() {
     sendMessage(text)
   }
 
-  const handleVoice = () => {
-    if (isRecording) {
-      stopRecording()
-    } else {
-      sendVoiceMessage()
-    }
-  }
-
   const initial = userInitial(user)
 
   return (
+    <>
     <div className="flex flex-col flex-1 max-w-3xl mx-auto w-full">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-stone-200">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-stone-900 flex items-center justify-center">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 border-b border-stone-200 bg-white">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center">
             <IconSparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <div>
@@ -327,12 +324,27 @@ export default function Assistant() {
             <p className="text-[10px] text-stone-400 leading-tight">{t('assistant_subtitle')}</p>
           </div>
         </div>
-        <button
-          onClick={clearChat}
-          className="text-xs text-stone-400 hover:text-stone-600 transition"
-        >
-          {t('clear_chat')}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Quick voice access (always visible) */}
+          <button
+            onClick={() => setVoiceOpen(true)}
+            className="hidden sm:flex items-center gap-1.5 text-[10px] font-medium text-stone-400 hover:text-emerald-600 bg-stone-50 hover:bg-emerald-50 rounded-lg px-2.5 py-1.5 transition-colors"
+            title="Open voice assistant"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <rect x="9" y="2" width="6" height="11" rx="3" />
+              <path d="M5 12a7 7 0 0014 0" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+            </svg>
+            Voice
+          </button>
+          <button
+            onClick={clearChat}
+            className="text-xs text-stone-400 hover:text-stone-600 transition"
+          >
+            {t('clear_chat')}
+          </button>
+        </div>
       </div>
 
       {/* Messages area - with top fade gradient */}
@@ -342,36 +354,167 @@ export default function Assistant() {
 
         <div className="px-3 sm:px-4 pb-4 space-y-4">
           {messages.length === 0 && (
-            <div className="text-center mt-12 mb-8 space-y-4">
-              {/* Empty-state illustration area */}
-              <div className="relative mx-auto w-32 h-32 rounded-full bg-gradient-to-br from-coffee-100 via-stone-100 to-forest-100 flex items-center justify-center">
-                <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-14 opacity-70" />
-                <div className="absolute inset-0 rounded-full animate-pulse-ring border-2 border-coffee-200 opacity-30" />
+            <div className="mt-6 sm:mt-10 mb-8 px-1 animate-fade-in-up">
+              {/* ── Greeting with animated logo ── */}
+              <div className="text-center mb-6">
+                <div className="inline-block mb-4">
+                  {/* Animated logo card — larger, centered */}
+                  <div className="relative mx-auto w-16 h-16">
+                    <svg className="absolute -inset-2.5 w-[calc(100%+20px)] h-[calc(100%+20px)]" viewBox="0 0 84 84" fill="none">
+                      <rect x="2" y="2" width="80" height="80" rx="22" stroke="url(#logo-ring-grad)" strokeWidth="0.7" strokeDasharray="4 8" opacity="0.35">
+                        <animateTransform attributeName="transform" type="rotate" from="0 42 42" to="360 42 42" dur="20s" repeatCount="indefinite" />
+                      </rect>
+                      <circle cx="8" cy="8" r="1" fill="#10B981" opacity="0.3">
+                        <animate attributeName="opacity" values="0.2;0.5;0.2" dur="3s" repeatCount="indefinite" />
+                      </circle>
+                      <circle cx="76" cy="76" r="1" fill="#06B6D4" opacity="0.25">
+                        <animate attributeName="opacity" values="0.15;0.45;0.15" dur="4s" repeatCount="indefinite" />
+                      </circle>
+                      <defs>
+                        <linearGradient id="logo-ring-grad" x1="0" y1="0" x2="84" y2="84">
+                          <stop offset="0%" stopColor="#10B981" />
+                          <stop offset="100%" stopColor="#06B6D4" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <img src={WAGA_LOGO} alt="WAGA" className="w-16 h-16 rounded-2xl shadow-sm" />
+                  </div>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-semibold text-stone-800 font-display tracking-tight">
+                  {t('assistant_welcome')}
+                </h2>
+                <p className="text-sm text-stone-400 mt-1">Choose how you'd like to interact</p>
               </div>
-              <div>
-                <p className="text-base font-medium text-stone-700">{t('assistant_welcome')}</p>
-                <p className="text-sm text-stone-400 mt-1">{t('chat_placeholder')}</p>
-              </div>
-              {/* Prompt pills - 2-column grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto mt-6">
-                {[
-                  t('prompt_rfqs'),
-                  t('prompt_create_rfq'),
-                  t('prompt_eudr'),
-                  t('prompt_containers'),
-                  t('prompt_lineage'),
-                  t('prompt_dpp'),
-                  t('prompt_blockchain'),
-                  t('prompt_eudr_docs'),
-                ].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => sendMessage(q)}
-                    className="text-xs text-left bg-white hover:bg-stone-50 text-stone-600 hover:text-stone-900 border border-stone-200 hover:border-stone-300 rounded-xl px-3 py-2.5 transition shadow-sm hover:shadow"
-                  >
-                    {q}
-                  </button>
-                ))}
+
+              {/* ── Two-mode cards ── */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl mx-auto">
+
+                {/* === Voice Card === */}
+                <button
+                  onClick={() => setVoiceOpen(true)}
+                  className="group relative overflow-hidden rounded-2xl text-left transition-all duration-300
+                    bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950
+                    hover:shadow-xl hover:shadow-emerald-900/20 hover:scale-[1.02] active:scale-[0.98]
+                    ring-1 ring-white/5 hover:ring-emerald-500/20"
+                  aria-label="Start voice session"
+                >
+                  {/* Constellation background — the dark-theme network pattern */}
+                  <div className="absolute inset-0 opacity-40">
+                    <ConstellationBg />
+                  </div>
+
+                  {/* Floating orbs (miniature) */}
+                  <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-emerald-500/10 blur-2xl animate-float-slow" />
+                  <div className="absolute -bottom-4 -left-4 w-20 h-20 rounded-full bg-cyan-500/8 blur-2xl animate-float-slower" />
+
+                  <div className="relative z-10 p-5 sm:p-6 flex flex-col items-center text-center min-h-[200px] justify-center gap-4">
+                    {/* Animated logo with orbital rings */}
+                    <div className="relative w-24 h-24 flex items-center justify-center">
+                      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 96 96">
+                        {/* Outer dashed orbit */}
+                        <circle cx="48" cy="48" r="44" fill="none" stroke="#10B981" strokeWidth="0.5"
+                                strokeDasharray="3 8" strokeOpacity="0.3">
+                          <animateTransform attributeName="transform" type="rotate"
+                                            from="0 48 48" to="360 48 48" dur="16s" repeatCount="indefinite" />
+                        </circle>
+                        {/* Inner counter-rotating ring */}
+                        <circle cx="48" cy="48" r="35" fill="none" stroke="#10B981" strokeWidth="0.3" strokeOpacity="0.15">
+                          <animateTransform attributeName="transform" type="rotate"
+                                            from="360 48 48" to="0 48 48" dur="12s" repeatCount="indefinite" />
+                        </circle>
+                        {/* Breathing ring around logo */}
+                        <circle cx="48" cy="48" fill="none" stroke="#10B981" strokeWidth="0.5" strokeOpacity="0.25">
+                          <animate attributeName="r" values="24;27;24" dur="3s" repeatCount="indefinite" />
+                        </circle>
+                        {/* Orbital dot */}
+                        <circle r="1.2" fill="#34D399" opacity="0.5">
+                          <animateMotion dur="8s" repeatCount="indefinite" path="M48,4 A44,44 0 1,1 47.99,4" />
+                        </circle>
+                        {/* Soft glow behind logo */}
+                        <circle cx="48" cy="48" r="18" fill="#10B981" opacity="0.06">
+                          <animate attributeName="r" values="16;20;16" dur="4s" repeatCount="indefinite" />
+                          <animate attributeName="opacity" values="0.04;0.08;0.04" dur="4s" repeatCount="indefinite" />
+                        </circle>
+                      </svg>
+                      {/* Logo center */}
+                      <img src={WAGA_LOGO} alt="" className="relative w-10 h-10 rounded-xl group-hover:scale-110 transition-transform duration-300" />
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-white/90 font-display tracking-tight">
+                        Speak to The Voice Ledger
+                      </p>
+                      <p className="text-[11px] text-white/35 mt-0.5">
+                        Your Voice Assistant
+                      </p>
+                    </div>
+
+                    {/* CTA pill */}
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-400/80 group-hover:text-emerald-300 tracking-wide uppercase transition-colors">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Tap to start
+                    </span>
+                  </div>
+
+                  {/* Subtle pulse ring on hover */}
+                  <div className="absolute inset-0 rounded-2xl border border-emerald-400/0 group-hover:border-emerald-400/10 transition-all pointer-events-none" />
+                </button>
+
+                {/* === Chat Card === */}
+                <div className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-stone-200 hover:ring-stone-300 transition-all">
+                  {/* Subtle dot-grid pattern */}
+                  <svg className="absolute inset-0 w-full h-full opacity-[0.04]" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+                    {Array.from({ length: 8 }, (_, row) =>
+                      Array.from({ length: 8 }, (_, col) => (
+                        <circle key={`${row}-${col}`} cx={8 + col * 12} cy={8 + row * 12} r="0.8" fill="currentColor" />
+                      ))
+                    )}
+                  </svg>
+
+                  <div className="relative z-10 p-5 sm:p-6 flex flex-col min-h-[200px]">
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <div className="relative w-9 h-9 rounded-xl bg-stone-100 flex items-center justify-center text-stone-500">
+                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                        </svg>
+                        {/* Subtle animated dot */}
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white">
+                          <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-40" />
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-stone-800 font-display tracking-tight">
+                          Type to ask
+                        </p>
+                        <p className="text-[11px] text-stone-400">
+                          Chat with the assistant below
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Prompt pills */}
+                    <div className="grid grid-cols-1 gap-1.5 flex-1">
+                      {[
+                        t('prompt_rfqs'),
+                        t('prompt_create_rfq'),
+                        t('prompt_eudr'),
+                        t('prompt_containers'),
+                      ].map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => sendMessage(q)}
+                          className="text-[11px] text-left text-stone-500 hover:text-stone-800 bg-stone-50 hover:bg-stone-100 rounded-lg px-3 py-2 transition truncate"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-[10px] text-stone-300 mt-3 text-center">
+                      + {4} more prompts — just start typing
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -470,45 +613,32 @@ export default function Assistant() {
 
       {/* Input bar */}
       <div className="border-t border-stone-200 bg-white px-3 sm:px-4 pt-3 pb-6 mb-2">
-        <form onSubmit={handleSubmit} className="flex items-center gap-1.5 sm:gap-2">
-          {/* Voice button */}
-          <button
-            type="button"
-            onClick={handleVoice}
-            disabled={isLoading}
-            className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-              isRecording
-                ? 'bg-red-500 text-white scale-110'
-                : 'bg-stone-100 hover:bg-stone-200 hover:scale-105 text-stone-600'
-            }`}
-            title={isRecording ? t('chat_recording') : t('chat_voice')}
-          >
-            {isRecording ? (
-              <span className="relative flex items-center justify-center">
-                <span className="absolute w-10 h-10 rounded-full bg-red-400 animate-pulse-ring" />
-                <svg className="w-5 h-5 relative" fill="currentColor" viewBox="0 0 24 24">
-                  <rect x="6" y="6" width="12" height="12" rx="2" />
-                </svg>
-              </span>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 01-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          {/* Text input with embedded mic icon */}
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t('chat_placeholder')}
+              disabled={isLoading}
+              className="w-full rounded-full border border-stone-300 pl-4 pr-12 py-2.5 text-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200/60 transition disabled:opacity-50"
+            />
+            {/* Mic icon inside input — opens voice panel */}
+            <button
+              type="button"
+              onClick={() => setVoiceOpen(true)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center
+                text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all duration-200"
+              title="Open voice assistant"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect x="9" y="2" width="6" height="11" rx="3" />
+                <path d="M5 12a7 7 0 0014 0" />
+                <line x1="12" y1="19" x2="12" y2="22" />
               </svg>
-            )}
-          </button>
-
-          {/* Text input */}
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t('chat_placeholder')}
-            disabled={isLoading || isRecording}
-            className="flex-1 rounded-full border border-stone-300 px-4 py-2.5 text-sm outline-none focus:border-stone-500 focus:ring-2 focus:ring-stone-200/60 transition disabled:opacity-50"
-          />
+            </button>
+          </div>
 
           {/* Send button */}
           <button
@@ -524,5 +654,8 @@ export default function Assistant() {
         </form>
       </div>
     </div>
+
+      <LiveVoicePanel isOpen={voiceOpen} onClose={() => setVoiceOpen(false)} />
+    </>
   )
 }

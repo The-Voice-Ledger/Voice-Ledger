@@ -1289,64 +1289,26 @@ class ToolRegistry:
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Query coffee batches from the database.
-        Replaces the old OPERATIONAL query type from hybrid_router.
+        Delegates to services.batch_service for shared business logic.
         """
-        from database.models import CoffeeBatch
-        
-        batch_id = args.get("batch_id")
-        status = args.get("status")
-        origin = args.get("origin")
-        limit = args.get("limit", 10)
-        
-        query = db.query(CoffeeBatch)
-        
-        # Filter by specific batch
-        if batch_id:
-            from database.crud import get_batch_by_id_or_gtin
-            batch = get_batch_by_id_or_gtin(db, batch_id)
-            if batch:
-                return (
-                    f"Found batch {batch.batch_id}",
-                    {
-                        "batch_id": batch.batch_id,
-                        "gtin": batch.gtin,
-                        "origin": batch.origin,
-                        "variety": batch.variety,
-                        "quantity_kg": batch.quantity_kg,
-                        "status": batch.status,
-                        "created_at": str(batch.created_at) if batch.created_at else None,
-                        "quality_grade": batch.quality_grade,
-                    },
-                )
-            else:
-                return (f"Batch '{batch_id}' not found", {"found": False})
-        
-        # Apply filters
-        if status:
-            query = query.filter(CoffeeBatch.status == status.upper())
-        if origin:
-            query = query.filter(CoffeeBatch.origin.ilike(f"%{origin}%"))
-        if user_id:
-            query = query.filter(CoffeeBatch.created_by_user_id == user_id)
-        
-        batches = query.order_by(CoffeeBatch.created_at.desc()).limit(limit).all()
-        
-        if not batches:
-            return ("No batches found matching your criteria", {"batches": [], "count": 0})
-        
-        batch_list = []
-        for b in batches:
-            batch_list.append({
-                "batch_id": b.batch_id,
-                "origin": b.origin,
-                "variety": b.variety,
-                "quantity_kg": b.quantity_kg,
-                "status": b.status,
-                "created_at": str(b.created_at) if b.created_at else None,
-            })
-        
-        summary = f"Found {len(batch_list)} batch(es)"
-        return (summary, {"batches": batch_list, "count": len(batch_list)})
+        from services.batch_service import query_batches as svc_query_batches
+
+        result = svc_query_batches(
+            db,
+            batch_id=args.get("batch_id"),
+            status=args.get("status"),
+            origin=args.get("origin"),
+            user_id=user_id,
+            limit=args.get("limit", 10),
+        )
+
+        if result["single"] and result["found"]:
+            return (f"Found batch {result['batch']['batch_id']}", result["batch"])
+        if result["single"] and not result["found"]:
+            return (f"Batch '{result.get('query_batch_id', args.get('batch_id'))}' not found", {"found": False})
+        if result["count"] > 0:
+            return (f"Found {result['count']} batch(es)", {"batches": result["batches"], "count": result["count"]})
+        return ("No batches found matching your criteria", {"batches": [], "count": 0})
     
     def _search_knowledge(
         self, db: Session, args: Dict[str, Any],
@@ -1823,88 +1785,70 @@ class ToolRegistry:
         self, db: Session, args: Dict[str, Any],
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
-        """Generate or retrieve the Digital Product Passport for a batch."""
+        """Generate or retrieve the Digital Product Passport for a batch.
+        Delegates to services.dpp_service for shared business logic.
+        """
+        from services.dpp_service import get_dpp as svc_get_dpp
+
         batch_id = args.get("batch_id")
         if not batch_id:
             return ("Please specify a batch ID.", {"error": "no_batch_id"})
 
-        try:
-            from dpp.dpp_builder import build_dpp
-            dpp = build_dpp(batch_id=batch_id)
-        except ValueError as e:
-            return (f"Could not generate DPP: {e}", {"error": str(e)})
-        except Exception as e:
-            logger.warning(f"DPP generation failed for {batch_id}: {e}")
-            return (f"DPP generation failed for batch '{batch_id}'.", {"error": str(e)})
+        result = svc_get_dpp(db, batch_id=batch_id)
 
-        # ── Embed DON attestation if available ──
-        try:
-            from dpp.dpp_builder import build_don_attestation_section
-            don_section = build_don_attestation_section(batch_id, db)
-            if don_section and don_section.get("attestationExists"):
-                dpp["donAttestation"] = don_section
-        except Exception as e:
-            logger.debug("DON attestation section skipped: %s", e)
+        if not result["success"]:
+            return (f"Could not generate DPP: {result['error']}", {"error": result["error"]})
 
-        # Build a concise summary for the voice response
-        product = dpp.get("productInformation", {})
-        trace = dpp.get("traceability", {})
-        origin = trace.get("origin", {})
-        dd = dpp.get("dueDiligence", {})
-        bc = dpp.get("blockchain", {})
-        don = dpp.get("donAttestation", {})
-        eudr = dpp.get("eudrCompliance", {})
-        geo_coords = (
-            eudr.get("geolocation", {})
-            .get("farmLocation", {})
-            .get("coordinates", {})
-        )
-        farm_lat = geo_coords.get("latitude")
-        farm_lon = geo_coords.get("longitude")
+        # Build voice-friendly summary (preserving original formatting)
+        p = result["product"]
+        o = result["origin"]
+        c = result["compliance"]
+        bc = result["blockchain"]
+        don = result["don_attestation"]
 
         don_line = ""
-        if don.get("attestationExists"):
+        if don["attested"]:
             don_line = (
-                f"\n• DON Attestation: {don.get('riskLabel', '?')} risk "
-                f"({'✅ Compliant' if don.get('eudrCompliant') else '❌ Non-compliant'})"
+                f"\n• DON Attestation: {don['risk_label'] or '?'} risk "
+                f"({'✅ Compliant' if don['eudr_compliant'] else '❌ Non-compliant'})"
             )
 
         summary = (
-            f"📋 DPP for {dpp.get('batchId', batch_id)}:\n"
-            f"• Product: {product.get('name', 'Coffee')} "
-            f"({product.get('variety', 'Unknown variety')})\n"
-            f"• Origin: {origin.get('region', '?')}, {origin.get('country', '?')}\n"
-            f"• EUDR: {'✅ Compliant' if dd.get('eudrCompliant') else '❌ Not compliant'}\n"
-            f"• Blockchain: {'✅ Anchored' if bc.get('transactionHash') else '⏳ Pending'}"
+            f"📋 DPP for {result['batch_id']}:\n"
+            f"• Product: {p['name']} ({p['variety']})\n"
+            f"• Origin: {o['region']}, {o['country']}\n"
+            f"• EUDR: {'✅ Compliant' if c['eudr_compliant'] else '❌ Not compliant'}\n"
+            f"• Blockchain: {'✅ Anchored' if bc['anchored'] else '⏳ Pending'}"
             f"{don_line}"
         )
 
+        # Build backward-compatible data dict for existing consumers
         return (
             summary,
             {
-                "batch_id": dpp.get("batchId"),
-                "passport_id": dpp.get("passportId"),
-                "gtin": product.get("gtin"),
-                "origin": f"{origin.get('region', '?')}, {origin.get('country', '?')}",
-                "variety": product.get("variety"),
-                "processing": product.get("processMethod"),
-                "grade": product.get("grade", "A"),
-                "quantity_kg": product.get("quantity"),
-                "farmer_name": origin.get("farmer", {}).get("name"),
-                "cooperative": dpp.get("cooperative") or self._get_batch_cooperative(batch_id, db),
-                "certifications": [c.get("type") for c in dpp.get("sustainability", {}).get("certifications", [])],
-                "latitude": farm_lat,
-                "longitude": farm_lon,
-                "gps_coordinates": f"{farm_lat or '?'}, {farm_lon or '?'}",
-                "eudr_compliant": dd.get("eudrCompliant"),
-                "deforestation_risk": dd.get("riskAssessment", {}).get("deforestationRisk"),
-                "blockchain_anchored": bc.get("anchors") and len(bc.get("anchors", [])) > 0,
-                "tx_hash": bc.get("transactionHash") or (bc.get("anchors")[0].get("transactionHash") if bc.get("anchors") else None),
-                "don_attested": don.get("attestationExists", False),
-                "don_risk_label": don.get("riskLabel"),
-                "qr_url": dpp.get("qrCode", {}).get("url"),
-                "qr_image": dpp.get("qrCode", {}).get("imageUrl"),
-                "lineage": dpp.get("traceability", {}).get("events", []),
+                "batch_id": result["batch_id"],
+                "passport_id": result["passport_id"],
+                "gtin": p["gtin"],
+                "origin": f"{o['region']}, {o['country']}",
+                "variety": p["variety"],
+                "processing": p["processing"],
+                "grade": p["grade"],
+                "quantity_kg": p["quantity_kg"],
+                "farmer_name": o["farmer_name"],
+                "cooperative": o["cooperative"],
+                "certifications": result["certifications"],
+                "latitude": c["latitude"],
+                "longitude": c["longitude"],
+                "gps_coordinates": f"{c['latitude'] or '?'}, {c['longitude'] or '?'}",
+                "eudr_compliant": c["eudr_compliant"],
+                "deforestation_risk": c["deforestation_risk"],
+                "blockchain_anchored": bc["anchored"],
+                "tx_hash": bc["tx_hash"],
+                "don_attested": don["attested"],
+                "don_risk_label": don["risk_label"],
+                "qr_url": result["qr"]["url"],
+                "qr_image": result["qr"]["image_url"],
+                "lineage": result["lineage"],
             },
         )
 

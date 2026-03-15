@@ -154,6 +154,14 @@ except ImportError as e:
     AGENT_API_AVAILABLE = False
     print(f"ℹ️  Agent API module not available: {e}")
 
+# Import LiveKit Token API router (real-time voice sessions)
+try:
+    from voice.web.livekit_api import router as livekit_api_router
+    LIVEKIT_API_AVAILABLE = True
+except ImportError as e:
+    LIVEKIT_API_AVAILABLE = False
+    print(f"ℹ️  LiveKit API module not available: {e}")
+
 # Import Container Pool API router (Phase 4.6 - shared container buying)
 try:
     from voice.marketplace.pool_api import router as pool_api_router
@@ -268,6 +276,11 @@ except ImportError as e:
 if AGENT_API_AVAILABLE:
     app.include_router(agent_api_router)
     print("✅ Agent chat endpoints registered at /api/agent/*")
+
+# Include LiveKit Token API router (real-time voice sessions)
+if LIVEKIT_API_AVAILABLE:
+    app.include_router(livekit_api_router)
+    print("✅ LiveKit voice endpoints registered at /api/livekit/*")
 
 # Include Container Pool API router (Phase 4.6)
 if POOL_API_AVAILABLE:
