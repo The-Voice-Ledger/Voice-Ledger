@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router-dom'
 import {
@@ -199,8 +199,16 @@ export default function Landing() {
             <span className="text-gradient-animated">{t('tagline')}</span>
           </h1>
           <a href="https://the-voice-ledger.vercel.app/" target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-sm text-stone-400 hover:text-white transition-colors">{t('powered_by')}</a>
-          <p className="mt-4 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
-            {t('hero_subtitle')}
+          <p className="mt-4 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed" aria-label={t('hero_subtitle')}>
+            {t('hero_subtitle').split(' ').map((word, i) => (
+              <span
+                key={i}
+                className="inline-block opacity-0 animate-word-fade-in"
+                style={{ animationDelay: `${0.6 + i * 0.12}s`, animationFillMode: 'forwards' }}
+              >
+                {word}&nbsp;
+              </span>
+            ))}
           </p>
           <div className="mt-8 flex justify-center">
             <Link
@@ -214,30 +222,36 @@ export default function Landing() {
             </Link>
           </div>
 
-          {/* Trust badges + partner — single consolidated row */}
-          <div className="mt-8 flex flex-wrap justify-center items-center gap-2.5">
-            <a href="https://www.addisai.ch/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity border border-stone-500/20 rounded-full px-2.5 py-1 backdrop-blur-sm" title="Addis AI - Amharic voice partner">
-              <img
-                src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafkreic4dyhikkdfn3npwap7l624ocsrfndtiw6vmzappr4b2jcjkafq7q"
-                alt="Addis AI"
-                className="h-4 w-auto rounded-sm"
-              />
-              <span className="text-[10px] text-stone-400 font-medium">{t('partner_addis_ai')}</span>
-            </a>
-            {[
-              { label: 'Base (Ethereum L2)', color: 'text-blue-300/80 border-blue-400/20 bg-blue-400/5' },
-              { label: 'Chainlink CRE', color: 'text-blue-200/80 border-blue-300/20 bg-blue-300/5' },
-              { label: 'GS1 Standard', color: 'text-emerald-300/80 border-emerald-400/20 bg-emerald-400/5' },
-              { label: 'IPFS / Pinata', color: 'text-teal-300/80 border-teal-400/20 bg-teal-400/5' },
-              { label: 'ERC-4626 Vault', color: 'text-purple-300/80 border-purple-400/20 bg-purple-400/5' },
-            ].map((b) => (
-              <span
-                key={b.label}
-                className={`text-[10px] font-medium tracking-wide border rounded-full px-2.5 py-1 backdrop-blur-sm ${b.color}`}
-              >
-                {b.label}
-              </span>
-            ))}
+          {/* Trust badges + partner — infinite marquee */}
+          <div className="mt-8 w-full max-w-3xl overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)] group/marquee">
+            <div className="flex gap-4 animate-marquee group-hover/marquee:[animation-play-state:paused] w-max">
+              {[0, 1].map((copy) => (
+                <div key={copy} className="flex items-center gap-4 shrink-0" aria-hidden={copy === 1}>
+                  <a href="https://www.addisai.ch/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity border border-stone-500/20 rounded-full px-2.5 py-1 backdrop-blur-sm shrink-0" title="Addis AI - Amharic voice partner">
+                    <img
+                      src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafkreic4dyhikkdfn3npwap7l624ocsrfndtiw6vmzappr4b2jcjkafq7q"
+                      alt="Addis AI"
+                      className="h-4 w-auto rounded-sm"
+                    />
+                    <span className="text-[10px] text-stone-400 font-medium whitespace-nowrap">{t('partner_addis_ai')}</span>
+                  </a>
+                  {[
+                    { label: 'Base (Ethereum L2)', color: 'text-blue-300/80 border-blue-400/20 bg-blue-400/5' },
+                    { label: 'Chainlink CRE', color: 'text-blue-200/80 border-blue-300/20 bg-blue-300/5' },
+                    { label: 'GS1 Standard', color: 'text-emerald-300/80 border-emerald-400/20 bg-emerald-400/5' },
+                    { label: 'IPFS / Pinata', color: 'text-teal-300/80 border-teal-400/20 bg-teal-400/5' },
+                    { label: 'ERC-4626 Vault', color: 'text-purple-300/80 border-purple-400/20 bg-purple-400/5' },
+                  ].map((b) => (
+                    <span
+                      key={b.label}
+                      className={`text-[10px] font-medium tracking-wide border rounded-full px-2.5 py-1 backdrop-blur-sm whitespace-nowrap shrink-0 ${b.color}`}
+                    >
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Scroll hint */}
@@ -249,18 +263,28 @@ export default function Landing() {
 
       {/* Year 1 roadmap targets band */}
       <section className="bg-stone-900 border-t border-stone-800">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-          <p className="text-center text-[10px] text-stone-500 uppercase tracking-widest mb-4">{t('stat_heading')}</p>
-          <div className="flex flex-wrap justify-center gap-8 sm:gap-14">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+          <p className="text-center text-[10px] text-stone-500 uppercase tracking-widest mb-5">{t('stat_heading')}</p>
+          <div className="flex flex-wrap justify-center gap-5 sm:gap-8">
             {[
-              { icon: IconUsers,   value: '1,200', label: t('stat_farmers') },
-              { icon: IconPackage, value: '50',    label: t('stat_containers') },
-              { icon: IconGlobe,   value: '5',     label: t('stat_countries') },
-            ].map((s) => (
-              <div key={s.label} className="flex items-center gap-2.5 text-white">
-                <s.icon className="w-5 h-5 text-stone-500" />
-                <div>
-                  <p className="text-lg font-bold leading-tight font-mono">{s.value}</p>
+              { icon: IconUsers,   value: '1,200', label: t('stat_farmers'),    accent: '#d4ad6e' },
+              { icon: IconPackage, value: '50',    label: t('stat_containers'), accent: '#34d399' },
+              { icon: IconGlobe,   value: '5',     label: t('stat_countries'),  accent: '#60a5fa' },
+            ].map((s, i) => (
+              <div
+                key={s.label}
+                className="group relative flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all duration-300 hover:scale-105"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              >
+                {/* SVG card background with animated border */}
+                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 72" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="1" width="198" height="70" rx="11" stroke={s.accent} strokeWidth="1" strokeOpacity="0.2" className="transition-all duration-300 group-hover:stroke-opacity-50" />
+                  <rect x="1" y="1" width="198" height="70" rx="11" stroke={s.accent} strokeWidth="1.5" strokeOpacity="0" strokeDasharray="120 280" className="animate-stat-trace group-hover:[stroke-opacity:0.6]" style={{ animationDelay: `${i * 0.5}s` }} />
+                  <rect x="0" y="0" width="200" height="72" rx="12" fill={s.accent} fillOpacity="0.04" className="transition-all duration-300 group-hover:[fill-opacity:0.08]" />
+                </svg>
+                <s.icon className="relative w-5 h-5 text-stone-500 group-hover:text-stone-300 transition-colors" />
+                <div className="relative">
+                  <p className="text-lg font-bold leading-tight font-mono text-white">{s.value}</p>
                   <p className="text-[10px] text-stone-500 uppercase tracking-wider">{s.label}</p>
                 </div>
               </div>

@@ -102,6 +102,33 @@ body {
   animation: float-slower 18s ease-in-out infinite;
 }
 
+/* Word-by-word stagger reveal for hero subtitle */
+@keyframes word-fade-in {
+  0%   { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+.animate-word-fade-in {
+  animation: word-fade-in 0.5s ease-out;
+}
+
+/* Infinite marquee scroll for trust badges */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+/* Stat card: animated dash trace around border */
+@keyframes stat-trace {
+  0%   { stroke-dashoffset: 400; }
+  100% { stroke-dashoffset: 0; }
+}
+.animate-stat-trace {
+  animation: stat-trace 6s linear infinite;
+}
+
 /* Slow upward drift for topographic contour background */
 @keyframes topo-drift {
   0%   { transform: translateY(0); }
