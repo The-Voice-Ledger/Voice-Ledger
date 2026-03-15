@@ -280,10 +280,18 @@ async def handle_session(ctx: agents.JobContext):
         room_input_options=room_io.RoomInputOptions(),
     )
 
-    # Greet the user
-    await session.generate_reply(
-        instructions=f"Greet {user_name} warmly. Keep it to one sentence."
+    # Build a role-aware greeting that tells users what they can actually do
+    greeting = (
+        f"Greet {user_name} warmly by name. Then briefly tell them what you "
+        f"can help with right now. Say something like: "
+        f"'You can ask me to look up any coffee batch — by ID, origin, or "
+        f"status — and I'll pull up the details for you. I can also generate "
+        f"a full Digital Product Passport for any batch, showing traceability, "
+        f"EUDR compliance, and blockchain anchoring. Just tell me what you need.' "
+        f"Keep the whole greeting to 3–4 sentences, conversational and warm. "
+        f"Do NOT list features with bullet points — speak naturally."
     )
+    await session.generate_reply(instructions=greeting)
 
 
 if __name__ == "__main__":
