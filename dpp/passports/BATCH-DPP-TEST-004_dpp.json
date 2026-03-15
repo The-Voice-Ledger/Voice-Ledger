@@ -2,7 +2,7 @@
   "passportId": "DPP-BATCH-DPP-TEST-004",
   "batchId": "BATCH-DPP-TEST-004",
   "version": "3.0.0",
-  "issuedAt": "2026-03-08T19:46:40.894432+00:00",
+  "issuedAt": "2026-03-15T13:54:16.211936+00:00",
   "productInformation": {
     "productName": "Persistence Test Coffee",
     "quantity": 100.0,
@@ -33,11 +33,14 @@
       "scope": "cradle-to-gate"
     }
   },
+  "qualityAssessment": {
+    "status": "PENDING_VERIFICATION"
+  },
   "dueDiligence": {
     "eudrCompliant": true,
     "riskAssessment": {
       "deforestationRisk": "none",
-      "assessmentDate": "2026-03-08",
+      "assessmentDate": "2026-03-15",
       "assessor": "Voice Ledger Platform",
       "methodology": "Satellite imagery + blockchain traceability"
     },
@@ -67,7 +70,7 @@
           "mitigation": "Upload farm photo with GPS for verification"
         }
       ],
-      "assessmentDate": "2026-03-08",
+      "assessmentDate": "2026-03-15",
       "assessor": "Voice Ledger GPS Verification System",
       "methodology": "Photo GPS EXIF extraction + Blockchain anchoring + Ethiopia boundary validation + Satellite imagery analysis",
       "deforestationCheck": {
@@ -77,10 +80,10 @@
     },
     "dueDiligenceStatement": {
       "operator": "Voice Ledger Supply Chain Platform",
-      "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires photo verification.",
+      "statement": "This batch has undergone GPS verification with compliance level: Non-Compliant. Geolocation data is self-reported and requires verification.",
       "verificationMethod": "Photo GPS EXIF extraction + SHA-256 hashing + Blockchain anchoring",
       "dataRetention": "Immutable storage via IPFS + Ethereum blockchain",
-      "nextReviewDate": "2027-03-08"
+      "nextReviewDate": "2027-03-15"
     }
   },
   "donAttestation": {
@@ -99,6 +102,6 @@
   },
   "qrCode": {
     "url": "https://voice-ledger-production.up.railway.app/app/dpp/BATCH-DPP-TEST-004",
-    "imageUrl": "data:image/png;base64,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"
+    "imageUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAhIAAAISAQAAAACxRhsSAAAFWUlEQVR4nO2dQY7bPAyFH38ZmKUDzAF6FOUG/5HmavZR5gbyMoAMdkFRYqZIp0ATNwieFkXHdj5YAEFRj6Qsir8d639/jQDIIIMMMl6AsUkbZ+wiIhPkbNf8f+dNBKtMwHoCgG2C/2a633uQQcbtoVqSqqoqslbo0m8scwUwV+iC/khJCiApsqrab5dnmQsZr85ojhEAMKuqaoWctwnmOz8KzJXqgl2aKW8icr7ze5BBxp8x5KPsYjbZRg2rPdZTUmCuD38PMsiIY4p/bO8qqySV/DlBvjyZdRfN5SSay/3fgwwyvmeY28R8EdXS7njMqgpgF2B7U6wnQM4ALD5Y7vweZJBxm7Hb1h3Y3lTOdj3piE+RS7Ib8lGStghARERO93wPMsi4NSZg7lL/totiA3Q9QYD5IhaLrqcEBS6i6w/XAO78HmSQ8dthyztmdb2pwIQovwYga4VHAKntrbLLWdSlyDiEsU1A/pxMdIIt+YBdMxPFNpmwqqoXadv/+SKDcY/3IIOM26P50/6nuVL3p+5ZK2yDlUvLDDTFf6Y/JeMIRre/ZLv39s/c0lMAkm/rLT3Vs1B2jXZKxhEMz5sW+BoPl/gXdHGqNOnKMqjtRgXjUzIOYvRVfJhejda5DAc6t7stta8tKqCdkvF4hvvEuW3hvb7kl03/CFzbYHxKxnGMGJ/2BNSojfq67oeAoHjMQDsl4+EMDMfohllDzGo7KgAYUemIY82oaadkPJzhPtGr+UKVVC5o6n7U+Udhag9cn2UuZLw0Y75YIakn9FudvgekeyvlN7F/rrCKFLtxuuN7kEHG7RHW+K48eRU/glN1sx0SK3UpMg5j9JI+T/LnsPhHsd8s9kscS12KjGMYvnEfHrMrVED0nSONOkRU7qPIOIjhvrNcXbxe6NviPwRTu8p6KTIOY4Sqkmas8/Cso57/ytF+ffhZ5kLG6zIQck/NY3pACiDmqBZ0EdUzrVz3yTiIMQFIFbm8Q7EByMtudxTYJ6/nL5CsuzX9CZCg2FIVbO/1eeZCxusyegIUAILylEJNasj59zRquEF/SsbDGVfxqdZottdlKf5nS1RZBou6FBnHMCYAu7TGPSTF+n+dxHr7tl3QFn+1dn41l7ulivw5Vcnl/U7vQQYZvx2hQE97nfQy1+4x4cu77/fDwVPUpcg4huElUGUUl0b5yUv6VEfllG/1e1fKs8yFjNdlIAqhLkm5j+3tzwV+Q6+a/lgvRcYxjNBK4iXSXmGa+97eDpwM2f+rNCrtlIyHMxCanxYArVSq90LFR4bY33/BfBQZhzC8nyTkQ2OHdBtzV03nel0JSDsl4whGOLfHM6hDA6i+5OOLdNqbT+hPyTiEEff7Xb8fZVGxkMpMOfVCqu58n2UuZLwuI5zb06LSEK4m3zgVYASu46g02ikZBzEmAPukwD5JLlCJ9VK7KGCFJ1UAQHKBAlAgK9Aefpa5kPG6jGuVKTZCR7Ff25I/BCvbfnG/T8YxDK85cf00dkOX/tDoRfH9lt+gnZJxBCP07IXMlLoXDafz9gZTtC0UPN3/LHMh46UZ4Xt8SZHLLiI/+iG82wRkvUhzr9tkHljO6BLrE82FjBdm9Ly9HRGdVJdtfPbMzudXOSMp1tNuBhzPRH2muZDxmgzX9JH6Gt8boUeTVD9wcplj4Mp9FBkHMa7stPRcPrqc/2vrvgez1E/J+JeMvX05+uyaPuw7ZwDaB6PsaKlduO6TcShDw+E96D1TnxOwytSTp7v4J87ezPnK+c7vQQYZN0ZQQ0eOdFSfhALqUXDqSQGwnp+MYxii3z/zzVifZS5kkEEGGf+S8RNqZZE3+dLK4gAAAABJRU5ErkJggg=="
   }
 }

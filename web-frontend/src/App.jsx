@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
@@ -10,6 +11,8 @@ import DPPViewer from './pages/DPPViewer'
 import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
+import LiveVoicePanel from './components/LiveVoicePanel'
+import useAuthStore from './stores/authStore'
 
 /* Lightweight footer for the chat page so it doesn't overwhelm the input */
 function MiniFooter() {
@@ -22,6 +25,8 @@ function MiniFooter() {
 
 export default function App() {
   const { pathname } = useLocation()
+  const { isAuthenticated } = useAuthStore()
+  const [voiceOpen, setVoiceOpen] = useState(false)
 
   return (
     <div className="flex flex-col min-h-dvh bg-stone-50 text-stone-900">
@@ -41,6 +46,35 @@ export default function App() {
         </Routes>
       </main>
       {pathname === '/assistant' ? <MiniFooter /> : <Footer />}
+
+      {/* ── LiveKit Voice ── */}
+      {isAuthenticated && (
+        <VoiceFAB onClick={() => setVoiceOpen(true)} />
+      )}
+      <LiveVoicePanel isOpen={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
+  )
+}
+
+/* Floating action button — bottom-right mic icon */
+function VoiceFAB({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Open voice assistant"
+      className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full
+                 bg-gradient-to-br from-emerald-500 to-green-600
+                 text-white shadow-lg shadow-emerald-500/25
+                 hover:shadow-emerald-500/40 hover:scale-110
+                 active:scale-95 transition-all
+                 flex items-center justify-center"
+    >
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor"
+           strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="8" y="3" width="6" height="10" rx="3" />
+        <path d="M5 12a6 6 0 0012 0" />
+        <path d="M11 18v2" />
+      </svg>
+    </button>
   )
 }
