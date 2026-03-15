@@ -74,6 +74,10 @@ admin_scripts/
 # Node modules (if we add any JS tooling)
 node_modules/
 
+# Vite build output & cache
+dist/
+.vite/
+
 # OS generated files
 .DS_Store
 Thumbs.db
