@@ -1,0 +1,33 @@
+# =============================================================================
+# Voice Ledger Worker — LiveKit Voice Agent
+# Lean dependency set (no torch/chromadb/streamlit)
+# =============================================================================
+
+# Core
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+pydantic>=2.5.0
+python-dotenv==1.0.0
+python-dateutil==2.8.2
+
+# LiveKit Real-Time Voice Agent
+livekit>=1.1.0
+livekit-agents>=1.4.0
+livekit-api>=1.1.0
+livekit-plugins-deepgram>=1.4.0
+livekit-plugins-openai>=1.4.0
+livekit-plugins-silero>=1.4.0
+
+# OpenAI (LLM + TTS)
+openai>=1.12.0
+
+# Database (tools query batches/DPP)
+sqlalchemy[asyncio]>=2.0.23
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Utilities
+requests>=2.31.0
+aiofiles>=24.1.0
+numpy>=1.26.0
