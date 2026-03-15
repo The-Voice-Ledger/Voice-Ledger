@@ -76,6 +76,7 @@ export default function Navbar() {
         <div className="flex-1 hidden md:flex items-center justify-center gap-6">
           {navLink('/', t('nav_home'))}
           {navLink('/assistant', t('nav_assistant'))}
+          {navLink('/about', t('nav_about', 'About'))}
           {navLink('/marketplace', t('nav_marketplace'))}
           {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'))}
 
@@ -161,6 +162,7 @@ export default function Navbar() {
         <div className="md:hidden fixed inset-x-0 top-14 z-30 bg-white/95 backdrop-blur-lg border-b border-stone-200 shadow-lg animate-fade-in-up">
           <div className="px-4 py-3 space-y-1">
             {navLink('/', t('nav_home'), true)}
+            {navLink('/about', t('nav_about', 'About'), true)}
             {navLink('/assistant', t('nav_assistant'), true)}
             {navLink('/marketplace', t('nav_marketplace'), true)}
             {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'), true)}

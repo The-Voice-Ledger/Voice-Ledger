@@ -10,6 +10,7 @@ import DPPViewer from './pages/DPPViewer'
 import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
+import About from './pages/About'
 
 /* Lightweight footer for the chat page so it doesn't overwhelm the input */
 function MiniFooter() {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/financing" element={<Financing />} />
           <Route path="/tracking" element={<Tracking />} />
+          <Route path="/about" element={<About />} />
         </Routes>
       </main>
       {pathname === '/assistant' ? <MiniFooter /> : <Footer />}

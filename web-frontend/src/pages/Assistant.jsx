@@ -511,7 +511,7 @@ export default function Assistant() {
                     </div>
 
                     <p className="text-[10px] text-stone-300 mt-3 text-center">
-                      + {4} more prompts — just start typing
+                      + {4} more prompts, just start typing
                     </p>
                   </div>
                 </div>
