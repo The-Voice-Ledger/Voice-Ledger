@@ -1,0 +1,11 @@
+[phases.setup]
+# Append Node.js 20 to whatever Python dependencies Nixpacks already detected
+nixPkgs = ["...", "nodejs_20"]
+
+[phases.frontend]
+# Wait until Python is fully installed (the default 'install' phase)
+dependsOn = ["install"]
+# Execute the React build process
+cmds = [
+    "cd web-frontend && npm install --include=dev && npm run build"
+]
