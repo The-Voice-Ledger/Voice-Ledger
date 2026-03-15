@@ -74,8 +74,7 @@ admin_scripts/
 # Node modules (if we add any JS tooling)
 node_modules/
 
-# Vite build output & cache
-dist/
+# Vite cache (dist/ is tracked for Railway deployment)
 .vite/
 
 # OS generated files
