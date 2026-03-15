@@ -65,10 +65,13 @@ export default function Navbar() {
       <nav className="sticky top-0 z-40 h-14 bg-white/80 backdrop-blur-lg border-b border-stone-100 flex items-center px-4 md:px-6">
         {/* Brand */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-7 w-auto" />
+          <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-7 w-auto logo-shimmer" />
           <div className="hidden sm:flex flex-col leading-none">
             <span className="text-sm font-bold tracking-tight text-stone-900 font-display">{t('brand')}</span>
-            <span className="text-[9px] text-stone-400 tracking-wide">{t('powered_by')}</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[9px] tracking-wide powered-by-glow">{t('powered_by')}</span>
+              <span className="beta-badge text-[8px] font-semibold tracking-wider uppercase text-emerald-600 border border-emerald-500/40 rounded-full px-1.5 py-px leading-tight">Beta</span>
+            </div>
           </div>
         </Link>
 

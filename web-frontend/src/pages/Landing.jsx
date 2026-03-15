@@ -13,6 +13,7 @@ import ImageCarousel from '../components/ImageCarousel'
 import ConstellationBg from '../components/svg/ConstellationBg'
 import TechCardBg from '../components/svg/TechCardBg'
 import { HexGrid, CircuitTrace, GlowOrb } from '../components/svg/SvgDecorations'
+import { DotGrid } from '../components/svg/LightBackgrounds'
 
 /* ── Category definitions ───────────────────────────────────────── */
 
@@ -181,7 +182,7 @@ export default function Landing() {
       <section className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 text-white">
         {/* Animated floating gradient orbs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-700/15 blur-3xl animate-float-slow" />
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-800/15 blur-3xl animate-float-slow" />
           <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-700/10 blur-3xl animate-float-slower" />
           <div className="absolute -bottom-16 left-1/3 w-72 h-72 rounded-full bg-amber-400/8 blur-3xl animate-float-slow" style={{ animationDelay: '3s' }} />
         </div>
@@ -286,7 +287,8 @@ export default function Landing() {
       <ImageCarousel />
 
       {/* Features - tabbed categories + 3D stacked decks */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
+      <section className="relative max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
+        <DotGrid className="absolute inset-0 text-stone-500" />
         <h2 className="text-2xl md:text-3xl font-extrabold text-center text-stone-900 mb-10 section-heading">
           {t('features_heading')}
         </h2>

@@ -34,7 +34,7 @@ export function HexGrid({ className = '' }) {
             fill="none"
             stroke="currentColor"
             strokeWidth="0.8"
-            opacity="0.05"
+            opacity="0.025"
           />
         </pattern>
       </defs>

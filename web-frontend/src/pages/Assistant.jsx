@@ -445,7 +445,7 @@ export default function Assistant() {
                         Speak to The Voice Ledger
                       </p>
                       <p className="text-[11px] text-white/35 mt-0.5">
-                        Your Voice Assistant
+                        Your Supply Chain Assistant
                       </p>
                     </div>
 

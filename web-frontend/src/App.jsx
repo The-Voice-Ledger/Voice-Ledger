@@ -11,6 +11,7 @@ import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
 import About from './pages/About'
+import { TopographicBg } from './components/svg/LightBackgrounds'
 
 /* Lightweight footer for the chat page so it doesn't overwhelm the input */
 function MiniFooter() {
@@ -26,6 +27,9 @@ export default function App() {
 
   return (
     <div className="flex flex-col min-h-dvh bg-stone-50 text-stone-900">
+      {/* Global subtle topographic contour lines behind light pages */}
+      <TopographicBg className="fixed inset-0 z-0 text-stone-500" />
+      <div className="relative z-10 flex flex-col flex-1">
       <Navbar />
       <main className="flex-1">
         <Routes>
@@ -43,6 +47,7 @@ export default function App() {
         </Routes>
       </main>
       {pathname === '/assistant' ? <MiniFooter /> : <Footer />}
+      </div>
     </div>
   )
 }

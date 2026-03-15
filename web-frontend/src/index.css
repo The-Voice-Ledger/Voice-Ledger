@@ -102,6 +102,44 @@ body {
   animation: float-slower 18s ease-in-out infinite;
 }
 
+/* Slow upward drift for topographic contour background */
+@keyframes topo-drift {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+.animate-topo-drift {
+  animation: topo-drift 300s linear infinite;
+}
+
+/* Logo: gentle brightness pulse + soft shadow glow */
+@keyframes logo-pulse {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 0px transparent); }
+  50%      { filter: brightness(1.15) drop-shadow(0 0 6px rgba(120, 90, 50, 0.35)); }
+}
+.logo-shimmer {
+  animation: logo-pulse 4s ease-in-out infinite;
+}
+
+/* Powered-by: color cycle with real contrast */
+@keyframes powered-glow {
+  0%, 100% { color: #a8a29e; }          /* stone-400 — default gray */
+  25%      { color: #166534; }          /* forest-800 — green flash */
+  50%      { color: #78350f; }          /* amber-900 — deep coffee */
+  75%      { color: #57534e; }          /* stone-600 */
+}
+.powered-by-glow {
+  animation: powered-glow 8s ease-in-out infinite;
+}
+
+/* Beta badge: pulsing border + soft shadow */
+@keyframes beta-pulse {
+  0%, 100% { border-color: rgba(16, 185, 129, 0.35); box-shadow: 0 0 0px transparent; }
+  50%      { border-color: rgba(16, 185, 129, 0.7);  box-shadow: 0 0 6px rgba(16, 185, 129, 0.2); }
+}
+.beta-badge {
+  animation: beta-pulse 3s ease-in-out infinite;
+}
+
 /* ── Typography utility classes ──────────────────────────── */
 
 /* Hero h1 — Space Grotesk, very tight tracking */
