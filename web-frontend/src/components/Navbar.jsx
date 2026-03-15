@@ -62,7 +62,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-40 h-14 bg-white/80 backdrop-blur-lg border-b border-stone-100 flex items-center px-4 md:px-6">
+      <nav className="sticky top-0 z-40 h-14 bg-white/80 backdrop-blur-lg border-b border-stone-100 flex items-center px-4 md:px-6 relative">
         {/* Brand */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src={WAGA_LOGO} alt="WAGA Coffee" className="h-7 w-auto logo-shimmer" />
@@ -75,8 +75,8 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Center -- Nav links (desktop) */}
-        <div className="flex-1 hidden md:flex items-center justify-center gap-6">
+        {/* Center -- Nav links (desktop) — absolute so they're truly page-centered */}
+        <div className="hidden md:flex items-center justify-center gap-6 absolute left-1/2 -translate-x-1/2">
           {navLink('/', t('nav_home'))}
           {navLink('/assistant', t('nav_assistant'))}
           {navLink('/about', t('nav_about', 'About'))}

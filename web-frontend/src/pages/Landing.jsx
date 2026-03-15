@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router-dom'
-import useAuthStore from '../stores/authStore'
 import {
   IconCoffee, IconShieldCheck, IconHandshake, IconSprout, IconLink, IconMic,
   IconMessageCircle, IconRadioTower, IconLandmark, IconShip, IconFileText,
@@ -142,7 +141,6 @@ function CardDeck({ features }) {
 
 export default function Landing() {
   const { t } = useTranslation()
-  const { isAuthenticated, user } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('supply')
   const [activeTab2, setActiveTab2] = useState('supply')
@@ -192,7 +190,7 @@ export default function Landing() {
         <ConstellationBg />
         <HexGrid className="absolute inset-0 text-white" />
 
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14 sm:py-20 md:py-28 relative z-10 text-center flex flex-col items-center">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-amber-300/90 border border-amber-400/30 bg-amber-400/10 rounded-full px-3 py-1 mb-6 backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             {t('hero_badge')}
@@ -201,28 +199,31 @@ export default function Landing() {
             <span className="text-gradient-animated">{t('tagline')}</span>
           </h1>
           <a href="https://the-voice-ledger.vercel.app/" target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-sm text-stone-400 hover:text-white transition-colors">{t('powered_by')}</a>
-          <p className="mt-5 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
+          <p className="mt-4 text-lg md:text-xl text-stone-300 max-w-2xl leading-relaxed">
             {t('hero_subtitle')}
           </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex justify-center">
             <Link
               to="/assistant"
-              className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-full px-6 py-3 hover:bg-stone-50 hover:scale-105 active:scale-95 transition-all shadow-lg"
+              className="group inline-flex items-center gap-2 bg-white/10 border border-white/25 text-stone-100 text-sm font-semibold rounded-full px-5 py-2.5 hover:bg-white/20 hover:text-white hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/5 backdrop-blur-md"
             >
-              <IconMessageCircle className="w-5 h-5" /> {t('cta_chat')}
+              <svg className="w-4 h-4 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              {t('cta_chat')}
             </Link>
-            {!isAuthenticated && (
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 border-2 border-white/40 text-white font-semibold rounded-full px-6 py-3 hover:bg-white/10 hover:scale-105 active:scale-95 transition-all"
-              >
-                {t('cta_login')}
-              </Link>
-            )}
           </div>
 
-          {/* Trust badges */}
-          <div className="mt-12 flex flex-wrap justify-center items-center gap-3">
+          {/* Trust badges + partner — single consolidated row */}
+          <div className="mt-8 flex flex-wrap justify-center items-center gap-2.5">
+            <a href="https://www.addisai.ch/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity border border-stone-500/20 rounded-full px-2.5 py-1 backdrop-blur-sm" title="Addis AI - Amharic voice partner">
+              <img
+                src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafkreic4dyhikkdfn3npwap7l624ocsrfndtiw6vmzappr4b2jcjkafq7q"
+                alt="Addis AI"
+                className="h-4 w-auto rounded-sm"
+              />
+              <span className="text-[10px] text-stone-400 font-medium">{t('partner_addis_ai')}</span>
+            </a>
             {[
               { label: 'Base (Ethereum L2)', color: 'text-blue-300/80 border-blue-400/20 bg-blue-400/5' },
               { label: 'Chainlink CRE', color: 'text-blue-200/80 border-blue-300/20 bg-blue-300/5' },
@@ -239,20 +240,8 @@ export default function Landing() {
             ))}
           </div>
 
-          {/* Partner logos */}
-          <div className="mt-8 flex items-center justify-center gap-6">
-            <a href="https://www.addisai.ch/" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 opacity-70 hover:opacity-100 transition-opacity" title="Addis AI - Amharic voice partner">
-              <img
-                src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafkreic4dyhikkdfn3npwap7l624ocsrfndtiw6vmzappr4b2jcjkafq7q"
-                alt="Addis AI"
-                className="h-10 w-auto rounded"
-              />
-              <span className="text-xs text-stone-400 font-medium">{t('partner_addis_ai')}</span>
-            </a>
-          </div>
-
           {/* Scroll hint */}
-          <div className="mt-14 animate-bounce">
+          <div className="mt-10 animate-bounce">
             <IconChevronDown className="w-5 h-5 text-stone-500" />
           </div>
         </div>
