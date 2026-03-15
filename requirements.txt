@@ -103,12 +103,5 @@ bcrypt==4.1.2              # Password hashing for admin auth
 chromadb==0.4.24
 PyPDF2==3.0.1
 
-# -----------------------------
-# LiveKit Real-Time Voice Agent
-# -----------------------------
-livekit>=1.1.0
-livekit-agents>=1.4.0
-livekit-api>=1.1.0
-livekit-plugins-deepgram>=1.4.0
-livekit-plugins-openai>=1.4.0
-livekit-plugins-silero>=1.4.0
+# LiveKit packages moved to requirements-worker.txt
+# (avoids chromadb/onnxruntime conflict)
