@@ -12,6 +12,7 @@ import SupplyChainJourney from '../components/SupplyChainJourney'
 import ImageCarousel from '../components/ImageCarousel'
 import ConstellationBg from '../components/svg/ConstellationBg'
 import TechCardBg from '../components/svg/TechCardBg'
+import { HexGrid, CircuitTrace, GlowOrb } from '../components/svg/SvgDecorations'
 
 /* ── Category definitions ───────────────────────────────────────── */
 
@@ -180,14 +181,15 @@ export default function Landing() {
       <section className="relative overflow-hidden bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 text-white">
         {/* Animated floating gradient orbs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-500/15 blur-3xl animate-float-slow" />
-          <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-500/10 blur-3xl animate-float-slower" />
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-700/15 blur-3xl animate-float-slow" />
+          <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-700/10 blur-3xl animate-float-slower" />
           <div className="absolute -bottom-16 left-1/3 w-72 h-72 rounded-full bg-amber-400/8 blur-3xl animate-float-slow" style={{ animationDelay: '3s' }} />
         </div>
         {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-[0.04] bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzRoLTJ2LTRoMnYtMmgtNHY2aDR2LTJ6bTAtMTZ2Mmg0di02aC00djRoLTJ2Mmgyem0tOCA4aDJ2NmgtMnYyaDR2LTZoMnYtMmgtNHYtMnptMC0ydi0ySDI0djJoMnYyaDJ2LTJ6Ii8+PC9nPjwvZz48L3N2Zz4=')]" />
         {/* Animated constellation network */}
         <ConstellationBg />
+        <HexGrid className="absolute inset-0 text-white" />
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-36 relative z-10 text-center flex flex-col items-center">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-amber-300/90 border border-amber-400/30 bg-amber-400/10 rounded-full px-3 py-1 mb-6 backdrop-blur-sm">
@@ -333,9 +335,10 @@ export default function Landing() {
 
       {/* CTA band */}
       <section className="relative overflow-hidden bg-gradient-to-br from-forest-600 via-forest-700 to-forest-800 text-white py-12 sm:py-16">
-        {/* Subtle decorative orbs */}
-        <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-forest-400/10 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-forest-400/10 blur-3xl pointer-events-none" />
+        {/* Decorative background layers */}
+        <HexGrid className="absolute inset-0 text-white" />
+        <CircuitTrace className="absolute inset-0 w-full h-full text-white" />
+        <GlowOrb className="absolute top-0 right-1/4 w-[300px] h-[300px]" color="#ffffff" />
         <div className="max-w-3xl mx-auto text-center px-4 sm:px-6 relative z-10">
           <h2 className="text-2xl md:text-3xl font-extrabold section-heading">{t('cta_ready')}</h2>
           <p className="mt-3 text-forest-100">

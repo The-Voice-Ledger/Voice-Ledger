@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import ConstellationBg from '../components/svg/ConstellationBg'
+import { HexGrid, CircuitTrace, GlowOrb } from '../components/svg/SvgDecorations'
 
 /* ═════════════════════════════════════════════════════════════════════
    DATA
@@ -315,7 +316,7 @@ function BlueprintDiagram({ activeNodes, interactive = false }) {
   const allActive = activeNodes === 'all'
 
   return (
-    <svg viewBox="0 0 700 420" className="w-full max-w-2xl mx-auto" style={{ filter: 'drop-shadow(0 0 30px rgba(16,185,129,0.06))' }}>
+    <svg viewBox="0 -50 700 480" className="w-full max-w-2xl mx-auto" style={{ overflow: 'visible', filter: 'drop-shadow(0 0 30px rgba(16,185,129,0.06))' }}>
       <defs>
         <filter id="bp-glow">
           <feGaussianBlur stdDeviation="4" result="blur" />
@@ -403,9 +404,14 @@ function BlueprintDiagram({ activeNodes, interactive = false }) {
             >
               {node.label}
             </text>
-            {/* Tooltip on hover */}
+            {/* Tooltip on hover — below node if near top */}
             {interactive && isHover && (
-              <foreignObject x={node.x - 60} y={node.y - 60} width="120" height="30">
+              <foreignObject
+                x={node.x - 60}
+                y={node.y < 120 ? node.y + 38 : node.y - 60}
+                width="120"
+                height="30"
+              >
                 <div className="bg-stone-800 text-emerald-300 text-[9px] text-center py-1 px-2 rounded-md border border-emerald-500/20 font-mono">
                   {node.label}
                 </div>
@@ -447,8 +453,9 @@ function HeroSection() {
     >
       {/* Ambient layers */}
       <ConstellationBg />
-      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-500/15 blur-3xl animate-float-slow" />
-      <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-500/10 blur-3xl animate-float-slower" />
+      <HexGrid className="absolute inset-0 text-white" />
+      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-coffee-700/15 blur-3xl animate-float-slow" />
+      <div className="absolute top-1/3 -right-32 w-80 h-80 rounded-full bg-forest-700/10 blur-3xl animate-float-slower" />
       <div className="absolute -bottom-16 left-1/3 w-72 h-72 rounded-full bg-amber-400/8 blur-3xl animate-float-slow" style={{ animationDelay: '3s' }} />
 
       {/* Dim blueprint hint */}
@@ -774,8 +781,9 @@ function CTASection() {
       className="relative py-24 px-6 overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #14532d 0%, #166534 50%, #14532d 100%)' }}
     >
-      <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-emerald-400/10 blur-3xl" />
-      <div className="absolute -bottom-20 -left-20 w-72 h-72 rounded-full bg-cyan-400/8 blur-3xl" />
+      <HexGrid className="absolute inset-0 text-white" />
+      <CircuitTrace className="absolute inset-0 w-full h-full text-white" />
+      <GlowOrb className="absolute top-0 right-1/4 w-[300px] h-[300px]" color="#ffffff" />
 
       <div className={`relative z-10 max-w-2xl mx-auto text-center transition-all duration-1000 ${revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
         <h2 className="text-3xl md:text-4xl font-display font-bold text-white/95">
