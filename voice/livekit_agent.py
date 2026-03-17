@@ -62,7 +62,7 @@ async def _send_action_card(ctx: RunContext, card: dict) -> None:
         logger.warning("Failed to send action card: %s", e)
 
 
-# ── Helper: get a DB session ────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────
 
 def _get_db():
     """Lazy import + create a DB session."""
@@ -70,9 +70,151 @@ def _get_db():
     return get_db()
 
 
+def _uid(ctx: RunContext) -> int | None:
+    """Extract numeric user_id from session userdata."""
+    v = ctx.userdata.get("user_id")
+    return int(v) if v and str(v).isdigit() else None
+
+
+def _did(ctx: RunContext) -> str | None:
+    return ctx.userdata.get("user_did")
+
+
+def _registry():
+    """Lazy-load the tool registry singleton."""
+    from voice.agent.registry import get_tool_registry
+    return get_tool_registry()
+
+
+async def _exec(ctx: RunContext, tool_name: str, args: dict) -> str:
+    """
+    Call a registry handler and push an action card with the result data.
+    Returns the voice-friendly message string.
+    """
+    handler = _registry().get(tool_name)
+    if not handler:
+        return f"Tool '{tool_name}' is not available."
+
+    with _get_db() as db:
+        message, data = handler(db, args, user_id=_uid(ctx), user_did=_did(ctx))
+
+    # Send a visual card unless it's an error-only response
+    if data and not data.get("error"):
+        await _send_action_card(ctx, {"type": tool_name, **data})
+
+    return message
+
+
 # =====================================================================
-# Tools — each wraps a services/ function
+# 1. CORE SUPPLY-CHAIN TOOLS (record, ship, receive, transform, pack)
 # =====================================================================
+
+@function_tool(description=(
+    "Create a NEW coffee batch. Use when a farmer reports a harvest, "
+    "a new lot, or says they have coffee to register. "
+    "Do NOT use if they reference an existing batch ID."
+))
+async def record_commission(
+    ctx: RunContext,
+    quantity_kg: Annotated[float, "Weight in kg. If user says bags, multiply by 60"],
+    origin: Annotated[str, "Farm name, region, or location"],
+    variety: Annotated[str | None, "Coffee variety e.g. Sidama, Yirgacheffe, Arabica"] = None,
+    grade: Annotated[str | None, "Quality grade: A, B, C, Grade 1, Grade 2"] = "A",
+) -> str:
+    return await _exec(ctx, "record_commission", {
+        "quantity_kg": quantity_kg, "origin": origin,
+        "variety": variety, "grade": grade,
+    })
+
+
+@function_tool(description=(
+    "Ship an EXISTING batch to a destination. Use when user says "
+    "'ship', 'send', 'deliver', 'dispatch' and references a batch."
+))
+async def record_shipment(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID or GTIN to ship"],
+    destination: Annotated[str, "Shipping destination"],
+    carrier: Annotated[str | None, "Carrier or transport company"] = None,
+    transport_mode: Annotated[str | None, "Transport mode: truck, ship, air, rail"] = None,
+) -> str:
+    return await _exec(ctx, "record_shipment", {
+        "batch_id": batch_id, "destination": destination,
+        "carrier": carrier, "transport_mode": transport_mode,
+    })
+
+
+@function_tool(description=(
+    "Record receipt of an existing batch. Use when user says "
+    "'received', 'got', 'accepted', 'arrived' and references a batch."
+))
+async def record_receipt(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID or GTIN of the received batch"],
+    condition: Annotated[str | None, "Condition on arrival: good, damaged, partial"] = "good",
+    location: Annotated[str | None, "Receiving location or warehouse"] = None,
+) -> str:
+    return await _exec(ctx, "record_receipt", {
+        "batch_id": batch_id, "condition": condition, "location": location or "",
+    })
+
+
+@function_tool(description=(
+    "Process coffee — roasting, milling, drying, hulling. "
+    "Changes the physical/chemical properties of the batch."
+))
+async def record_transformation(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID or GTIN of the input batch"],
+    transformation_type: Annotated[str, "Type: roasting, milling, drying, hulling, washing"],
+    output_quantity_kg: Annotated[float, "Output quantity in kg (typically 10-30% less than input)"],
+    output_variety: Annotated[str | None, "Output product description e.g. Roasted Sidama"] = None,
+) -> str:
+    return await _exec(ctx, "record_transformation", {
+        "batch_id": batch_id, "transformation_type": transformation_type,
+        "output_quantity_kg": output_quantity_kg, "output_variety": output_variety,
+    })
+
+
+@function_tool(description=(
+    "Pack / aggregate multiple batches into a single container or pallet. "
+    "Use when user says 'pack', 'combine', 'load into container'."
+))
+async def pack_batches(
+    ctx: RunContext,
+    batch_ids: Annotated[list[str], "List of batch IDs or GTINs to pack"],
+    container_id: Annotated[str | None, "Container or pallet ID (auto-generated if omitted)"] = None,
+    container_type: Annotated[str | None, "Container type: pallet, container, bag"] = "pallet",
+) -> str:
+    return await _exec(ctx, "pack_batches", {
+        "batch_ids": batch_ids, "container_id": container_id,
+        "container_type": container_type,
+    })
+
+
+@function_tool(description=(
+    "Unpack / disaggregate a container to release its batches. "
+    "Use when user says 'unpack', 'unload', 'open container'."
+))
+async def unpack_batches(
+    ctx: RunContext,
+    container_id: Annotated[str, "Container or pallet ID to unpack"],
+) -> str:
+    return await _exec(ctx, "unpack_batches", {"container_id": container_id})
+
+
+@function_tool(description=(
+    "Split one batch into multiple smaller portions. "
+    "Use when user says 'split', 'divide', 'separate'. "
+    "NOT for processing — use record_transformation for that."
+))
+async def split_batch(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Parent batch ID or GTIN to split"],
+    splits: Annotated[list[dict], "List of {quantity_kg, destination} portions"],
+) -> str:
+    return await _exec(ctx, "split_batch", {"batch_id": batch_id, "splits": splits})
+
 
 @function_tool(description=(
     "Look up coffee batches in the database. Use when the user asks "
@@ -82,59 +224,252 @@ def _get_db():
 async def query_batches(
     ctx: RunContext,
     batch_id: Annotated[str | None, "Specific batch ID or GTIN to look up"] = None,
-    status: Annotated[str | None, "Filter by status: PENDING_VERIFICATION, VERIFIED, SHIPPED, RECEIVED"] = None,
+    status: Annotated[str | None, "Filter: PENDING_VERIFICATION, VERIFIED, SHIPPED, RECEIVED"] = None,
     origin: Annotated[str | None, "Filter by origin region"] = None,
-    limit: Annotated[int, "Max number of results (default 10)"] = 10,
+    limit: Annotated[int, "Max results (default 10)"] = 10,
 ) -> str:
     """Query batches and push a visual card with results."""
     from services.batch_service import query_batches as svc_query_batches
 
-    user_id = ctx.userdata.get("user_id")
-    uid = int(user_id) if user_id and str(user_id).isdigit() else None
-
     with _get_db() as db:
         result = svc_query_batches(
-            db,
-            batch_id=batch_id,
-            status=status,
-            origin=origin,
-            user_id=uid,
-            limit=limit,
+            db, batch_id=batch_id, status=status,
+            origin=origin, user_id=_uid(ctx), limit=limit,
         )
 
-    # Push action card to frontend
     if result["single"] and result["found"]:
-        await _send_action_card(ctx, {
-            "type": "batch_detail",
-            **result["batch"],
-        })
+        await _send_action_card(ctx, {"type": "batch_detail", **result["batch"]})
         b = result["batch"]
         return (
             f"Found batch {b['batch_id']}: {b['variety'] or 'coffee'} from "
             f"{b['origin'] or 'unknown origin'}, {b['quantity_kg']}kg, "
             f"status {b['status']}."
         )
-
     if result["single"] and not result["found"]:
         return f"Batch '{result.get('query_batch_id', batch_id)}' not found."
-
     if result["count"] > 0:
         await _send_action_card(ctx, {
             "type": "batch_list",
-            "batches": result["batches"],
-            "count": result["count"],
+            "batches": result["batches"], "count": result["count"],
         })
         return f"Found {result['count']} batch(es). I've sent the details to your screen."
-
     return "No batches found matching your criteria."
 
 
 @function_tool(description=(
+    "Search the Voice Ledger knowledge base for documentation, guides, "
+    "standards, and how-to information. Use when user asks 'how to', "
+    "'what is', 'explain', or questions about EUDR, EPCIS, GS1, blockchain."
+))
+async def search_knowledge(
+    ctx: RunContext,
+    query: Annotated[str, "The search query in English"],
+) -> str:
+    return await _exec(ctx, "search_knowledge", {"query": query})
+
+
+# =====================================================================
+# 2. MARKETPLACE TOOLS (RFQs, offers, acceptances)
+# =====================================================================
+
+@function_tool(description=(
+    "Create a new Request for Quote (RFQ) on the marketplace. "
+    "Only BUYER role users can create RFQs. Use when a buyer says "
+    "'I need coffee', 'looking for', 'request quote', 'buy', 'purchase'."
+))
+async def create_rfq(
+    ctx: RunContext,
+    quantity_kg: Annotated[float, "Quantity needed in kg. If bags, multiply by 60"],
+    variety: Annotated[str | None, "Coffee variety e.g. Yirgacheffe, Sidama, Guji"] = None,
+    processing_method: Annotated[str | None, "Processing: Washed, Natural, Honey"] = None,
+    grade: Annotated[str | None, "Quality grade: Grade 1, Grade 2, Specialty"] = None,
+    delivery_location: Annotated[str | None, "Delivery destination"] = None,
+) -> str:
+    return await _exec(ctx, "create_rfq", {
+        "quantity_kg": quantity_kg, "variety": variety,
+        "processing_method": processing_method, "grade": grade,
+        "delivery_location": delivery_location,
+    })
+
+
+@function_tool(description=(
+    "Browse open RFQs on the marketplace. Use when cooperative managers ask "
+    "'what do buyers need', 'show me requests', 'available RFQs', 'marketplace'."
+))
+async def browse_rfqs(
+    ctx: RunContext,
+    variety: Annotated[str | None, "Filter by coffee variety"] = None,
+    status: Annotated[str | None, "Filter: OPEN, PARTIALLY_FILLED, FULFILLED"] = "OPEN",
+    limit: Annotated[int, "Max results (default 10)"] = 10,
+) -> str:
+    return await _exec(ctx, "browse_rfqs", {
+        "variety": variety, "status": status, "limit": limit,
+    })
+
+
+@function_tool(description=(
+    "Submit an offer for an open RFQ. Only COOPERATIVE_MANAGER role. "
+    "Use when user says 'I can supply', 'make offer', 'bid on'."
+))
+async def submit_offer(
+    ctx: RunContext,
+    quantity_offered_kg: Annotated[float, "Quantity offered in kg"],
+    price_per_kg: Annotated[float, "Price per kg in USD"],
+    rfq_id: Annotated[int | None, "RFQ ID to make an offer on"] = None,
+    rfq_number: Annotated[str | None, "RFQ number e.g. RFQ-000001"] = None,
+    delivery_timeline: Annotated[str | None, "Timeline e.g. '2 weeks', '30 days'"] = None,
+) -> str:
+    return await _exec(ctx, "submit_offer", {
+        "rfq_id": rfq_id, "rfq_number": rfq_number,
+        "quantity_offered_kg": quantity_offered_kg,
+        "price_per_kg": price_per_kg, "delivery_timeline": delivery_timeline,
+    })
+
+
+@function_tool(description=(
+    "Accept an offer from a cooperative on one of your RFQs. "
+    "Only the BUYER who created the RFQ can accept."
+))
+async def accept_offer(
+    ctx: RunContext,
+    offer_id: Annotated[int, "The offer ID to accept"],
+    rfq_id: Annotated[int, "RFQ ID the offer belongs to"],
+    quantity_accepted_kg: Annotated[float | None, "Quantity to accept (full offer if omitted)"] = None,
+    payment_terms: Annotated[str | None, "Payment terms e.g. 'Net 30 days'"] = None,
+) -> str:
+    return await _exec(ctx, "accept_offer", {
+        "offer_id": offer_id, "rfq_id": rfq_id,
+        "quantity_accepted_kg": quantity_accepted_kg,
+        "payment_terms": payment_terms,
+    })
+
+
+@function_tool(description=(
+    "List offers submitted by your cooperative. "
+    "Use when user asks 'show my offers', 'what have I offered'."
+))
+async def list_my_offers(
+    ctx: RunContext,
+    status: Annotated[str | None, "Filter: PENDING, ACCEPTED, REJECTED"] = None,
+) -> str:
+    return await _exec(ctx, "list_my_offers", {"status": status})
+
+
+# =====================================================================
+# 3. CONTAINER MARKETPLACE & POOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Browse available container offerings on the marketplace. "
+    "Use when user asks about containers, full-lot purchases."
+))
+async def browse_containers(
+    ctx: RunContext,
+    variety: Annotated[str | None, "Filter by coffee variety"] = None,
+    min_quantity_kg: Annotated[float | None, "Minimum quantity available"] = None,
+    limit: Annotated[int, "Max results (default 10)"] = 10,
+) -> str:
+    return await _exec(ctx, "browse_containers", {
+        "variety": variety, "min_quantity_kg": min_quantity_kg, "limit": limit,
+    })
+
+
+@function_tool(description=(
+    "Purchase a partial quantity from a container offering. Buyers only."
+))
+async def purchase_container(
+    ctx: RunContext,
+    container_id: Annotated[int, "Container offering ID"],
+    quantity_kg: Annotated[float, "Quantity to purchase in kg"],
+    payment_terms: Annotated[str | None, "Payment terms"] = "Net 7 days",
+) -> str:
+    return await _exec(ctx, "purchase_container", {
+        "container_id": container_id, "quantity_kg": quantity_kg,
+        "payment_terms": payment_terms,
+    })
+
+
+@function_tool(description=(
+    "Browse active shared-buying container pools. "
+    "Use when user asks about pools, shared containers, group buys."
+))
+async def browse_pools(
+    ctx: RunContext,
+    region: Annotated[str | None, "Filter by destination region"] = None,
+    container_offering_id: Annotated[int | None, "Filter by specific container"] = None,
+) -> str:
+    return await _exec(ctx, "browse_pools", {
+        "region": region, "container_offering_id": container_offering_id,
+    })
+
+
+@function_tool(description=(
+    "Commit a fractional quantity to a shared container pool. Buyers only."
+))
+async def commit_to_pool(
+    ctx: RunContext,
+    container_offering_id: Annotated[int, "Container offering to commit to"],
+    quantity_kg: Annotated[float, "Quantity to commit in kg"],
+    delivery_country: Annotated[str | None, "2-letter country code for delivery"] = None,
+    delivery_city: Annotated[str | None, "Delivery city"] = None,
+) -> str:
+    return await _exec(ctx, "commit_to_pool", {
+        "container_offering_id": container_offering_id,
+        "quantity_kg": quantity_kg,
+        "delivery_country": delivery_country,
+        "delivery_city": delivery_city,
+    })
+
+
+@function_tool(description=(
+    "List your own pool commitments. "
+    "Use when user asks 'show my commitments', 'what pools am I in'."
+))
+async def list_my_commitments(ctx: RunContext) -> str:
+    return await _exec(ctx, "list_my_commitments", {})
+
+
+# =====================================================================
+# 4. COMPLIANCE TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Check EUDR compliance for one or more batches. "
+    "Validates GPS, photo verification, and deforestation status."
+))
+async def check_eudr_compliance(
+    ctx: RunContext,
+    batch_ids: Annotated[list[str], "List of batch IDs to check"],
+) -> str:
+    return await _exec(ctx, "check_eudr_compliance", {"batch_ids": batch_ids})
+
+
+@function_tool(description=(
+    "Validate mass balance between inputs and outputs. "
+    "Use when checking processing yield or aggregation totals."
+))
+async def check_mass_balance(
+    ctx: RunContext,
+    input_quantities: Annotated[list[dict], "List of {quantity} input records"],
+    output_quantities: Annotated[list[dict], "List of {quantity} output records"],
+    allow_loss: Annotated[bool, "Allow output < input (processing loss)"] = False,
+) -> str:
+    return await _exec(ctx, "check_mass_balance", {
+        "input_quantities": input_quantities,
+        "output_quantities": output_quantities,
+        "allow_loss": allow_loss,
+    })
+
+
+# =====================================================================
+# 5. DPP / TRACEABILITY TOOLS
+# =====================================================================
+
+@function_tool(description=(
     "Generate or retrieve the Digital Product Passport (DPP) for a "
-    "coffee batch. Returns EUDR compliance data, traceability, "
-    "blockchain anchoring status, and QR code. Use when user asks "
-    "'show me the passport for batch X', 'get DPP', 'product passport', "
-    "'traceability info', 'where did this coffee come from'."
+    "coffee batch. Returns EUDR compliance, traceability, blockchain "
+    "anchoring, and QR code. Use when user asks 'show passport', "
+    "'get DPP', 'traceability info', 'where did this coffee come from'."
 ))
 async def get_dpp(
     ctx: RunContext,
@@ -149,7 +484,6 @@ async def get_dpp(
     if not result["success"]:
         return f"Could not generate DPP: {result['error']}"
 
-    # Push rich DPP passport card to frontend
     await _send_action_card(ctx, {
         "type": "dpp_passport",
         "batch_id": result["batch_id"],
@@ -163,7 +497,6 @@ async def get_dpp(
         "qr": result["qr"],
     })
 
-    # Build concise voice summary
     p = result["product"]
     o = result["origin"]
     c = result["compliance"]
@@ -187,8 +520,273 @@ async def get_dpp(
     )
 
 
+@function_tool(description=(
+    "Get the aggregated Digital Product Passport for a shipping container. "
+    "Shows all contributing farmers and total quantities."
+))
+async def get_container_dpp(
+    ctx: RunContext,
+    container_id: Annotated[str, "Container or SSCC ID"],
+) -> str:
+    return await _exec(ctx, "get_container_dpp", {"container_id": container_id})
+
+
+@function_tool(description=(
+    "Trace the full supply chain lineage of a product or batch. "
+    "Shows all contributing farmers, transformations, and custody transfers."
+))
+async def trace_lineage(
+    ctx: RunContext,
+    product_id: Annotated[str, "Product, batch, or container ID to trace"],
+    max_depth: Annotated[int, "Max recursion depth (default 5)"] = 5,
+) -> str:
+    return await _exec(ctx, "trace_lineage", {
+        "product_id": product_id, "max_depth": max_depth,
+    })
+
+
+@function_tool(description=(
+    "Validate a DPP for completeness and EUDR compliance. "
+    "Checks all required fields and compliance criteria."
+))
+async def validate_dpp(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID to validate"],
+) -> str:
+    return await _exec(ctx, "validate_dpp", {"batch_id": batch_id})
+
+
 # =====================================================================
-# System prompt (reuses the same domain knowledge as executor.py)
+# 6. VERIFICATION TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "List batches pending verification. Use when a cooperative manager "
+    "asks 'what needs to be verified', 'pending verifications'."
+))
+async def list_pending_verifications(
+    ctx: RunContext,
+    origin: Annotated[str | None, "Filter by origin"] = None,
+    limit: Annotated[int, "Max results (default 10)"] = 10,
+) -> str:
+    return await _exec(ctx, "list_pending_verifications", {
+        "origin": origin, "limit": limit,
+    })
+
+
+@function_tool(description=(
+    "Verify a coffee batch. Only COOPERATIVE_MANAGER or ADMIN roles. "
+    "Sets batch status to VERIFIED and issues a verifiable credential."
+))
+async def verify_batch(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID to verify"],
+    verified_quantity_kg: Annotated[float | None, "Verified weight (defaults to claimed)"] = None,
+    quality_notes: Annotated[str | None, "Quality assessment notes"] = None,
+    cupping_score: Annotated[float | None, "Cupping score (0-100)"] = None,
+    moisture_pct: Annotated[float | None, "Moisture percentage"] = None,
+    screen_size: Annotated[str | None, "Screen size"] = None,
+    defect_count: Annotated[int | None, "Number of defects"] = None,
+) -> str:
+    args = {"batch_id": batch_id}
+    if verified_quantity_kg is not None:
+        args["verified_quantity_kg"] = verified_quantity_kg
+    if quality_notes:
+        args["quality_notes"] = quality_notes
+    if cupping_score is not None:
+        args["cupping_score"] = cupping_score
+    if moisture_pct is not None:
+        args["moisture_pct"] = moisture_pct
+    if screen_size:
+        args["screen_size"] = screen_size
+    if defect_count is not None:
+        args["defect_count"] = defect_count
+    return await _exec(ctx, "verify_batch", args)
+
+
+# =====================================================================
+# 7. BLOCKCHAIN TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Check if a batch is anchored on the blockchain. "
+    "Use when user asks 'is batch X on chain', 'blockchain status'."
+))
+async def check_blockchain_anchor(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID to check"],
+) -> str:
+    return await _exec(ctx, "check_blockchain_anchor", {"batch_id": batch_id})
+
+
+@function_tool(description=(
+    "Look up an ERC-1155 batch token's on-chain metadata. "
+    "Use when user asks about a token ID or on-chain batch data."
+))
+async def get_token_info(
+    ctx: RunContext,
+    token_id: Annotated[int, "Token ID to look up"],
+) -> str:
+    return await _exec(ctx, "get_token_info", {"token_id": token_id})
+
+
+@function_tool(description=(
+    "Verify batch data integrity by comparing its hash against the "
+    "blockchain record. Detects if data has been tampered with."
+))
+async def verify_batch_hash(
+    ctx: RunContext,
+    batch_id: Annotated[str, "Batch ID to verify"],
+) -> str:
+    return await _exec(ctx, "verify_batch_hash", {"batch_id": batch_id})
+
+
+# =====================================================================
+# 8. CHAINLINK CRE / DON ATTESTATION TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Request a Chainlink DON-attested deforestation check for a farm. "
+    "Uses satellite data (GFW) to verify no tree loss at the farm's GPS."
+))
+async def request_don_attestation(
+    ctx: RunContext,
+    farm_id: Annotated[str, "Farm or farmer ID to check"],
+) -> str:
+    return await _exec(ctx, "request_don_attestation", {"farm_id": farm_id})
+
+
+@function_tool(description=(
+    "Read a DON-attested deforestation result from the blockchain. "
+    "Use after requesting an attestation, or to check existing results."
+))
+async def check_don_attestation(
+    ctx: RunContext,
+    farm_id: Annotated[str, "Farm or farmer ID to check"],
+) -> str:
+    return await _exec(ctx, "check_don_attestation", {"farm_id": farm_id})
+
+
+@function_tool(description=(
+    "Read DON-attested supply chain provenance metrics from the blockchain. "
+    "Shows total farmers, batches, quantity, EUDR compliance rates."
+))
+async def get_don_provenance_metrics(ctx: RunContext) -> str:
+    return await _exec(ctx, "get_don_provenance_metrics", {})
+
+
+# =====================================================================
+# 9. SETTLEMENT / PAYMENT TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Confirm you made a bank transfer for a commitment or acceptance. "
+    "Records settlement on-chain. Buyer role required."
+))
+async def confirm_payment(
+    ctx: RunContext,
+    commitment_id: Annotated[int | None, "Commitment ID to confirm payment for"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number e.g. ACC-000001"] = None,
+    payment_reference: Annotated[str | None, "Bank transfer reference"] = None,
+) -> str:
+    return await _exec(ctx, "confirm_payment", {
+        "commitment_id": commitment_id,
+        "acceptance_number": acceptance_number,
+        "payment_reference": payment_reference,
+    })
+
+
+@function_tool(description=(
+    "Check payment and blockchain settlement status for a commitment "
+    "or acceptance. Shows buyer/coop confirmation and TX hashes."
+))
+async def check_payment_status(
+    ctx: RunContext,
+    commitment_id: Annotated[int | None, "Commitment ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "check_payment_status", {
+        "commitment_id": commitment_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
+@function_tool(description=(
+    "Admin records that WAGA forwarded funds to the cooperative's bank. "
+    "Records payout on-chain. Admin role required."
+))
+async def record_cooperative_payout(
+    ctx: RunContext,
+    commitment_id: Annotated[int | None, "Commitment ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "record_cooperative_payout", {
+        "commitment_id": commitment_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
+@function_tool(description=(
+    "Cooperative confirms they received the buyer's payment. "
+    "Updates delivery status to PREPARING_SHIPMENT."
+))
+async def confirm_payment_received(
+    ctx: RunContext,
+    commitment_id: Annotated[int | None, "Commitment ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "confirm_payment_received", {
+        "commitment_id": commitment_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
+# =====================================================================
+# 10. DeFi FINANCING POOL TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Check the current DeFi financing pool stats — liquidity, "
+    "utilisation, share price, advances. READ-ONLY."
+))
+async def check_financing_pool(ctx: RunContext) -> str:
+    return await _exec(ctx, "check_financing_pool", {})
+
+
+@function_tool(description=(
+    "Request a USDC advance from the financing pool against a confirmed "
+    "trade. Cooperative role required. The pool advances ~80% of agreed price."
+))
+async def request_financing_advance(
+    ctx: RunContext,
+    acceptance_number: Annotated[str | None, "Acceptance number for the trade"] = None,
+    token_id: Annotated[int | None, "Container token ID (if known)"] = None,
+    buyer_address: Annotated[str | None, "Buyer's wallet address"] = None,
+) -> str:
+    return await _exec(ctx, "request_financing_advance", {
+        "acceptance_number": acceptance_number,
+        "token_id": token_id,
+        "buyer_address": buyer_address,
+    })
+
+
+@function_tool(description=(
+    "Check the status of a financed trade — advance amount, fees, "
+    "settlement status, deadline."
+))
+async def check_trade_financing(
+    ctx: RunContext,
+    trade_id: Annotated[int | None, "On-chain trade ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "check_trade_financing", {
+        "trade_id": trade_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
+# =====================================================================
+# System prompt — full capabilities
 # =====================================================================
 
 SYSTEM_PROMPT = """\
@@ -200,21 +798,110 @@ connection — keep responses SHORT (2-3 sentences for confirmations, brief list
 for data queries).
 
 YOUR CAPABILITIES (use the tools provided):
-• Look up batches and data (query_batches)
-• Get Digital Product Passports (get_dpp)
 
-More tools are being connected — if a user asks for something you can't do yet,
-let them know it will be available soon.
+SUPPLY CHAIN RECORDING
+• Record new coffee batches (record_commission)
+• Ship batches (record_shipment), receive batches (record_receipt)
+• Process / transform coffee (record_transformation)
+• Pack (pack_batches), unpack (unpack_batches), split (split_batch)
+
+QUERIES & KNOWLEDGE
+• Look up batches by ID, status, or origin (query_batches)
+• Search docs, guides, EUDR/EPCIS standards (search_knowledge)
+
+MARKETPLACE
+• Create a Request for Quote / RFQ (create_rfq) — buyers only
+• Browse active RFQs (browse_rfqs)
+• Submit an offer on an RFQ (submit_offer) — cooperatives only
+• Accept an offer (accept_offer) — buyer who created the RFQ
+• List your submitted offers (list_my_offers)
+
+CONTAINER MARKETPLACE & POOLS
+• Browse container offerings (browse_containers)
+• Purchase from a container (purchase_container)
+• Browse shared-buying pools (browse_pools)
+• Commit to a pool (commit_to_pool)
+• List your pool commitments (list_my_commitments)
+
+COMPLIANCE
+• Check EUDR compliance (check_eudr_compliance)
+• Validate mass balance (check_mass_balance)
+
+DIGITAL PRODUCT PASSPORTS
+• Generate full DPP for a batch (get_dpp)
+• Container-level DPP (get_container_dpp)
+• Trace supply chain lineage (trace_lineage)
+• Validate DPP completeness (validate_dpp)
+
+VERIFICATION
+• List batches pending verification (list_pending_verifications)
+• Verify a batch (verify_batch) — cooperative managers / admin
+
+BLOCKCHAIN
+• Check blockchain anchor status (check_blockchain_anchor)
+• Look up on-chain token info (get_token_info)
+• Verify batch hash integrity (verify_batch_hash)
+
+CHAINLINK DON / CRE
+• Request DON-attested deforestation check (request_don_attestation)
+• Read attestation result (check_don_attestation)
+• Read provenance metrics (get_don_provenance_metrics)
+
+SETTLEMENT & PAYMENTS
+• Confirm bank payment (confirm_payment)
+• Check payment status (check_payment_status)
+• Record cooperative payout (record_cooperative_payout) — admin
+• Confirm payment received (confirm_payment_received) — cooperative
+
+DeFi FINANCING
+• Check financing pool stats (check_financing_pool)
+• Request advance against trade (request_financing_advance)
+• Check trade financing status (check_trade_financing)
 
 RULES:
-1. Be warm, clear, and concise — the user is speaking to you live
-2. When the user gives enough info, call the tool immediately
-3. When info is missing, ask ONE question at a time
-4. After a tool runs, summarize briefly — the visual card has the details
-5. For quantities in "bags", convert to kg (1 bag = 60 kg)
-6. Never fabricate batch IDs — always query first if unsure
-7. Respond in English only (Amharic support coming soon)
+1. Be warm, clear, and concise — the user is speaking to you live.
+2. When the user gives enough info, call the tool immediately.
+3. When info is missing, ask ONE question at a time.
+4. After a tool runs, summarize briefly — the visual card has the details.
+5. For quantities in "bags", convert to kg (1 bag = 60 kg).
+6. Never fabricate batch IDs — always query first if unsure.
+7. Respect role-based access — farmers create batches, cooperatives verify
+   and offer, buyers create RFQs and purchase, admins manage payouts.
+8. Respond in English only (Amharic support coming soon).
 """
+
+
+# =====================================================================
+# All 40 tools grouped logically
+# =====================================================================
+
+ALL_TOOLS = [
+    # Supply chain recording
+    record_commission, record_shipment, record_receipt,
+    record_transformation, pack_batches, unpack_batches, split_batch,
+    # Queries / knowledge
+    query_batches, search_knowledge,
+    # Marketplace
+    create_rfq, browse_rfqs, submit_offer, accept_offer, list_my_offers,
+    # Containers & pools
+    browse_containers, purchase_container,
+    browse_pools, commit_to_pool, list_my_commitments,
+    # Compliance
+    check_eudr_compliance, check_mass_balance,
+    # DPP / traceability
+    get_dpp, get_container_dpp, trace_lineage, validate_dpp,
+    # Verification
+    list_pending_verifications, verify_batch,
+    # Blockchain
+    check_blockchain_anchor, get_token_info, verify_batch_hash,
+    # Chainlink DON / CRE
+    request_don_attestation, check_don_attestation, get_don_provenance_metrics,
+    # Settlement
+    confirm_payment, check_payment_status,
+    record_cooperative_payout, confirm_payment_received,
+    # DeFi
+    check_financing_pool, request_financing_advance, check_trade_financing,
+]
 
 
 # =====================================================================
@@ -222,12 +909,12 @@ RULES:
 # =====================================================================
 
 class VoiceLedgerAgent(Agent):
-    """LiveKit voice agent for Voice Ledger."""
+    """LiveKit voice agent for Voice Ledger — all 40 supply chain tools."""
 
     def __init__(self, user_name: str = "there"):
         super().__init__(
             instructions=SYSTEM_PROMPT + f"\nThe user's name is {user_name}.",
-            tools=[query_batches, get_dpp],
+            tools=ALL_TOOLS,
         )
 
 
@@ -281,14 +968,34 @@ async def handle_session(ctx: agents.JobContext):
     )
 
     # Build a role-aware greeting that tells users what they can actually do
+    role_hints = {
+        "farmer": (
+            "You can register new coffee batches, check their status, "
+            "track shipments, and generate Digital Product Passports."
+        ),
+        "cooperative_manager": (
+            "You can verify batches, browse buyer RFQs, submit offers, "
+            "manage settlements, and request financing advances."
+        ),
+        "buyer": (
+            "You can create Requests for Quote, browse container offerings, "
+            "join shared-buying pools, confirm payments, and pull up DPPs."
+        ),
+        "admin": (
+            "You have full access — batch management, marketplace, "
+            "verification, settlement payouts, blockchain tools, and DeFi."
+        ),
+    }
+    what_i_can_do = role_hints.get(
+        user_role,
+        "I can help you record coffee batches, look up traceability data, "
+        "manage marketplace transactions, check compliance, and more.",
+    )
+
     greeting = (
         f"Greet {user_name} warmly by name. Then briefly tell them what you "
-        f"can help with right now. Say something like: "
-        f"'You can ask me to look up any coffee batch — by ID, origin, or "
-        f"status — and I'll pull up the details for you. I can also generate "
-        f"a full Digital Product Passport for any batch, showing traceability, "
-        f"EUDR compliance, and blockchain anchoring. Just tell me what you need.' "
-        f"Keep the whole greeting to 3–4 sentences, conversational and warm. "
+        f"can help with. Say something like: '{what_i_can_do}' "
+        f"Keep the whole greeting to 3-4 sentences, conversational and warm. "
         f"Do NOT list features with bullet points — speak naturally."
     )
     await session.generate_reply(instructions=greeting)
