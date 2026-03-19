@@ -146,25 +146,105 @@ export default function ActionCards({ textStreams }) {
 
 
 /* ================================================================
-   Shared card shell — glass-morphism wrapper
+   Shared card shell — premium SVG tech design matching hero theme
    ================================================================ */
+
+/* ── Animated trace border for action cards ── */
+function ActionTraceBorder({ accent }) {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 300 200"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+      {/* Dim static border */}
+      <rect x="1" y="1" width="298" height="198" rx="15" stroke={accent} strokeWidth="0.5" strokeOpacity="0.12" />
+      {/* Animated racing trace */}
+      <rect
+        x="1" y="1" width="298" height="198" rx="15"
+        stroke={accent} strokeWidth="1.2" strokeOpacity="0"
+        strokeDasharray="80 920"
+        className="animate-card-trace"
+      />
+      {/* Corner accent dots */}
+      <circle cx="16" cy="16" r="1.2" fill={accent} opacity="0.2" />
+      <circle cx="284" cy="16" r="1.2" fill={accent} opacity="0.2" />
+      <circle cx="16" cy="184" r="1" fill={accent} opacity="0.1" />
+      <circle cx="284" cy="184" r="1" fill={accent} opacity="0.1" />
+    </svg>
+  )
+}
+
+/* ── Subtle SVG background pattern for action cards ── */
+function ActionCardBg({ accent }) {
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 200 120"
+      preserveAspectRatio="xMidYMid slice"
+      fill="none"
+    >
+      {/* Circuit traces */}
+      <g stroke={accent} strokeWidth="0.3" opacity="0.06">
+        <path d="M0 25h30v15h20" />
+        <path d="M160 10h20v20h20" />
+        <path d="M50 90h25v-15h15" />
+        <path d="M140 100h30v-20" />
+        <path d="M10 70h15" />
+        <path d="M175 60v25" />
+      </g>
+      {/* Junction dots */}
+      <g fill={accent} opacity="0.08">
+        <circle cx="30" cy="25" r="1.5" />
+        <circle cx="50" cy="40" r="1" />
+        <circle cx="180" cy="10" r="1.5" />
+        <circle cx="200" cy="30" r="1" />
+        <circle cx="75" cy="90" r="1" />
+        <circle cx="90" cy="75" r="1.5" />
+        <circle cx="170" cy="100" r="1" />
+      </g>
+      {/* Faint hex accents */}
+      <g stroke={accent} strokeWidth="0.25" fill="none" opacity="0.04">
+        <polygon points="120,20 127,24 127,32 120,36 113,32 113,24" />
+        <polygon points="145,70 152,74 152,82 145,86 138,82 138,74" />
+      </g>
+    </svg>
+  )
+}
 
 function CardShell({ children, icon, title, accent = '#10B981' }) {
   return (
-    <div className="rounded-2xl overflow-hidden"
+    <div className="group relative rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.01] hover:shadow-lg"
          style={{
-           background: 'rgba(255,255,255,0.04)',
-           border: '1px solid rgba(255,255,255,0.06)',
+           background: 'rgba(255,255,255,0.03)',
            backdropFilter: 'blur(16px)',
          }}>
+      {/* SVG animated trace border */}
+      <ActionTraceBorder accent={accent} />
+
+      {/* SVG background pattern */}
+      <ActionCardBg accent={accent} />
+
+      {/* Hover glow */}
+      <div
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse at 50% 0%, ${accent}10 0%, transparent 70%)`,
+        }}
+      />
+
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5"
+      <div className="relative z-10 flex items-center gap-2.5 px-4 py-2.5"
            style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
         <span style={{ color: accent }}>{icon}</span>
-        <span className="text-xs font-semibold tracking-wide text-white/80">{title}</span>
+        <span className="text-xs font-bold tracking-wide" style={{ color: `${accent}DD` }}>{title}</span>
+        {/* Header accent line */}
+        <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${accent}20, transparent)` }} />
       </div>
+
       {/* Body */}
-      <div className="px-4 py-3">{children}</div>
+      <div className="relative z-10 px-4 py-3">{children}</div>
     </div>
   )
 }

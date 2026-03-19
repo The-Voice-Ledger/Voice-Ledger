@@ -2,7 +2,9 @@
 LiveKit Token Endpoint — issues signed JWTs for web frontend voice sessions.
 
 The frontend calls POST /api/livekit/token to get a room token + URL.
-The LiveKit agent worker auto-joins the room when a participant appears.
+The token endpoint also creates an explicit AgentDispatch so the
+voice-agent worker is guaranteed to join the room (no reliance on
+LiveKit Cloud auto-dispatch).
 """
 
 from __future__ import annotations
@@ -24,6 +26,28 @@ router = APIRouter(prefix="/api/livekit", tags=["LiveKit Voice"])
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+
+
+async def _dispatch_agent(room_name: str) -> None:
+    """Explicitly dispatch the voice-agent worker into the room."""
+    try:
+        from livekit.api import LiveKitAPI
+        from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
+
+        api = LiveKitAPI(
+            url=LIVEKIT_URL,
+            api_key=LIVEKIT_API_KEY,
+            api_secret=LIVEKIT_API_SECRET,
+        )
+        try:
+            await api.agent_dispatch.create_dispatch(
+                CreateAgentDispatchRequest(room=room_name, agent_name="")
+            )
+            logger.info("Agent dispatched to room %s", room_name)
+        finally:
+            await api.aclose()
+    except Exception as e:
+        logger.warning("Agent dispatch failed (will rely on auto-dispatch): %s", e)
 
 
 # ── Request / Response models ────────────────────────────────────────

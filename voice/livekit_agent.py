@@ -182,10 +182,15 @@ async def record_transformation(
 ))
 async def pack_batches(
     ctx: RunContext,
-    batch_ids: Annotated[list[str], "List of batch IDs or GTINs to pack"],
+    batch_ids_json: Annotated[str, "JSON array of batch IDs or GTINs to pack, e.g. '[\"BATCH-001\", \"BATCH-002\"]'"],
     container_id: Annotated[str | None, "Container or pallet ID (auto-generated if omitted)"] = None,
     container_type: Annotated[str | None, "Container type: pallet, container, bag"] = "pallet",
 ) -> str:
+    import json as _json
+    try:
+        batch_ids = _json.loads(batch_ids_json)
+    except Exception:
+        batch_ids = [b.strip() for b in batch_ids_json.split(",")]
     return await _exec(ctx, "pack_batches", {
         "batch_ids": batch_ids, "container_id": container_id,
         "container_type": container_type,
@@ -211,8 +216,13 @@ async def unpack_batches(
 async def split_batch(
     ctx: RunContext,
     batch_id: Annotated[str, "Parent batch ID or GTIN to split"],
-    splits: Annotated[list[dict], "List of {quantity_kg, destination} portions"],
+    splits_json: Annotated[str, "JSON array of split portions, e.g. '[{\"quantity_kg\": 50, \"destination\": \"Addis\"}, {\"quantity_kg\": 30, \"destination\": \"Djibouti\"}]'"],
 ) -> str:
+    import json as _json
+    try:
+        splits = _json.loads(splits_json)
+    except (ValueError, TypeError):
+        return "Invalid splits format. Provide a JSON array of {quantity_kg, destination} objects."
     return await _exec(ctx, "split_batch", {"batch_id": batch_id, "splits": splits})
 
 
@@ -439,8 +449,13 @@ async def list_my_commitments(ctx: RunContext) -> str:
 ))
 async def check_eudr_compliance(
     ctx: RunContext,
-    batch_ids: Annotated[list[str], "List of batch IDs to check"],
+    batch_ids_json: Annotated[str, "JSON array of batch IDs to check, e.g. '[\"BATCH-001\"]'"],
 ) -> str:
+    import json as _json
+    try:
+        batch_ids = _json.loads(batch_ids_json)
+    except Exception:
+        batch_ids = [b.strip() for b in batch_ids_json.split(",")]
     return await _exec(ctx, "check_eudr_compliance", {"batch_ids": batch_ids})
 
 
@@ -450,10 +465,19 @@ async def check_eudr_compliance(
 ))
 async def check_mass_balance(
     ctx: RunContext,
-    input_quantities: Annotated[list[dict], "List of {quantity} input records"],
-    output_quantities: Annotated[list[dict], "List of {quantity} output records"],
+    input_quantities_json: Annotated[str, "JSON array of input records, e.g. '[{\"quantity\": 100}]'"],
+    output_quantities_json: Annotated[str, "JSON array of output records, e.g. '[{\"quantity\": 80}]'"],
     allow_loss: Annotated[bool, "Allow output < input (processing loss)"] = False,
 ) -> str:
+    import json as _json
+    try:
+        input_quantities = _json.loads(input_quantities_json)
+    except Exception:
+        input_quantities = []
+    try:
+        output_quantities = _json.loads(output_quantities_json)
+    except Exception:
+        output_quantities = []
     return await _exec(ctx, "check_mass_balance", {
         "input_quantities": input_quantities,
         "output_quantities": output_quantities,
@@ -964,7 +988,7 @@ async def handle_session(ctx: agents.JobContext):
     await session.start(
         agent=VoiceLedgerAgent(user_name=user_name),
         room=ctx.room,
-        room_input_options=room_io.RoomInputOptions(),
+        room_options=room_io.RoomOptions(),
     )
 
     # Build a role-aware greeting that tells users what they can actually do
@@ -998,7 +1022,21 @@ async def handle_session(ctx: agents.JobContext):
         f"Keep the whole greeting to 3-4 sentences, conversational and warm. "
         f"Do NOT list features with bullet points — speak naturally."
     )
-    await session.generate_reply(instructions=greeting)
+    try:
+        speech = session.generate_reply(instructions=greeting)
+        await speech
+        logger.info("Greeting delivered for user=%s", user_name)
+    except Exception as e:
+        logger.error("generate_reply failed, falling back to say(): %s", e)
+        try:
+            fallback = (
+                f"Hello {user_name}! Welcome to The Voice Ledger. "
+                f"{what_i_can_do} Just tell me what you need!"
+            )
+            speech = session.say(fallback)
+            await speech
+        except Exception as e2:
+            logger.error("say() fallback also failed: %s", e2)
 
 
 if __name__ == "__main__":

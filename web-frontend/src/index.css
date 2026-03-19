@@ -129,6 +129,16 @@ body {
   animation: stat-trace 6s linear infinite;
 }
 
+/* Action-card: animated dash trace racing around border */
+@keyframes card-trace {
+  0%   { stroke-dashoffset: 600; stroke-opacity: 0.35; }
+  50%  { stroke-opacity: 0.6; }
+  100% { stroke-dashoffset: 0; stroke-opacity: 0.35; }
+}
+.animate-card-trace {
+  animation: card-trace 8s linear infinite;
+}
+
 /* Slow upward drift for topographic contour background */
 @keyframes topo-drift {
   0%   { transform: translateY(0); }
