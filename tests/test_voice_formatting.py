@@ -306,7 +306,7 @@ def test_preserve_important_codes():
     else:
         print("\n❌ TEST 7 FAILED: Some codes altered incorrectly")
     
-    return all_passed
+    assert all_passed, "Some codes were altered incorrectly"
 
 
 if __name__ == "__main__":

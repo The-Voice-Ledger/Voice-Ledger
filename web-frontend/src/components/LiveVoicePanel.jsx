@@ -282,7 +282,7 @@ function VoicePanelOverlay({ session, onClose, userName }) {
         </div>
 
         {/* Transcript (collapsible) */}
-        {isStarted && transcriptions.length > 0 && (
+        {isStarted && transcriptions.filter((s) => s.isAgent).length > 0 && (
           <div className="w-full mt-6">
             <button
               onClick={() => setShowTranscript((v) => !v)}
@@ -303,7 +303,7 @@ function VoicePanelOverlay({ session, onClose, userName }) {
                   backdropFilter: 'blur(8px)',
                 }}
               >
-                {transcriptions.map((seg, i) => (
+                {transcriptions.filter((seg) => seg.isAgent).map((seg, i) => (
                   <p key={seg.id || i} className="text-xs leading-relaxed text-emerald-300/60">
                     <span className="font-mono text-[9px] text-white/15 mr-1.5">AI</span>
                     {seg.text}
