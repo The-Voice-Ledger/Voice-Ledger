@@ -6,7 +6,7 @@ import {Script} from "forge-std/Script.sol";
 /**
  * @title HelperConfig
  * @notice Network-specific configurations for Voice Ledger contract deployments
- * @dev Supports Base Sepolia (testnet) and Anvil (local testing)
+ * @dev Supports Base Sepolia (testnet), 0G Galileo (testnet), 0G Mainnet, and Anvil (local testing)
  */
 contract HelperConfig is Script {
     
@@ -19,6 +19,12 @@ contract HelperConfig is Script {
         if (block.chainid == 84532) {
             // Base Sepolia testnet
             return getBaseSepoliaConfig();
+        } else if (block.chainid == 16602) {
+            // 0G Galileo testnet
+            return getZeroGConfig();
+        } else if (block.chainid == 16661) {
+            // 0G mainnet
+            return getZeroGConfig();
         } else if (block.chainid == 31337) {
             // Anvil local testing
             return getAnvilConfig();
@@ -38,6 +44,18 @@ contract HelperConfig is Script {
             baseTokenURI: "https://voiceledger.org/api/batch/{id}"
         });
         return baseSepoliaConfig;
+    }
+
+    /**
+     * @notice Get 0G Chain configuration (Galileo testnet + mainnet)
+     * @return NetworkConfig struct with 0G settings
+     */
+    function getZeroGConfig() public pure returns (NetworkConfig memory) {
+        NetworkConfig memory zgConfig = NetworkConfig({
+            requiredRole: "COOPERATIVE_MANAGER",
+            baseTokenURI: "https://voiceledger.org/api/batch/{id}"
+        });
+        return zgConfig;
     }
 
     /**

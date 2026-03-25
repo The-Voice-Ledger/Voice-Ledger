@@ -43,18 +43,21 @@ class FinancingManager:
     """Manages the DeFi financing pool, escrow, and fee distributor."""
 
     def __init__(self):
-        self.rpc_url = os.getenv("BASE_SEPOLIA_RPC_URL")
-        self.private_key = os.getenv("PRIVATE_KEY_SEP")
-        self.pool_address = os.getenv("FINANCING_POOL_ADDRESS")
-        self.escrow_address = os.getenv("TRADE_ESCROW_ADDRESS")
-        self.distributor_address = os.getenv("FEE_DISTRIBUTOR_ADDRESS")
-        self.usdc_address = os.getenv("USDC_ADDRESS")
+        # Resolve chain using shared helper (supports 0G Chain and Base Sepolia)
+        from blockchain.blockchain_anchor import _resolve_chain_config
+        self.rpc_url, self.private_key, self.pool_address, self._network = \
+            _resolve_chain_config('FINANCING_POOL_ADDRESS', 'ZG_FINANCING_POOL_ADDRESS')
+        _, _, self.escrow_address, _ = \
+            _resolve_chain_config('TRADE_ESCROW_ADDRESS', 'ZG_TRADE_ESCROW_ADDRESS')
+        _, _, self.distributor_address, _ = \
+            _resolve_chain_config('FEE_DISTRIBUTOR_ADDRESS', 'ZG_FEE_DISTRIBUTOR_ADDRESS')
+        self.usdc_address = os.getenv('USDC_ADDRESS')
 
         missing = [
             k
             for k, v in {
-                "BASE_SEPOLIA_RPC_URL": self.rpc_url,
-                "PRIVATE_KEY_SEP": self.private_key,
+                "RPC_URL": self.rpc_url,
+                "PRIVATE_KEY": self.private_key,
                 "FINANCING_POOL_ADDRESS": self.pool_address,
                 "TRADE_ESCROW_ADDRESS": self.escrow_address,
                 "FEE_DISTRIBUTOR_ADDRESS": self.distributor_address,
@@ -91,7 +94,8 @@ class FinancingManager:
         )
 
         logger.info(
-            "FinancingManager initialised - pool=%s escrow=%s chain=%d",
+            "FinancingManager initialised - network=%s pool=%s escrow=%s chain=%d",
+            self._network,
             self.pool_address,
             self.escrow_address,
             self.w3.eth.chain_id,

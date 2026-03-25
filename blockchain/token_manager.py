@@ -39,14 +39,15 @@ class CoffeeBatchTokenManager:
     def __init__(self):
         """Initialize Web3 connection and contract"""
         
-        self.rpc_url = os.getenv('BASE_SEPOLIA_RPC_URL')
-        self.private_key = os.getenv('PRIVATE_KEY_SEP')
-        self.contract_address = os.getenv('COFFEE_BATCH_TOKEN_ADDRESS')
+        # Resolve chain - supports 0G Chain and Base Sepolia
+        from blockchain.blockchain_anchor import _resolve_chain_config
+        self.rpc_url, self.private_key, self.contract_address, self._network = \
+            _resolve_chain_config('COFFEE_BATCH_TOKEN_ADDRESS', 'ZG_COFFEE_BATCH_TOKEN_ADDRESS')
         
         if not all([self.rpc_url, self.private_key, self.contract_address]):
             raise ValueError(
                 "Missing required environment variables: "
-                "BASE_SEPOLIA_RPC_URL, PRIVATE_KEY_SEP, COFFEE_BATCH_TOKEN_ADDRESS"
+                "COFFEE_BATCH_TOKEN_ADDRESS (or ZG_COFFEE_BATCH_TOKEN_ADDRESS when BLOCKCHAIN_NETWORK=0g)"
             )
         
         # Initialize Web3
@@ -81,8 +82,8 @@ class CoffeeBatchTokenManager:
             abi=abi
         )
         
-        logger.info("CoffeeBatchTokenManager initialized  chain=%s  wallet=%s  contract=%s",
-                    self.w3.eth.chain_id, self.account.address, self.contract_address)
+        logger.info("CoffeeBatchTokenManager initialized  network=%s  chain=%s  wallet=%s  contract=%s",
+                    self._network, self.w3.eth.chain_id, self.account.address, self.contract_address)
     
     def mint_batch(
         self,

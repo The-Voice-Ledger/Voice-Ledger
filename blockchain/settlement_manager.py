@@ -45,17 +45,18 @@ _COOP_COMMITMENT_OFFSET = 3_000_000_000
 
 
 class SettlementManager:
-    """Interact with the deployed SettlementContract on Base Sepolia."""
+    """Interact with the deployed SettlementContract on Base Sepolia or 0G Chain."""
 
     def __init__(self):
-        self.rpc_url = os.getenv("BASE_SEPOLIA_RPC_URL")
-        self.private_key = os.getenv("PRIVATE_KEY_SEP")
-        self.contract_address = os.getenv("SETTLEMENT_CONTRACT_ADDRESS")
+        # Resolve chain - supports 0G Chain and Base Sepolia
+        from blockchain.blockchain_anchor import _resolve_chain_config
+        self.rpc_url, self.private_key, self.contract_address, self._network = \
+            _resolve_chain_config('SETTLEMENT_CONTRACT_ADDRESS', 'ZG_SETTLEMENT_CONTRACT_ADDRESS')
 
         if not all([self.rpc_url, self.private_key, self.contract_address]):
             raise ValueError(
-                "Missing env vars: BASE_SEPOLIA_RPC_URL, PRIVATE_KEY_SEP, "
-                "SETTLEMENT_CONTRACT_ADDRESS"
+                "Missing env vars: SETTLEMENT_CONTRACT_ADDRESS "
+                "(or ZG_SETTLEMENT_CONTRACT_ADDRESS when BLOCKCHAIN_NETWORK=0g)"
             )
 
         self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
@@ -77,7 +78,8 @@ class SettlementManager:
             address=Web3.to_checksum_address(self.contract_address), abi=abi
         )
         logger.info(
-            "SettlementManager ready  chain=%s  account=%s  contract=%s",
+            "SettlementManager ready  network=%s  chain=%s  account=%s  contract=%s",
+            self._network,
             self.w3.eth.chain_id,
             self.account.address,
             self.contract_address,

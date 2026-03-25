@@ -30,21 +30,52 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 load_dotenv()
 
+def _resolve_chain_config(contract_env_base: str, contract_env_zg: str) -> tuple:
+    """Resolve RPC URL, private key, and contract address based on BLOCKCHAIN_NETWORK.
+    
+    Returns (rpc_url, private_key, contract_address, network_name).
+    Falls back to Base Sepolia when 0G vars are missing.
+    """
+    network = os.getenv('BLOCKCHAIN_NETWORK', 'base').lower()
+    
+    if network == '0g':
+        rpc_url = os.getenv('OG_GALLILEO_TESTNET_RPC_URL')
+        private_key = os.getenv('ZG_PRIVATE_KEY') or os.getenv('PRIVATE_KEY_SEP')
+        contract_address = os.getenv(contract_env_zg)
+        # Fall back to Base Sepolia if 0G contract not deployed yet
+        if not contract_address:
+            logger.warning("0G contract %s not set, falling back to Base Sepolia", contract_env_zg)
+            rpc_url = os.getenv('BASE_SEPOLIA_RPC_URL')
+            private_key = os.getenv('PRIVATE_KEY_SEP')
+            contract_address = os.getenv(contract_env_base)
+            network = 'base (fallback)'
+        else:
+            network = '0g'
+    else:
+        rpc_url = os.getenv('BASE_SEPOLIA_RPC_URL')
+        private_key = os.getenv('PRIVATE_KEY_SEP')
+        contract_address = os.getenv(contract_env_base)
+        network = 'base'
+    
+    return rpc_url, private_key, contract_address, network
+
+
 class BlockchainAnchor:
     """Manages blockchain anchoring of EPCIS events"""
     
     def __init__(self):
         """Initialize Web3 connection and contract"""
         
-        # Load configuration
-        self.rpc_url = os.getenv('BASE_SEPOLIA_RPC_URL')
-        self.private_key = os.getenv('PRIVATE_KEY_SEP')
-        self.contract_address = os.getenv('EPCIS_EVENT_ANCHOR_ADDRESS')
+        # Load configuration - supports 0G Chain and Base Sepolia
+        self.rpc_url, self.private_key, self.contract_address, self._network = \
+            _resolve_chain_config('EPCIS_EVENT_ANCHOR_ADDRESS', 'ZG_EPCIS_ANCHOR_ADDRESS')
         
         if not all([self.rpc_url, self.private_key, self.contract_address]):
             raise ValueError(
-                "Missing required environment variables: "
-                "BASE_SEPOLIA_RPC_URL, PRIVATE_KEY_SEP, EPCIS_EVENT_ANCHOR_ADDRESS"
+                "Missing required environment variables for blockchain anchoring. "
+                "Set BLOCKCHAIN_NETWORK=base with BASE_SEPOLIA_RPC_URL, PRIVATE_KEY_SEP, "
+                "EPCIS_EVENT_ANCHOR_ADDRESS or BLOCKCHAIN_NETWORK=0g with "
+                "OG_GALLILEO_TESTNET_RPC_URL, ZG_PRIVATE_KEY, ZG_EPCIS_ANCHOR_ADDRESS"
             )
         
         # Initialize Web3
@@ -73,8 +104,8 @@ class BlockchainAnchor:
             abi=abi
         )
         
-        logger.info("BlockchainAnchor initialized  chain=%s  account=%s  contract=%s",
-                    self.w3.eth.chain_id, self.account.address, self.contract_address)
+        logger.info("BlockchainAnchor initialized  network=%s  chain=%s  account=%s  contract=%s",
+                    self._network, self.w3.eth.chain_id, self.account.address, self.contract_address)
     
     def anchor_event(
         self,
