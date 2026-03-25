@@ -86,17 +86,43 @@ def _registry():
     return get_tool_registry()
 
 
+# Tools that anonymous / guest users may call (read-only)
+READ_ONLY_TOOL_NAMES = {
+    "query_batches", "search_knowledge",
+    "browse_rfqs", "list_my_offers",
+    "check_eudr_compliance", "check_mass_balance",
+    "get_dpp", "get_container_dpp",
+    "trace_lineage", "validate_dpp",
+    "list_pending_verifications",
+    "check_blockchain_anchor", "get_token_info",
+    "verify_batch_hash",
+    "check_don_attestation", "get_don_provenance_metrics",
+    "browse_containers", "browse_pools",
+    "list_my_commitments", "check_payment_status",
+    "check_financing_pool", "check_trade_financing",
+}
+
+
 async def _exec(ctx: RunContext, tool_name: str, args: dict) -> str:
     """
     Call a registry handler and push an action card with the result data.
     Returns the voice-friendly message string.
     """
+    # ── Anonymous / guest hard gate ──
+    uid = _uid(ctx)
+    if (uid is None or uid == 0) and tool_name not in READ_ONLY_TOOL_NAMES:
+        return (
+            f"Sorry, {tool_name.replace('_', ' ')} requires a signed-in account. "
+            "You can sign in from the navigation bar, or register via Telegram "
+            "at t.me/voice_ledger_bot. Is there anything else I can look up for you?"
+        )
+
     handler = _registry().get(tool_name)
     if not handler:
         return f"Tool '{tool_name}' is not available."
 
     with _get_db() as db:
-        message, data = handler(db, args, user_id=_uid(ctx), user_did=_did(ctx))
+        message, data = handler(db, args, user_id=uid, user_did=_did(ctx))
 
     # Send a visual card unless it's an error-only response
     if data and not data.get("error"):
@@ -896,34 +922,49 @@ RULES:
 
 
 # =====================================================================
-# All 40 tools grouped logically
+# Tool sets — guests see only read-only tools; registered users see all
 # =====================================================================
 
+# Read-only tools (safe for guests / anonymous users)
+GUEST_TOOLS = [
+    query_batches, search_knowledge,
+    browse_rfqs, list_my_offers,
+    browse_containers, browse_pools, list_my_commitments,
+    check_eudr_compliance, check_mass_balance,
+    get_dpp, get_container_dpp, trace_lineage, validate_dpp,
+    list_pending_verifications,
+    check_blockchain_anchor, get_token_info, verify_batch_hash,
+    check_don_attestation, get_don_provenance_metrics,
+    check_payment_status,
+    check_financing_pool, check_trade_financing,
+]
+
+# All 40 tools (registered / authenticated users)
 ALL_TOOLS = [
-    # Supply chain recording
+    # Supply chain recording (write)
     record_commission, record_shipment, record_receipt,
     record_transformation, pack_batches, unpack_batches, split_batch,
-    # Queries / knowledge
+    # Queries / knowledge (read)
     query_batches, search_knowledge,
-    # Marketplace
+    # Marketplace (mixed)
     create_rfq, browse_rfqs, submit_offer, accept_offer, list_my_offers,
-    # Containers & pools
+    # Containers & pools (mixed)
     browse_containers, purchase_container,
     browse_pools, commit_to_pool, list_my_commitments,
-    # Compliance
+    # Compliance (read)
     check_eudr_compliance, check_mass_balance,
-    # DPP / traceability
+    # DPP / traceability (read)
     get_dpp, get_container_dpp, trace_lineage, validate_dpp,
-    # Verification
+    # Verification (mixed)
     list_pending_verifications, verify_batch,
-    # Blockchain
+    # Blockchain (read)
     check_blockchain_anchor, get_token_info, verify_batch_hash,
-    # Chainlink DON / CRE
+    # Chainlink DON / CRE (mixed)
     request_don_attestation, check_don_attestation, get_don_provenance_metrics,
-    # Settlement
+    # Settlement (mixed)
     confirm_payment, check_payment_status,
     record_cooperative_payout, confirm_payment_received,
-    # DeFi
+    # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
 ]
 
@@ -932,13 +973,32 @@ ALL_TOOLS = [
 # Agent class
 # =====================================================================
 
-class VoiceLedgerAgent(Agent):
-    """LiveKit voice agent for Voice Ledger — all 40 supply chain tools."""
+# Guest-mode addendum appended to system prompt for anonymous sessions
+GUEST_PROMPT_ADDENDUM = """
 
-    def __init__(self, user_name: str = "there"):
+AUTHENTICATION STATUS: This user is a GUEST (not signed in).
+- They CAN browse and query: look up batches, browse RFQs, view DPPs,
+  check compliance, inspect blockchain anchors, and search knowledge.
+- They CANNOT perform any write operations: creating batches, RFQs,
+  offers, purchases, commitments, payments, verifications, or financing.
+- If they ask for a write action, do NOT attempt it. Instead, warmly
+  explain that they need to sign in first. Give two options:
+  1. Click 'Sign In' in the navigation bar
+  2. Register via Telegram: https://t.me/voice_ledger_bot
+- Then ask if there is anything you can look up for them.
+"""
+
+
+class VoiceLedgerAgent(Agent):
+    """LiveKit voice agent for Voice Ledger."""
+
+    def __init__(self, user_name: str = "there", is_guest: bool = False):
+        prompt = SYSTEM_PROMPT + f"\nThe user's name is {user_name}."
+        if is_guest:
+            prompt += GUEST_PROMPT_ADDENDUM
         super().__init__(
-            instructions=SYSTEM_PROMPT + f"\nThe user's name is {user_name}.",
-            tools=ALL_TOOLS,
+            instructions=prompt,
+            tools=GUEST_TOOLS if is_guest else ALL_TOOLS,
         )
 
 
@@ -966,10 +1026,11 @@ async def handle_session(ctx: agents.JobContext):
     user_name = metadata.get("name", "there")
     user_id = metadata.get("user_id", "anonymous")
     user_role = metadata.get("role", "user")
+    is_guest = (not user_id or str(user_id) == "anonymous" or str(user_id) == "0")
 
     logger.info(
-        "Session started: user=%s (id=%s, role=%s)",
-        user_name, user_id, user_role,
+        "Session started: user=%s (id=%s, role=%s, guest=%s)",
+        user_name, user_id, user_role, is_guest,
     )
 
     session = AgentSession(
@@ -982,39 +1043,48 @@ async def handle_session(ctx: agents.JobContext):
             "user_did": metadata.get("user_did"),
             "name": user_name,
             "role": user_role,
+            "is_guest": is_guest,
         },
     )
 
     await session.start(
-        agent=VoiceLedgerAgent(user_name=user_name),
+        agent=VoiceLedgerAgent(user_name=user_name, is_guest=is_guest),
         room=ctx.room,
         room_options=room_io.RoomOptions(),
     )
 
     # Build a role-aware greeting that tells users what they can actually do
-    role_hints = {
-        "farmer": (
-            "You can register new coffee batches, check their status, "
-            "track shipments, and generate Digital Product Passports."
-        ),
-        "cooperative_manager": (
-            "You can verify batches, browse buyer RFQs, submit offers, "
-            "manage settlements, and request financing advances."
-        ),
-        "buyer": (
-            "You can create Requests for Quote, browse container offerings, "
-            "join shared-buying pools, confirm payments, and pull up DPPs."
-        ),
-        "admin": (
-            "You have full access — batch management, marketplace, "
-            "verification, settlement payouts, blockchain tools, and DeFi."
-        ),
-    }
-    what_i_can_do = role_hints.get(
-        user_role,
-        "I can help you record coffee batches, look up traceability data, "
-        "manage marketplace transactions, check compliance, and more.",
-    )
+    if is_guest:
+        what_i_can_do = (
+            "As a guest, I can help you explore — browse coffee batches, "
+            "look up Digital Product Passports, check EUDR compliance, "
+            "view marketplace listings, and search our knowledge base. "
+            "If you'd like to do more, just sign in!"
+        )
+    else:
+        role_hints = {
+            "farmer": (
+                "You can register new coffee batches, check their status, "
+                "track shipments, and generate Digital Product Passports."
+            ),
+            "cooperative_manager": (
+                "You can verify batches, browse buyer RFQs, submit offers, "
+                "manage settlements, and request financing advances."
+            ),
+            "buyer": (
+                "You can create Requests for Quote, browse container offerings, "
+                "join shared-buying pools, confirm payments, and pull up DPPs."
+            ),
+            "admin": (
+                "You have full access — batch management, marketplace, "
+                "verification, settlement payouts, blockchain tools, and DeFi."
+            ),
+        }
+        what_i_can_do = role_hints.get(
+            user_role,
+            "I can help you record coffee batches, look up traceability data, "
+            "manage marketplace transactions, check compliance, and more.",
+        )
 
     greeting = (
         f"Greet {user_name} warmly by name. Then briefly tell them what you "

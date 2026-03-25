@@ -653,6 +653,7 @@ class AgentExecutor:
         "check_don_attestation", "get_don_provenance_metrics",
         "browse_containers", "browse_pools",
         "list_my_commitments", "check_payment_status",
+        "check_financing_pool", "check_trade_financing",
     }
 
     def _execute_tool(
