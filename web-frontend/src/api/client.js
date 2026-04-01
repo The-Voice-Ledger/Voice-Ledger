@@ -6,7 +6,7 @@
 const BASE = '' // same-origin in production; Vite proxy in dev
 
 export async function apiFetch(path, opts = {}) {
-  const token = localStorage.getItem('vl_token')
+  const token = localStorage.getItem('voice-ledger-auth') ? JSON.parse(localStorage.getItem('voice-ledger-auth')).state?.token : null
   const headers = { ...(opts.headers || {}) }
 
   if (token) {
@@ -22,7 +22,13 @@ export async function apiFetch(path, opts = {}) {
 
   if (res.status === 401) {
     // Token expired - clear and let UI redirect
-    localStorage.removeItem('vl_token')
+    const authData = localStorage.getItem('voice-ledger-auth')
+    if (authData) {
+      const parsed = JSON.parse(authData)
+      if (parsed.state?.token) {
+        localStorage.setItem('voice-ledger-auth', JSON.stringify({ ...parsed, state: { ...parsed.state, token: null, user: null, isAuthenticated: false } }))
+      }
+    }
     window.dispatchEvent(new Event('vl:auth-expired'))
   }
 
