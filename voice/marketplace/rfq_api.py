@@ -330,6 +330,7 @@ def list_rfqs(
     status: Optional[str] = Query(None, description="Filter by status (OPEN, FULFILLED, etc.)"),
     variety: Optional[str] = Query(None, description="Filter by variety"),
     user_id: Optional[int] = Query(None, description="Filter by buyer (user_id)"),
+    buyer_id: Optional[int] = Query(None, alias="buyer_id", description="Filter by buyer (buyer_id)"),
     limit: int = Query(50, le=100, description="Max results"),
     db: Session = Depends(get_db)
 ):
@@ -342,7 +343,11 @@ def list_rfqs(
     - status: OPEN, PARTIALLY_FILLED, FULFILLED, CANCELLED
     - variety: Coffee variety
     - user_id: Buyer's user ID
+    - buyer_id: Buyer's user ID (alias for user_id)
     """
+    # Use buyer_id if provided, otherwise use user_id
+    effective_user_id = buyer_id if buyer_id is not None else user_id
+    
     # Eager load relationships to avoid N+1 queries
     query = db.query(RFQ).options(
         joinedload(RFQ.buyer).joinedload(UserIdentity.organization),
@@ -353,8 +358,8 @@ def list_rfqs(
         query = query.filter(RFQ.status == status)
     if variety:
         query = query.filter(RFQ.variety == variety)
-    if user_id:
-        query = query.filter(RFQ.buyer_id == user_id)
+    if effective_user_id:
+        query = query.filter(RFQ.buyer_id == effective_user_id)
     
     rfqs = query.order_by(RFQ.created_at.desc()).limit(limit).all()
     
