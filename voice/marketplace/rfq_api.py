@@ -148,18 +148,54 @@ def get_current_user(user_id: int, db: Session) -> UserIdentity:
 
 def generate_rfq_number(db: Session) -> str:
     """Generate unique RFQ number"""
-    count = db.query(RFQ).count() + 1
-    return f"RFQ-{count:06d}"
+    # Get the highest existing RFQ number
+    max_result = db.query(func.max(RFQ.rfq_number)).filter(RFQ.rfq_number.like('RFQ-%')).scalar()
+    
+    if max_result:
+        # Extract numeric part and increment
+        try:
+            current_num = int(max_result.split('-')[1])
+            next_num = current_num + 1
+        except (ValueError, IndexError):
+            next_num = 1
+    else:
+        next_num = 1
+    
+    return f"RFQ-{next_num:06d}"
 
 def generate_offer_number(db: Session) -> str:
     """Generate unique offer number"""
-    count = db.query(RFQOffer).count() + 1
-    return f"OFF-{count:06d}"
+    # Get the highest existing offer number
+    max_result = db.query(func.max(RFQOffer.offer_number)).filter(RFQOffer.offer_number.like('OFF-%')).scalar()
+    
+    if max_result:
+        # Extract numeric part and increment
+        try:
+            current_num = int(max_result.split('-')[1])
+            next_num = current_num + 1
+        except (ValueError, IndexError):
+            next_num = 1
+    else:
+        next_num = 1
+    
+    return f"OFF-{next_num:06d}"
 
 def generate_acceptance_number(db: Session) -> str:
     """Generate unique acceptance number"""
-    count = db.query(RFQAcceptance).count() + 1
-    return f"ACC-{count:06d}"
+    # Get the highest existing acceptance number
+    max_result = db.query(func.max(RFQAcceptance.acceptance_number)).filter(RFQAcceptance.acceptance_number.like('ACC-%')).scalar()
+    
+    if max_result:
+        # Extract numeric part and increment
+        try:
+            current_num = int(max_result.split('-')[1])
+            next_num = current_num + 1
+        except (ValueError, IndexError):
+            next_num = 1
+    else:
+        next_num = 1
+    
+    return f"ACC-{next_num:06d}"
 
 def calculate_relevance_score(rfq: RFQ, cooperative: Organization, db: Session) -> float:
     """
