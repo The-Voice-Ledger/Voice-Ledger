@@ -1374,8 +1374,20 @@ class ToolRegistry:
             return ("Quantity must be greater than zero.", {"error": "invalid_quantity"})
 
         # Generate RFQ number
-        count = db.query(RFQ).count() + 1
-        rfq_number = f"RFQ-{count:06d}"
+        from sqlalchemy import func
+        max_result = db.query(func.max(RFQ.rfq_number)).filter(RFQ.rfq_number.like('RFQ-%')).scalar()
+        
+        if max_result:
+            # Extract numeric part and increment
+            try:
+                current_num = int(max_result.split('-')[1])
+                next_num = current_num + 1
+            except (ValueError, IndexError):
+                next_num = 1
+        else:
+            next_num = 1
+        
+        rfq_number = f"RFQ-{next_num:06d}"
 
         rfq = RFQ(
             buyer_id=user.id,
