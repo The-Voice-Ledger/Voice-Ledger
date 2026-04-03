@@ -1519,8 +1519,20 @@ class ToolRegistry:
         if quantity <= 0 or price <= 0:
             return ("Quantity and price must be greater than zero.", {"error": "invalid_values"})
 
-        count = db.query(RFQOffer).count() + 1
-        offer_number = f"OFF-{count:06d}"
+        # Generate unique offer number using MAX instead of COUNT
+        from sqlalchemy import func
+        max_result = db.query(func.max(RFQOffer.offer_number)).filter(RFQOffer.offer_number.like('OFF-%')).scalar()
+        
+        if max_result:
+            try:
+                current_num = int(max_result.split('-')[1])
+                next_num = current_num + 1
+            except (ValueError, IndexError):
+                next_num = 1
+        else:
+            next_num = 1
+        
+        offer_number = f"OFF-{next_num:06d}"
 
         offer = RFQOffer(
             rfq_id=rfq.id,
