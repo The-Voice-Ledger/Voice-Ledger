@@ -690,17 +690,17 @@ def list_my_offers(
     if status:
         query = query.filter(RFQOffer.status == status)
     
-    offers = query.order_by(RFQOffer.created_at.desc()).all()
+    # Eager load organization
+    offers = query.options(joinedload(RFQOffer.cooperative)).order_by(RFQOffer.created_at.desc()).all()
     
     results = []
     for offer in offers:
-        coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
         results.append(OfferResponse(
             id=offer.id,
             offer_number=offer.offer_number,
             rfq_id=offer.rfq_id,
             cooperative_id=offer.cooperative_id,
-            cooperative_name=coop_org.name if coop_org else "Unknown",
+            cooperative_name=offer.cooperative.name if offer.cooperative else "Unknown",
             quantity_offered_kg=offer.quantity_offered_kg,
             price_per_kg=offer.price_per_kg,
             delivery_timeline=offer.delivery_timeline,
