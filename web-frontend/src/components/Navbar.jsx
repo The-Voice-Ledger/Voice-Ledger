@@ -81,7 +81,7 @@ export default function Navbar() {
           {navLink('/assistant', t('nav_assistant'))}
           {navLink('/about', t('nav_about', 'About'))}
           {navLink('/marketplace', t('nav_marketplace'))}
-          {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'))}
+          {isAuthenticated && user?.role === 'BUYER' && navLink('/my-rfqs', t('nav_my_rfqs'))}
 
           {/* Tools dropdown */}
           <div ref={toolsRef} className="relative">
@@ -168,7 +168,7 @@ export default function Navbar() {
             {navLink('/about', t('nav_about', 'About'), true)}
             {navLink('/assistant', t('nav_assistant'), true)}
             {navLink('/marketplace', t('nav_marketplace'), true)}
-            {isAuthenticated && navLink('/my-rfqs', t('nav_my_rfqs'), true)}
+            {isAuthenticated && user?.role === 'BUYER' && navLink('/my-rfqs', t('nav_my_rfqs'), true)}
             <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-stone-400">{t('nav_tools')}</p>
             {navLink('/financing', t('nav_financing'), true)}
             {navLink('/tracking', t('nav_tracking'), true)}

@@ -460,6 +460,10 @@ def list_my_rfqs(
     user = _resolve_user_from_query(db, resolved_id)
     if not user:
         raise HTTPException(401, "User not found.")
+    
+    # Role-based access: Only BUYER role can access their RFQs
+    if user.role not in ("BUYER", "ADMIN"):
+        raise HTTPException(403, f"Access denied. Only buyers can view their RFQs. Your role is {user.role}.")
 
     rfqs = (
         db.query(RFQ)

@@ -23,7 +23,7 @@ function StatusBadge({ status }) {
 
 export default function MyRFQs() {
   const { t } = useTranslation()
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
   const [rfqs, setRFQs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -46,6 +46,28 @@ export default function MyRFQs() {
   }, [isAuthenticated])
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  
+  // Role-based access: Only BUYER role can access MyRFQs
+  if (user?.role !== 'BUYER') {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-stone-900 mb-4">
+            Access Restricted
+          </h1>
+          <p className="text-stone-600 mb-6">
+            This page is only available to users with BUYER role.
+          </p>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 text-sm bg-stone-900 text-white rounded-full px-4 py-2 hover:bg-stone-800 transition"
+          >
+            Go Home
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
