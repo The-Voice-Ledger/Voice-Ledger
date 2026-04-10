@@ -503,6 +503,11 @@ def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> 
     # In production, you'd look up actual GLN from a location registry
     destination_gln = "0614141000027"  # Default warehouse GLN
     
+    # Find farmer identity for EPCIS events (submitter_id must reference farmer_identities.id)
+    from database.models import FarmerIdentity
+    farmer_identity = db.query(FarmerIdentity).filter_by(farmer_id=f"FARMER-{user_id}").first()
+    submitter_farmer_id = farmer_identity.id if farmer_identity else None
+    
     # Create GS1 EPCIS 2.0 shipment event using dedicated module
     event_result = create_shipment_event(
         db=db,
@@ -515,7 +520,7 @@ def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> 
         origin=batch.origin,
         shipper_did=shipper_did,
         batch_db_id=batch.id,
-        submitter_db_id=user_id
+        submitter_db_id=submitter_farmer_id
     )
     
     if not event_result:
