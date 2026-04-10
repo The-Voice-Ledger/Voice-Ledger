@@ -101,7 +101,7 @@ bcrypt==4.1.2              # Password hashing for admin auth
 # -----------------------------
 # RAG & Document Indexing
 # -----------------------------
-chromadb==0.4.24
+chromadb==0.5.0
 PyPDF2==3.0.1
 
 # LiveKit agent/plugin packages moved to requirements-worker.txt
