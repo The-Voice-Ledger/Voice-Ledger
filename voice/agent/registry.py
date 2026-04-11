@@ -1321,6 +1321,10 @@ class ToolRegistry:
         query_text = args.get("query", "")
         
         try:
+            # Load environment variables
+            from dotenv import load_dotenv
+            load_dotenv()
+            
             from voice.rag.hybrid_router import search_documentation
             results = search_documentation(query_text, top_k=3)
             
@@ -1341,9 +1345,13 @@ class ToolRegistry:
             )
         except Exception as e:
             logger.warning(f"Knowledge search failed: {e}")
+            # Return a helpful response instead of error
             return (
-                "Knowledge base search is currently unavailable",
-                {"error": str(e)},
+                f"I couldn't search the knowledge base for '{query_text}'. "
+                f"However, I can help you based on my training. "
+                f"For specific documentation, please check the Voice Ledger guides "
+                f"or contact support if the knowledge base should be available.",
+                {"error": str(e), "fallback": True},
             )
 
     # ------------------------------------------------------------------
