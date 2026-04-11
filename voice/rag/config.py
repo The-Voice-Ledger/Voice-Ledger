@@ -138,6 +138,7 @@ def get_chroma_client():
         raise ImportError("chromadb not installed. Run: pip install chromadb")
     
     if CHROMA_CLIENT_TYPE == "cloud":
+        # Always use external ChromaDB Cloud (both local and Railway)
         if not CHROMA_API_KEY or not CHROMA_TENANT or not CHROMA_DATABASE:
             raise ValueError(
                 "ChromaDB Cloud requires CHROMA_API_KEY, CHROMA_TENANT, and CHROMA_DATABASE environment variables. "
@@ -149,11 +150,12 @@ def get_chroma_client():
         print(f"Database: {CHROMA_DATABASE}")
         print(f"API Key: {CHROMA_API_KEY[:15]}...")
         
-        # Use CloudClient for ChromaDB Cloud (not HttpClient)
-        return chromadb.CloudClient(
-            api_key=CHROMA_API_KEY,
-            tenant=CHROMA_TENANT,
-            database=CHROMA_DATABASE
+        
+        return chromadb.HttpClient(
+            host="api.trychroma.com",
+            port=443,
+            ssl=True,
+            headers={"Authorization": f"Bearer {CHROMA_API_KEY}"}
         )
     else:
         print(f"Using local ChromaDB: {CHROMA_DB_PATH}")

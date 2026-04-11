@@ -149,18 +149,23 @@ def search_documentation(
     
     try:
         # Get ChromaDB client
+        print(f"DEBUG search_documentation: Getting ChromaDB client for query: '{query}'")
         chroma_client = get_chroma_client()
+        print(f"DEBUG search_documentation: Got client: {type(chroma_client).__name__}")
         
         # Get collection with OpenAI embeddings
+        print(f"DEBUG search_documentation: Creating OpenAI embedding function")
         openai_ef = embedding_functions.OpenAIEmbeddingFunction(
             api_key=os.getenv("OPENAI_API_KEY"),
             model_name=EMBEDDING_MODEL
         )
         
+        print(f"DEBUG search_documentation: Getting collection 'voice_ledger_docs_v2'")
         collection = chroma_client.get_collection(
             name="voice_ledger_docs_v2",
             embedding_function=openai_ef
         )
+        print(f"DEBUG search_documentation: Successfully got collection")
         
         # Search
         results = collection.query(
