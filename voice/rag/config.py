@@ -149,31 +149,28 @@ def get_chroma_client():
         print(f"Tenant: {CHROMA_TENANT}")
         print(f"Database: {CHROMA_DATABASE}")
         print(f"API Key: {CHROMA_API_KEY[:15]}...")
-        
-        import socket
-        import ssl
-    
-        # Test DNS resolution
+
         try:
-            ip = socket.gethostbyname("api.trychroma.com")
-            print(f"✅ DNS resolved api.trychroma.com to {ip}")
+            print(f"DEBUG: API Key length: {len(CHROMA_API_KEY)}")
+            print(f"DEBUG: API Key starts with: {CHROMA_API_KEY[:10]}")
+            print(f"DEBUG: Tenant ID: {CHROMA_TENANT}")
+            print(f"DEBUG: Database: {CHROMA_DATABASE}")
+            
+            client = chromadb.CloudClient(
+                api_key=CHROMA_API_KEY,
+                tenant=CHROMA_TENANT,
+                database=CHROMA_DATABASE
+            )
+            print(f"DEBUG: CloudClient created successfully")
+            return client
         except Exception as e:
-            print(f"❌ DNS resolution failed: {e}")
-    
-        # Test SSL connection
-        try:
-            context = ssl.create_default_context()
-            with socket.create_connection(("api.trychroma.com", 443), timeout=5) as sock:
-               with context.wrap_socket(sock, server_hostname="api.trychroma.com") as ssock:
-                  print(f"✅ SSL connection successful")
-        except Exception as e:
-            print(f"❌ SSL connection failed: {e}")
-    
-        return chromadb.CloudClient(
-            api_key=CHROMA_API_KEY,
-            tenant=CHROMA_TENANT,
-            database=CHROMA_DATABASE
-        )
+            print(f"ERROR: CloudClient initialization failed")
+            print(f"ERROR: Exception type: {type(e).__name__}")
+            print(f"ERROR: Exception message: {str(e)}")
+            print(f"ERROR: Full traceback:")
+            import traceback
+            traceback.print_exc()
+            raise
     else:
         print(f"Using local ChromaDB: {CHROMA_DB_PATH}")
         return chromadb.PersistentClient(
