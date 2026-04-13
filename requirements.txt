@@ -82,7 +82,7 @@ twilio==9.0.4              # Twilio SDK for voice/SMS
 phonenumbers==8.13.27      # Phone number parsing and validation
 
 # Phase 4: Telegram Bot
-python-telegram-bot==20.7  # Telegram Bot API
+python-telegram-bot>=21.0  # Telegram Bot API
 
 # -----------------------------
 # Database (Neon PostgreSQL)
