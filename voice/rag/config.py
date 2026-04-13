@@ -150,12 +150,27 @@ def get_chroma_client():
         print(f"Database: {CHROMA_DATABASE}")
         print(f"API Key: {CHROMA_API_KEY[:15]}...")
         
-        
-        return chromadb.HttpClient(
-            host="api.trychroma.com",
-            port=443,
-            ssl=True,
-            headers={"Authorization": f"Bearer {CHROMA_API_KEY}"},
+        import socket
+        import ssl
+    
+        # Test DNS resolution
+        try:
+            ip = socket.gethostbyname("api.trychroma.com")
+            print(f"✅ DNS resolved api.trychroma.com to {ip}")
+        except Exception as e:
+            print(f"❌ DNS resolution failed: {e}")
+    
+        # Test SSL connection
+        try:
+            context = ssl.create_default_context()
+            with socket.create_connection(("api.trychroma.com", 443), timeout=5) as sock:
+               with context.wrap_socket(sock, server_hostname="api.trychroma.com") as ssock:
+                  print(f"✅ SSL connection successful")
+        except Exception as e:
+            print(f"❌ SSL connection failed: {e}")
+    
+        return chromadb.CloudClient(
+            api_key=CHROMA_API_KEY,
             tenant=CHROMA_TENANT,
             database=CHROMA_DATABASE
         )
