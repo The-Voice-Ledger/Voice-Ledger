@@ -155,7 +155,9 @@ def get_chroma_client():
             host="api.trychroma.com",
             port=443,
             ssl=True,
-            headers={"Authorization": f"Bearer {CHROMA_API_KEY}"}
+            headers={"Authorization": f"Bearer {CHROMA_API_KEY}"},
+            tenant=CHROMA_TENANT,
+            database=CHROMA_DATABASE
         )
     else:
         print(f"Using local ChromaDB: {CHROMA_DB_PATH}")
