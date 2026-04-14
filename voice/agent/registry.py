@@ -1239,6 +1239,101 @@ class ToolRegistry:
                 {"error": str(e)},
             )
 
+    def _cancel_trade(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Cancel a pending or active financed trade."""
+        from database.models import UserIdentity, RFQAcceptance, RFQOffer
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or user.role not in ("cooperative", "admin"):
+            return ("Only cooperatives can cancel trades.", {"error": "forbidden"})
+
+        trade_id = args.get("trade_id")
+        acceptance_number = args.get("acceptance_number")
+
+        # Look up trade details from acceptance if provided
+        if acceptance_number:
+            acc = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number
+            ).first()
+            if not acc:
+                return (
+                    f"Acceptance {acceptance_number} not found.",
+                    {"error": "not_found"},
+                )
+            offer = db.query(RFQOffer).filter_by(id=acc.offer_id).first()
+            if not offer or user.organization_id != offer.cooperative_id:
+                return (
+                    "You are not the cooperative for this acceptance.",
+                    {"error": "forbidden"},
+                )
+        elif not trade_id:
+            return (
+                "Please provide a trade_id or acceptance_number.",
+                {"error": "missing_id"},
+            )
+        else:
+            acc = None
+
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+
+            # Find the trade ID if we have acceptance
+            if acceptance_number and acc:
+                # Try sequential trade IDs to find matching acceptance
+                trade = None
+                for tid in range(1, 100):
+                    t = mgr.get_trade(tid)
+                    if not t:
+                        break
+                    if t.get("farm_id") and acceptance_number in str(t.get("farm_id", "")):
+                        trade = t
+                        trade_id = tid
+                        break
+                if not trade:
+                    return (
+                        f"No financed trade found for acceptance {acceptance_number}.",
+                        {"error": "not_found"},
+                    )
+            else:
+                trade = mgr.get_trade(trade_id)
+                if not trade:
+                    return (f"Trade {trade_id} not found.", {"error": "not_found"})
+
+            # Cancel trade on blockchain
+            tx_hash = mgr.cancel_trade(trade_id)
+            if tx_hash:
+                # Update acceptance status in database
+                if acc:
+                    acc.delivery_status = "CANCELLED"
+                    db.commit()
+
+                return (
+                    f"Trade #{trade_id} cancelled successfully.\n"
+                    f"  TX: {tx_hash}\n"
+                    f"  Collateral has been returned to your wallet.\n"
+                    f"  Pool liquidity has been restored.",
+                    {
+                        "tx_hash": tx_hash,
+                        "trade_id": trade_id,
+                        "acceptance_number": acceptance_number,
+                    },
+                )
+            else:
+                return (
+                    "Trade cancellation failed. Check trade status and try again.",
+                    {"error": "tx_failed"},
+                )
+        except Exception as e:
+            logger.error("cancel_trade failed: %s", e)
+            return (
+                f"Trade cancellation failed: {e}",
+                {"error": str(e)},
+            )
+
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
         self._tools[name] = handler

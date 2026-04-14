@@ -1351,6 +1351,35 @@ CONFIRM_TRADE_DELIVERY = {
     },
 }
 
+# Tool: cancel_trade  (WRITE - cancel pending trade)
+# ---------------------------------------------------------------------------
+CANCEL_TRADE = {
+    "type": "function",
+    "function": {
+        "name": "cancel_trade",
+        "description": (
+            "Cancel a pending or active financed trade. Returns collateral "
+            "to the cooperative and frees up pool liquidity. Use when a "
+            "cooperative says 'cancel trade', 'cancel financing', 'abort trade', "
+            "'cancel shipment for trade X'. Only cooperative or admin roles."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "description": "On-chain trade ID from escrow contract",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to look up associated trade",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -1491,5 +1520,6 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     REQUEST_FINANCING_ADVANCE,
     CHECK_TRADE_FINANCING,
     CONFIRM_TRADE_DELIVERY,
+    CANCEL_TRADE,
 ]
 
