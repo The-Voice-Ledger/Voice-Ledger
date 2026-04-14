@@ -1380,6 +1380,35 @@ CANCEL_TRADE = {
     },
 }
 
+# Tool: mark_default  (WRITE - mark trade as defaulted)
+# ---------------------------------------------------------------------------
+MARK_DEFAULT = {
+    "type": "function",
+    "function": {
+        "name": "mark_default",
+        "description": (
+            "Mark a financed trade as defaulted when delivery deadline passes. "
+            "Liquidates collateral and distributes to pool investors. Use when a "
+            "cooperative says 'mark trade as default', 'trade defaulted', "
+            "'handle default for trade X'. Only admin or cooperative roles."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "description": "On-chain trade ID from escrow contract",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to look up associated trade",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -1521,5 +1550,6 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_TRADE_FINANCING,
     CONFIRM_TRADE_DELIVERY,
     CANCEL_TRADE,
+    MARK_DEFAULT,
 ]
 

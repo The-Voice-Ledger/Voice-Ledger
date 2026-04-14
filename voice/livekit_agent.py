@@ -99,7 +99,8 @@ READ_ONLY_TOOL_NAMES = {
     "check_don_attestation", "get_don_provenance_metrics",
     "browse_containers", "browse_pools",
     "list_my_commitments", "check_payment_status",
-    "check_financing_pool", "check_trade_financing", "confirm_trade_delivery", "cancel_trade",
+    "check_financing_pool", "check_trade_financing", 
+    "confirm_trade_delivery", "cancel_trade", "mark_default",
 }
 
 
@@ -868,6 +869,22 @@ async def cancel_trade(
     })
 
 
+@function_tool(description=(
+    "Mark a financed trade as defaulted when delivery deadline passes. "
+    "Liquidates collateral and distributes to pool investors. "
+    "Cooperative or admin role required."
+))
+async def mark_default(
+    ctx: RunContext,
+    trade_id: Annotated[int | None, "On-chain trade ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "mark_default", {
+        "trade_id": trade_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
 # =====================================================================
 # System prompt — full capabilities
 # =====================================================================
@@ -942,6 +959,7 @@ DeFi FINANCING
 • Check trade financing status (check_trade_financing)
 • Confirm delivery and release payment (confirm_trade_delivery)
 • Cancel pending or active trade (cancel_trade)
+• Mark trade as defaulted (mark_default)
 
 RULES:
 1. Be warm, clear, and concise — the user is speaking to you live.
@@ -1001,7 +1019,7 @@ ALL_TOOLS = [
     record_cooperative_payout, confirm_payment_received,
     # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
-    confirm_trade_delivery, cancel_trade,
+    confirm_trade_delivery, cancel_trade, mark_default,
 ]
 
 

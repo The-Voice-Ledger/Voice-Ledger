@@ -1334,6 +1334,101 @@ class ToolRegistry:
                 {"error": str(e)},
             )
 
+    def _mark_default(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Mark a financed trade as defaulted."""
+        from database.models import UserIdentity, RFQAcceptance, RFQOffer
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or user.role not in ("cooperative", "admin"):
+            return ("Only cooperatives or admins can mark trades as defaulted.", {"error": "forbidden"})
+
+        trade_id = args.get("trade_id")
+        acceptance_number = args.get("acceptance_number")
+
+        # Look up trade details from acceptance if provided
+        if acceptance_number:
+            acc = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number
+            ).first()
+            if not acc:
+                return (
+                    f"Acceptance {acceptance_number} not found.",
+                    {"error": "not_found"},
+                )
+            offer = db.query(RFQOffer).filter_by(id=acc.offer_id).first()
+            if not offer or user.organization_id != offer.cooperative_id:
+                return (
+                    "You are not the cooperative for this acceptance.",
+                    {"error": "forbidden"},
+                )
+        elif not trade_id:
+            return (
+                "Please provide a trade_id or acceptance_number.",
+                {"error": "missing_id"},
+            )
+        else:
+            acc = None
+
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+
+            # Find the trade ID if we have acceptance
+            if acceptance_number and acc:
+                # Try sequential trade IDs to find matching acceptance
+                trade = None
+                for tid in range(1, 100):
+                    t = mgr.get_trade(tid)
+                    if not t:
+                        break
+                    if t.get("farm_id") and acceptance_number in str(t.get("farm_id", "")):
+                        trade = t
+                        trade_id = tid
+                        break
+                if not trade:
+                    return (
+                        f"No financed trade found for acceptance {acceptance_number}.",
+                        {"error": "not_found"},
+                    )
+            else:
+                trade = mgr.get_trade(trade_id)
+                if not trade:
+                    return (f"Trade {trade_id} not found.", {"error": "not_found"})
+
+            # Mark trade as defaulted on blockchain
+            tx_hash = mgr.mark_default(trade_id)
+            if tx_hash:
+                # Update acceptance status in database
+                if acc:
+                    acc.delivery_status = "DEFAULTED"
+                    db.commit()
+
+                return (
+                    f"Trade #{trade_id} marked as defaulted.\n"
+                    f"  TX: {tx_hash}\n"
+                    f"  Collateral is being liquidated.\n"
+                    f"  Proceeds will be distributed to pool investors.",
+                    {
+                        "tx_hash": tx_hash,
+                        "trade_id": trade_id,
+                        "acceptance_number": acceptance_number,
+                    },
+                )
+            else:
+                return (
+                    "Failed to mark trade as defaulted. Check trade status and try again.",
+                    {"error": "tx_failed"},
+                )
+        except Exception as e:
+            logger.error("mark_default failed: %s", e)
+            return (
+                f"Failed to mark trade as defaulted: {e}",
+                {"error": str(e)},
+            )
+
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
         self._tools[name] = handler
