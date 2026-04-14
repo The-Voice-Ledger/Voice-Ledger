@@ -41,13 +41,23 @@ export async function postJSON(path, body) {
     method: 'POST',
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${res.statusText}`)
+    error.status = res.status
+    error.statusText = res.statusText
+    throw error
+  }
   return res.json()
 }
 
 /** GET JSON helper */
 export async function getJSON(path) {
   const res = await apiFetch(path)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${res.statusText}`)
+    error.status = res.status
+    error.statusText = res.statusText
+    throw error
+  }
   return res.json()
 }

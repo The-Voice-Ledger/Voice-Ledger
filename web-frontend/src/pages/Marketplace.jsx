@@ -271,7 +271,16 @@ export default function Marketplace() {
       setCommitPool(null)
       load()
     } catch (e) {
-      setError(e.message)
+      // Handle different error types
+      if (e.status === 403) {
+        setError('Access denied. You may not have permission to commit to this pool.')
+      } else if (e.status === 401) {
+        setError('Please log in to commit to a pool.')
+      } else if (e.status === 400) {
+        setError(e.message || 'Invalid request. Please check your input.')
+      } else {
+        setError(e.message || 'Failed to commit to pool. Please try again.')
+      }
     } finally {
       setSubmitting(false)
     }
