@@ -1321,6 +1321,36 @@ CHECK_TRADE_FINANCING = {
     },
 }
 
+# Tool: confirm_trade_delivery  (WRITE - buyer confirms coffee delivery)
+# ---------------------------------------------------------------------------
+CONFIRM_TRADE_DELIVERY = {
+    "type": "function",
+    "function": {
+        "name": "confirm_trade_delivery",
+        "description": (
+            "Buyer confirms coffee delivery and releases payment from escrow. "
+            "This settles the trade: remaining 20% goes to cooperative, "
+            "fees are distributed to investors, and collateral is unlocked. "
+            "Use when a buyer says 'confirm delivery', 'coffee arrived', "
+            "'shipment received', 'release payment for trade X'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "description": "On-chain trade ID from escrow contract",
+                },
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to look up associated trade",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -1460,5 +1490,6 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_FINANCING_POOL,
     REQUEST_FINANCING_ADVANCE,
     CHECK_TRADE_FINANCING,
+    CONFIRM_TRADE_DELIVERY,
 ]
 

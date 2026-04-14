@@ -99,7 +99,7 @@ READ_ONLY_TOOL_NAMES = {
     "check_don_attestation", "get_don_provenance_metrics",
     "browse_containers", "browse_pools",
     "list_my_commitments", "check_payment_status",
-    "check_financing_pool", "check_trade_financing",
+    "check_financing_pool", "check_trade_financing", "confirm_trade_delivery",
 }
 
 
@@ -835,6 +835,23 @@ async def check_trade_financing(
     })
 
 
+@function_tool(description=(
+    "Buyer confirms coffee delivery and releases payment from escrow. "
+    "This settles the trade: remaining 20% goes to cooperative, "
+    "fees are distributed to investors, and collateral is unlocked. "
+    "Buyer role required."
+))
+async def confirm_trade_delivery(
+    ctx: RunContext,
+    trade_id: Annotated[int | None, "On-chain trade ID"] = None,
+    acceptance_number: Annotated[str | None, "Acceptance number"] = None,
+) -> str:
+    return await _exec(ctx, "confirm_trade_delivery", {
+        "trade_id": trade_id,
+        "acceptance_number": acceptance_number,
+    })
+
+
 # =====================================================================
 # System prompt — full capabilities
 # =====================================================================
@@ -907,6 +924,7 @@ DeFi FINANCING
 • Check financing pool stats (check_financing_pool)
 • Request advance against trade (request_financing_advance)
 • Check trade financing status (check_trade_financing)
+• Confirm delivery and release payment (confirm_trade_delivery)
 
 RULES:
 1. Be warm, clear, and concise — the user is speaking to you live.
@@ -966,6 +984,7 @@ ALL_TOOLS = [
     record_cooperative_payout, confirm_payment_received,
     # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
+    confirm_trade_delivery,
 ]
 
 

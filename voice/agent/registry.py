@@ -1124,27 +1124,118 @@ class ToolRegistry:
                 "Active": "🟡",
                 "Settled": "✅",
                 "Defaulted": "❌",
-                "Cancelled": "⚪",
-            }.get(trade["status"], "❓")
+            }
 
-            from datetime import datetime
-            deadline_str = ""
-            if trade["deadline"] > 0:
-                deadline_dt = datetime.utcfromtimestamp(trade["deadline"])
-                deadline_str = f"\n  Deadline: {deadline_dt.strftime('%Y-%m-%d')}"
-
+            status = trade.get("status", "Unknown")
+            emoji = status_emoji.get(status, "❓")
+            
             msg = (
-                f"{status_emoji} Trade #{trade['trade_id']} - {trade['status']}\n"
-                f"  Agreed price: ${trade['agreed_price_usdc']:,.2f}\n"
-                f"  Advance received: ${trade['advance_amount_usdc']:,.2f}\n"
-                f"  Fee: ${trade['fee_amount_usdc']:,.2f} ({trade['fee_bps']}bps)"
-                f"{deadline_str}"
+                f"{emoji} Trade #{trade_id} Status: {status}\n"
+                f"  Advance amount: ${trade.get('advance_amount', 0):,.2f}\n"
+                f"  Remaining balance: ${trade.get('remaining_amount', 0):,.2f}\n"
+                f"  Deadline: {trade.get('deadline', 'N/A')}"
             )
             return (msg, trade)
+
         except Exception as e:
             logger.error("check_trade_financing failed: %s", e)
             return (
-                f"Could not check trade financing: {e}",
+                f"Could not fetch trade status: {e}",
+                {"error": str(e)},
+            )
+
+    def _confirm_trade_delivery(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Buyer confirms coffee delivery and releases payment."""
+        from database.models import UserIdentity, RFQAcceptance, RFQOffer
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user or user.role not in ("buyer", "admin"):
+            return ("Only buyers can confirm delivery.", {"error": "forbidden"})
+
+        trade_id = args.get("trade_id")
+        acceptance_number = args.get("acceptance_number")
+
+        # Look up trade details from acceptance if provided
+        if acceptance_number:
+            acc = db.query(RFQAcceptance).filter_by(
+                acceptance_number=acceptance_number
+            ).first()
+            if not acc:
+                return (
+                    f"Acceptance {acceptance_number} not found.",
+                    {"error": "not_found"},
+                )
+            offer = db.query(RFQOffer).filter_by(id=acc.offer_id).first()
+            if not offer or user.organization_id != offer.buyer_id:
+                return (
+                    "You are not the buyer for this acceptance.",
+                    {"error": "forbidden"},
+                )
+        elif not trade_id:
+            return (
+                "Please provide a trade_id or acceptance_number.",
+                {"error": "missing_id"},
+            )
+        else:
+            acc = None
+
+        try:
+            from blockchain.financing_manager import get_financing_manager
+            mgr = get_financing_manager()
+
+            # Find the trade ID if we have acceptance
+            if acceptance_number and acc:
+                # Try sequential trade IDs to find matching acceptance
+                trade = None
+                for tid in range(1, 100):
+                    t = mgr.get_trade(tid)
+                    if not t:
+                        break
+                    if t.get("farm_id") and acceptance_number in str(t.get("farm_id", "")):
+                        trade = t
+                        trade_id = tid
+                        break
+                if not trade:
+                    return (
+                        f"No financed trade found for acceptance {acceptance_number}.",
+                        {"error": "not_found"},
+                    )
+            else:
+                trade = mgr.get_trade(trade_id)
+                if not trade:
+                    return (f"Trade {trade_id} not found.", {"error": "not_found"})
+
+            # Confirm delivery on blockchain
+            tx_hash = mgr.confirm_delivery(trade_id)
+            if tx_hash:
+                # Update acceptance status in database
+                if acc:
+                    acc.delivery_status = "DELIVERED"
+                    db.commit()
+
+                return (
+                    f"✅ Delivery confirmed! Payment released to cooperative.\n"
+                    f"  Trade ID: {trade_id}\n"
+                    f"  TX: {tx_hash}\n"
+                    f"  Remaining 20% + fees have been distributed.",
+                    {
+                        "tx_hash": tx_hash,
+                        "trade_id": trade_id,
+                        "acceptance_number": acceptance_number,
+                    },
+                )
+            else:
+                return (
+                    "Delivery confirmation failed. Check trade status and try again.",
+                    {"error": "tx_failed"},
+                )
+        except Exception as e:
+            logger.error("confirm_trade_delivery failed: %s", e)
+            return (
+                f"Delivery confirmation failed: {e}",
                 {"error": str(e)},
             )
 
