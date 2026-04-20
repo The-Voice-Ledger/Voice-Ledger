@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Landing from './pages/Landing'
@@ -10,7 +10,8 @@ import DPPViewer from './pages/DPPViewer'
 import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
-import About from './pages/About'
+import HowItWorks from './pages/HowItWorks'
+import Platform from './pages/Platform'
 import { TopographicBg } from './components/svg/LightBackgrounds'
 
 /* Lightweight footer for the chat page so it doesn't overwhelm the input */
@@ -43,7 +44,9 @@ export default function App() {
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/financing" element={<Financing />} />
           <Route path="/tracking" element={<Tracking />} />
-          <Route path="/about" element={<About />} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/platform" element={<Platform />} />
+          <Route path="/about" element={<Navigate to="/how-it-works" replace />} />
         </Routes>
       </main>
       {pathname === '/assistant' ? <MiniFooter /> : <Footer />}

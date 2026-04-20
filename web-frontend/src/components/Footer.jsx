@@ -155,6 +155,8 @@ export default function Footer() {
                 ['/assistant', t('nav_assistant')],
                 ['/marketplace', t('nav_marketplace')],
                 ['/my-rfqs', t('nav_my_rfqs')],
+                ['/how-it-works', t('nav_how_it_works', 'How It Works')],
+                ['/platform', t('nav_platform', 'The Platform')],
               ].map(([to, label]) => (
                 <li key={to}>
                   <Link to={to} className="text-sm text-stone-400 hover:text-white transition-colors">

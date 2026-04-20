@@ -47,6 +47,8 @@ const resources = {
       nav_compliance: 'Compliance',
       nav_dpp: 'DPP Viewer',
       nav_tools: 'Tools',
+      nav_how_it_works: 'How It Works',
+      nav_platform: 'The Platform',
       // Landing page
       carousel_label: 'Farm photo showcase',
       carousel_heading: 'Straight from the Source',
@@ -288,6 +290,8 @@ const resources = {
       nav_compliance: 'ተስማሚነት',
       nav_dpp: 'DPP አያች',
       nav_tools: 'መሳሪያዎች',
+      nav_how_it_works: 'እንዴት እንደሚሰራ',
+      nav_platform: 'ፕላትፎርም',
       // Landing page
       carousel_label: 'የእርሻ ፎቶ ማሳያ',
       carousel_heading: 'ቀጥታ ከምንጩ',

@@ -14,12 +14,15 @@ export default function Navbar() {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const toolsRef = useRef(null)
+  const aboutRef = useRef(null)
 
-  // Close Tools dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleClick = (e) => {
       if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false)
+      if (aboutRef.current && !aboutRef.current.contains(e.target)) setAboutOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -32,7 +35,13 @@ export default function Navbar() {
     { to: '/dpp',        label: t('nav_dpp') },
   ]
 
+  const ABOUT_LINKS = [
+    { to: '/how-it-works', label: t('nav_how_it_works', 'How It Works') },
+    { to: '/platform',     label: t('nav_platform', 'The Platform') },
+  ]
+
   const isToolActive = TOOLS.some((tl) => location.pathname === tl.to)
+  const isAboutActive = ABOUT_LINKS.some((al) => location.pathname === al.to)
 
   const toggleLang = () => {
     const next = i18n.language === 'en' ? 'am' : 'en'
@@ -79,7 +88,41 @@ export default function Navbar() {
         <div className="hidden md:flex items-center justify-center gap-6 absolute left-1/2 -translate-x-1/2">
           {navLink('/', t('nav_home'))}
           {navLink('/assistant', t('nav_assistant'))}
-          {navLink('/about', t('nav_about', 'About'))}
+
+          {/* About dropdown */}
+          <div ref={aboutRef} className="relative">
+            <button
+              onClick={() => setAboutOpen((o) => !o)}
+              className={`inline-flex items-center gap-1 px-1 py-1 text-[13px] tracking-wide transition-colors ${
+                isAboutActive
+                  ? 'text-stone-900 font-semibold'
+                  : 'text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              {t('nav_about', 'About')}
+              <IconChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${aboutOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {aboutOpen && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-xl shadow-lg border border-stone-100 py-1.5 z-50 animate-fade-in-up">
+                {ABOUT_LINKS.map((al) => (
+                  <Link
+                    key={al.to}
+                    to={al.to}
+                    onClick={() => setAboutOpen(false)}
+                    className={`block px-4 py-2 text-sm transition-colors ${
+                      isActive(al.to)
+                        ? 'bg-stone-50 text-stone-900 font-semibold'
+                        : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
+                    }`}
+                  >
+                    {al.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           {navLink('/marketplace', t('nav_marketplace'))}
           {isAuthenticated && user?.role === 'BUYER' && navLink('/my-rfqs', t('nav_my_rfqs'))}
 
@@ -165,8 +208,10 @@ export default function Navbar() {
         <div className="md:hidden fixed inset-x-0 top-14 z-30 bg-white/95 backdrop-blur-lg border-b border-stone-200 shadow-lg animate-fade-in-up">
           <div className="px-4 py-3 space-y-1">
             {navLink('/', t('nav_home'), true)}
-            {navLink('/about', t('nav_about', 'About'), true)}
             {navLink('/assistant', t('nav_assistant'), true)}
+            <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-stone-400">{t('nav_about', 'About')}</p>
+            {navLink('/how-it-works', t('nav_how_it_works', 'How It Works'), true)}
+            {navLink('/platform', t('nav_platform', 'The Platform'), true)}
             {navLink('/marketplace', t('nav_marketplace'), true)}
             {isAuthenticated && user?.role === 'BUYER' && navLink('/my-rfqs', t('nav_my_rfqs'), true)}
             <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-stone-400">{t('nav_tools')}</p>
