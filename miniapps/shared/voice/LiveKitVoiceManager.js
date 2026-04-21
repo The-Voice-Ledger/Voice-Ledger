@@ -52,12 +52,11 @@ export class LiveKitVoiceManager {
         throw new Error('LiveKit is not configured on the backend')
       }
 
-      // Get LiveKit token with agent dispatch
+      // Get LiveKit token
       const tokenData = await getLiveKitToken({
         userId: this.userId,
         userName: this.userName,
-        userRole: this.userRole,
-        agentName: 'voice-agent' // Request agent dispatch
+        userRole: this.userRole
       })
 
       // Create and connect to room
