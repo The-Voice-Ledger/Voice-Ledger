@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Voice Ledger &ndash; Assistant</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="/miniapps/shared/theme.css">
@@ -205,11 +205,129 @@
     </button>
   </div>
 
+  <!-- LiveKit Voice Panel - Popup overlay matching web-frontend -->
+  <div class="livekit-voice-panel" id="livekitVoicePanel" style="display: none; position: fixed; inset: 0; z-index: 9999; overflow: hidden;">
+    <!-- Background -->
+    <div style="position: absolute; inset: 0; background: linear-gradient(to bottom right, #1a1a1a, #2d2d2d, #0a0a0a);"></div>
+    
+    <!-- Audio renderer for agent playback -->
+    <audio id="roomAudioRenderer" style="position: absolute; inset: 0;" autoplay playsinline></audio>
+    
+    <!-- Main content -->
+    <div style="position: relative; z-index: 10; height: 100vh; display: flex; flex-direction: column;">
+      <!-- Top bar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <img src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa" alt="WAGA" style="height: 32px; width: auto; border-radius: 8px;">
+          <div>
+            <div style="color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 600;">The Voice Ledger</div>
+            <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-family: monospace;">voice assistant</div>
+          </div>
+        </div>
+        <button onclick="closeLiveKitVoicePanel()" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: transparent; color: rgba(255,255,255,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.background='transparent'">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 4l8 8M12 4l-8 8"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Center content -->
+      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
+        <!-- Central orb -->
+        <div id="livekitOrb" style="width: 200px; height: 200px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 24px; transition: all 1s; opacity: 0.25;">
+          <svg width="200" height="200" viewBox="0 0 200 200" style="position: absolute; inset: 0;">
+            <defs>
+              <radialGradient id="orb-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
+                <stop offset="100%" stop-color="#10B981" stop-opacity="0"></stop>
+              </radialGradient>
+            </defs>
+            <circle cx="100" cy="100" r="95" fill="none" stroke="#10B981" stroke-width="0.5" stroke-dasharray="3 9" stroke-opacity="0.3">
+              <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="20s" repeatCount="indefinite"></animateTransform>
+            </circle>
+            <circle cx="100" cy="100" r="80" fill="none" stroke="#10B981" stroke-width="0.3" stroke-opacity="0.2">
+              <animateTransform attributeName="transform" type="rotate" from="360 100 100" to="0 100 100" dur="15s" repeatCount="indefinite"></animateTransform>
+            </circle>
+            <circle cx="100" cy="100" fill="none" stroke="#10B981" stroke-width="0.6" stroke-opacity="0.1">
+              <animate attributeName="r" values="65;70;65" dur="3s" repeatCount="indefinite"></animate>
+            </circle>
+            <circle cx="100" cy="100" r="45" fill="url(#orb-glow)" opacity="0.5"></circle>
+          </svg>
+          <div id="livekitOrbContent" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+            <!-- Idle mic icon -->
+            <svg width="60" height="60" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="25" fill="rgba(16,185,129,0.25)" opacity="0.8">
+                <animate attributeName="r" values="23;27;23" dur="4s" repeatCount="indefinite"></animate>
+                <animate attributeName="opacity" values="0.6;0.9;0.6" dur="4s" repeatCount="indefinite"></animate>
+              </circle>
+              <rect x="36" y="28" width="8" height="14" rx="4" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.7"></rect>
+              <path d="M32 40a8 8 0 0016 0" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.7"></path>
+              <path d="M40 48v5" stroke="#fff" stroke-width="1.5" opacity="0.7"></path>
+            </svg>
+          </div>
+        </div>
+        
+        <!-- State label -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 32px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div id="livekitStateDot" style="width: 8px; height: 8px; border-radius: 50%; background-color: #9CA3AF; box-shadow: 0 0 8px rgba(107,114,128,0.15);"></div>
+            <span id="livekitStateLabel" style="color: #9CA3AF; font-size: 14px; font-weight: 500;">Disconnected</span>
+          </div>
+          <span id="livekitUserInfo" style="color: rgba(255,255,255,0.2); font-size: 11px; font-family: monospace; display: none;">Guest</span>
+        </div>
+        
+        <!-- Controls -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+          <div id="livekitConnectError" style="display: none; padding: 12px 16px; border-radius: 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #FCA5A5; font-size: 12px; text-align: center; max-width: 300px;"></div>
+          
+          <button id="livekitStartBtn" onclick="initializeLiveKit()" style="padding: 16px 32px; border-radius: 16px; border: none; background: linear-gradient(to bottom right, #10B981, #059669); color: white; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16,185,129,0.3);" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 6px 16px rgba(16,185,129,0.4)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(16,185,129,0.3)'">
+            Start Voice Session
+          </button>
+          
+          <div id="livekitActiveControls" style="display: none; gap: 16px;">
+            <button id="livekitMuteBtn" onclick="toggleLiveKitMute()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Mute microphone">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="2" width="6" height="11" rx="3"></rect>
+                <path d="M5 12a7 7 0 0014 0"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+            <button onclick="endLiveKitSession()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(239,68,68,0.15); color: #F87171; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; border: 1px solid rgba(239,68,68,0.1);" title="End voice session">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.73.8 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-6-6A19.79 19.79 0 012 4.18 2 2 0 014 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 002.59 3.4z"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <span id="livekitMutedIndicator" style="color: rgba(245,158,11,0.6); font-size: 10px; font-family: monospace; display: none; animation: pulse 1.5s infinite;">microphone muted</span>
+        </div>
+        
+        <!-- Footer -->
+        <div style="position: absolute; bottom: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 9px;">The Voice Ledger</span>
+          <span style="color: rgba(255,255,255,0.08); font-size: 8px; font-family: monospace;">Powered by LiveKit</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/miniapps/shared/i18n.js"></script>
   <script src="/miniapps/shared/tab-bar.js"></script>
-  <script>
+  <script src="/miniapps/shared/api/livekit.js?v=2025041901"></script>
+  <script type="module" src="/miniapps/shared/voice/livekit-imports.js"></script>
+  <script type="module" src="/miniapps/shared/voice/LiveKitVoiceManager.js"></script>
+<script type="module">
+    // Import RoomEvent for use in the main script
+    import { RoomEvent } from 'https://cdn.skypack.dev/livekit-client@2.17.3';
+    
+    // Make RoomEvent globally available
+    window.RoomEvent = RoomEvent;
+</script>
+<script>
     const tg = window.Telegram.WebApp;
-    tg.expand(); tg.ready();
+    tg.expand();
     tg.BackButton.show();
     tg.BackButton.onClick(() => { window.location.href = '/miniapps/index.html'; });
 
@@ -378,10 +496,23 @@
           tools: data.tools_used || [],
           audio_base64: data.audio_base64 || null,
         });
-        if (data.audio_base64) playBase64Audio(data.audio_base64);
+        if (data.audio_base64) {
+          console.log('Playing TTS audio response...');
+          updateLiveKitState('speaking');
+          playBase64Audio(data.audio_base64);
+          // The playBase64Audio function will handle the state transition back to listening
+        } else {
+          // No audio response, transition directly to listening
+          setTimeout(() => {
+            if (voiceManager && voiceManager.isReady()) {
+              updateLiveKitState('listening');
+            }
+          }, 500);
+        }
       } catch (err) {
         console.error('Voice error:', err);
         messages.push({ role: 'assistant', text: vlI18n.t('assistant_voice_fail'), time: timeStr() });
+        updateLiveKitState('failed');
       }
       isLoading = false;
       render();
@@ -389,40 +520,343 @@
 
     function playBase64Audio(b64) {
       try {
+        console.log('Playing base64 audio...');
         const bytes = atob(b64);
         const arr = new Uint8Array(bytes.length);
         for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
         const blob = new Blob([arr], { type: 'audio/mp3' });
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
-        audio.play().catch(() => {});
-        audio.onended = () => URL.revokeObjectURL(url);
-      } catch (e) { console.warn('TTS playback failed', e); }
+        
+        audio.play().then(() => {
+          console.log('TTS audio started playing');
+        }).catch(e => {
+          console.warn('TTS playback failed:', e);
+        });
+        
+        audio.onended = () => {
+          console.log('TTS audio finished');
+          URL.revokeObjectURL(url);
+          // Let LiveKit agent handle state transition back to listening
+        };
+        
+        audio.onerror = () => {
+          console.error('TTS audio error');
+          URL.revokeObjectURL(url);
+          updateLiveKitState('failed');
+        };
+      } catch (e) { 
+        console.warn('TTS playback failed', e);
+        updateLiveKitState('failed');
+      }
+    }
+
+    // LiveKit Voice Manager integration
+    let voiceManager = null;
+    let isLiveKitStarted = false;
+    let isLiveKitMuted = false;
+    
+    // Initialize LiveKit Voice Manager
+    async function initializeVoiceManager() {
+      if (voiceManager) return voiceManager;
+      
+      try {
+        // Import LiveKitVoiceManager from module
+        const { liveKitVoiceManager } = await import('/miniapps/shared/voice/LiveKitVoiceManager.js');
+        voiceManager = liveKitVoiceManager;
+        
+        // Set up state change callback
+        voiceManager.onStateChange((newState, oldState) => {
+          console.log('LiveKit state changed:', oldState, '->', newState);
+          updateLiveKitState(newState);
+          
+          // Let LiveKit agent handle state transitions automatically
+          if (newState === 'speaking') {
+            console.log('Agent started speaking');
+          }
+          
+          // Update UI based on state
+          if (newState === 'connected' && !isLiveKitStarted) {
+            isLiveKitStarted = true;
+            document.getElementById('livekitStartBtn').style.display = 'none';
+            document.getElementById('livekitActiveControls').style.display = 'flex';
+            
+            // Set up track handlers AFTER room is connected
+            console.log('Setting up track handlers after connection, room exists:', !!voiceManager.room);
+            if (voiceManager.room) {
+              console.log('Room object:', voiceManager.room);
+              console.log('RoomEvent available:', !!RoomEvent);
+              
+              // Handle all track events
+              voiceManager.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                console.log('Track subscribed:', track.kind, 'from participant:', participant.identity, 'isLocal:', participant.isLocal);
+                console.log('Track condition check:', {
+                  isAudio: track.kind === 'audio',
+                  notLocal: !participant.isLocal,
+                  shouldHandle: track.kind === 'audio' && !participant.isLocal
+                });
+                
+                // Only handle remote audio tracks (not our own microphone)
+                if (track.kind === 'audio' && !participant.isLocal) {
+                  console.log('Remote audio track detected!');
+                  console.log('Track details:', {
+                    kind: track.kind,
+                    source: track.source,
+                    enabled: track.enabled,
+                    muted: track.muted,
+                    participant: participant.identity,
+                    isLocal: participant.isLocal
+                  });
+                  
+                  const audioElement = document.getElementById('roomAudioRenderer');
+                  if (audioElement) {
+                    console.log('Audio element found, attaching track...');
+                    
+                    // Clear any existing tracks first
+                    while (audioElement.firstChild) {
+                      audioElement.removeChild(audioElement.firstChild);
+                    }
+                    
+                    // Attach the new track
+                    track.attach(audioElement);
+                    console.log('Audio track attached successfully');
+                    
+                    // Debug audio element after attachment
+                    console.log('Audio element after attachment:', {
+                      srcObject: audioElement.srcObject ? 'has srcObject' : 'no srcObject',
+                      paused: audioElement.paused,
+                      muted: audioElement.muted,
+                      volume: audioElement.volume,
+                      readyState: audioElement.readyState,
+                      currentTime: audioElement.currentTime
+                    });
+                    
+                    // Force play with multiple attempts
+                    const attemptPlay = async () => {
+                      try {
+                        await audioElement.play();
+                        console.log('Audio playback started successfully!');
+                      } catch (e) {
+                        console.log('Audio play failed:', e);
+                        console.log('Trying alternative approach...');
+                        
+                        // Try unmute and set volume
+                        audioElement.muted = false;
+                        audioElement.volume = 1.0;
+                        
+                        // Try again after a short delay
+                        setTimeout(() => {
+                          audioElement.play().then(() => {
+                            console.log('Audio playback started on retry!');
+                          }).catch(e2 => {
+                            console.log('Audio play failed on retry too:', e2);
+                          });
+                        }, 100);
+                      }
+                    };
+                    
+                    // Try to play immediately
+                    attemptPlay();
+                    
+                    // Also try on user interaction
+                    const startAudioOnInteraction = () => {
+                      console.log('User interaction detected, starting audio...');
+                      attemptPlay();
+                      document.removeEventListener('click', startAudioOnInteraction);
+                      document.removeEventListener('touchstart', startAudioOnInteraction);
+                    };
+                    
+                    document.addEventListener('click', startAudioOnInteraction, { once: true });
+                    document.addEventListener('touchstart', startAudioOnInteraction, { once: true });
+                    
+                  } else {
+                    console.error('roomAudioRenderer element not found');
+                  }
+                } else {
+                  console.log('Ignoring non-remote audio track:', track.kind, participant.isLocal);
+                }
+              });
+              
+              // Also handle existing tracks that might already be subscribed
+              console.log('Checking existing remote participants...', voiceManager.room.remoteParticipants.length);
+              voiceManager.room.remoteParticipants.forEach((participant, index) => {
+                console.log(`Participant ${index}:`, {
+                  identity: participant.identity,
+                  isLocal: participant.isLocal,
+                  trackPublications: participant.trackPublications.length
+                });
+                
+                participant.trackPublications.forEach((publication) => {
+                  console.log('Publication:', {
+                    kind: publication.kind,
+                    source: publication.source,
+                    track: !!publication.track,
+                    isLocal: publication.isLocal
+                  });
+                  
+                  if (publication.kind === 'audio' && publication.track && !publication.isLocal) {
+                    console.log('Found existing remote audio track, attaching...');
+                    const audioElement = document.getElementById('roomAudioRenderer');
+                    if (audioElement) {
+                      publication.track.attach(audioElement);
+                      audioElement.play().then(() => {
+                        console.log('Existing track audio started!');
+                      }).catch(e => {
+                        console.log('Play failed for existing track:', e);
+                      });
+                    } else {
+                      console.error('Audio element not found for existing track');
+                    }
+                  }
+                });
+              });
+            }
+          }
+        });
+        
+        return voiceManager;
+      } catch (error) {
+        console.error('Failed to initialize voice manager:', error);
+        throw error;
+      }
+    }
+    
+    // LiveKit UI functions
+    function showLiveKitVoicePanel() {
+      document.getElementById('livekitVoicePanel').style.display = 'flex';
+      updateLiveKitState('disconnected');
+    }
+    
+    function closeLiveKitVoicePanel() {
+      document.getElementById('livekitVoicePanel').style.display = 'none';
+      if (voiceManager && voiceManager.isRecordingActive()) {
+        voiceManager.stopRecording();
+      }
+    }
+    
+    function updateLiveKitState(state) {
+      const { STATE_COLORS, STATE_LABELS } = window.STATE_COLORS ? window : { STATE_COLORS: {}, STATE_LABELS: {} };
+      const colors = STATE_COLORS[state] || { dot: '#9CA3AF', glow: 'rgba(107,114,128,0.15)' };
+      const label = STATE_LABELS[state] || state;
+      const isPulsing = ['listening', 'connecting', 'thinking'].includes(state);
+      
+      const stateDot = document.getElementById('livekitStateDot');
+      const stateLabel = document.getElementById('livekitStateLabel');
+      
+      if (stateDot) {
+        stateDot.style.backgroundColor = colors.dot;
+        stateDot.style.boxShadow = `0 0 8px ${colors.glow}`;
+        stateDot.style.animation = isPulsing ? 'pulse 1.5s infinite' : 'none';
+      }
+      
+      if (stateLabel) {
+        stateLabel.textContent = label;
+        stateLabel.style.color = colors.dot;
+      }
+      
+      // Update orb
+      const orb = document.getElementById('livekitOrb');
+      if (orb) {
+        orb.style.boxShadow = `0 0 60px 12px ${colors.glow}, 0 0 120px 24px ${colors.glow}`;
+        orb.style.opacity = (state === 'speaking' || state === 'listening') ? 0.7 : 0.25;
+      }
+    }
+    
+    async function initializeLiveKit() {
+      try {
+        console.log('[VoiceLedger] Starting voice session...');
+        updateLiveKitState('connecting');
+        
+        // Initialize voice manager
+        const vm = await initializeVoiceManager();
+        
+        // Connect to LiveKit room with agent (like web-frontend's session.start())
+        await vm.connect(
+          tg.initDataUnsafe?.user?.id || 'anonymous',
+          tg.initDataUnsafe?.user?.first_name || 'Guest',
+          'user'
+        );
+        
+        console.log('[VoiceLedger] Connected to LiveKit room!');
+        
+        // Start recording to enable voice detection
+        await vm.startRecording();
+        console.log('[VoiceLedger] Voice detection enabled - ready for conversation');
+        
+      } catch (error) {
+        console.error('[VoiceLedger] session.start() failed:', error);
+        const errorEl = document.getElementById('livekitConnectError');
+        if (errorEl) {
+          errorEl.textContent = error.message || 'Failed to connect. Check microphone permissions.';
+          errorEl.style.display = 'block';
+        }
+        updateLiveKitState('failed');
+      }
+    }
+    
+    // Enable continuous voice activity detection
+    let voiceActivityTimeout = null;
+    let isVoiceDetectionEnabled = false;
+
+    function enableVoiceActivityDetection() {
+      if (isVoiceDetectionEnabled || !voiceManager) return;
+      
+      isVoiceDetectionEnabled = true;
+      console.log('Enabling continuous voice activity detection');
+      
+      // Start in listening mode
+      updateLiveKitState('listening');
+      
+      // Set up voice activity monitoring (this would need to be implemented in LiveKitVoiceManager)
+      // For now, we'll use the manual recording as a fallback
+    }
+
+    function disableVoiceActivityDetection() {
+      isVoiceDetectionEnabled = false;
+      if (voiceActivityTimeout) {
+        clearTimeout(voiceActivityTimeout);
+        voiceActivityTimeout = null;
+      }
+      console.log('Disabling voice activity detection');
+    }
+
+    async function toggleLiveKitRecording() {
+      // Only initialize once, like web-frontend
+      if (!voiceManager) {
+        await initializeLiveKit();
+        return;
+      }
+      
+      // If already connected, just toggle mute/unmute (like web-frontend)
+      if (voiceManager.isReady()) {
+        await toggleLiveKitMute();
+        return;
+      }
+    }
+
+    // Fallback to basic MediaRecorder if LiveKit fails
+    function initializeFallbackVoice() {
+      console.log('Using fallback voice recording');
+      voiceManager = window.VoiceManager; // Use original VoiceManager
     }
 
     async function toggleRecording() {
-      if (isRecording) { mediaRecorder?.stop(); return; }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioChunks = [];
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach(t => t.stop());
-          isRecording = false;
-          micBtn.classList.remove('recording');
-          const blob = new Blob(audioChunks, { type: 'audio/webm' });
-          if (blob.size > 1000) sendVoice(blob);
-        };
-        mediaRecorder.start();
-        isRecording = true;
-        micBtn.classList.add('recording');
-        tg.HapticFeedback?.impactOccurred?.('light');
+        // Try haptic feedback (may not be supported in older Telegram versions)
+        try {
+          tg.HapticFeedback?.impactOccurred?.('light');
+        } catch (hapticErr) {
+          // Ignore haptic feedback errors
+        }
+
+        // Just show the LiveKit popup, don't start session yet
+        showLiveKitVoicePanel();
       } catch (err) {
-        console.error('Mic error:', err);
-        tg.showAlert('Microphone access denied. Please allow microphone in browser settings.');
+        console.error('Error showing LiveKit panel:', err);
       }
     }
+
+    // Don't initialize LiveKit on page load - only when user clicks mic button (like web-frontend)
 
     chatInput.addEventListener('input', () => {
       chatInput.style.height = 'auto';
@@ -457,6 +891,48 @@
 
     vlTabBar('assistant');
     render();
+    
+    // LiveKit control functions (matching web-frontend)
+    async function toggleLiveKitMute() {
+      if (!voiceManager || !voiceManager.isReady()) return;
+      
+      try {
+        // Use Room-based recording toggle
+        await voiceManager.toggleRecording();
+        
+        // Update muted state
+        isLiveKitMuted = !voiceManager.isRecordingActive();
+        console.log('[VoiceLedger] Microphone', isLiveKitMuted ? 'muted' : 'unmuted');
+        
+        // Update UI
+        const muteBtn = document.getElementById('livekitMuteBtn');
+        const mutedIndicator = document.getElementById('livekitMutedIndicator');
+        if (muteBtn) {
+          muteBtn.style.background = isLiveKitMuted ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.08)';
+          muteBtn.style.color = isLiveKitMuted ? '#F59E0B' : 'rgba(255,255,255,0.7)';
+          muteBtn.title = isLiveKitMuted ? 'Unmute microphone' : 'Mute microphone';
+        }
+        if (mutedIndicator) {
+          mutedIndicator.style.display = isLiveKitMuted ? 'block' : 'none';
+        }
+      } catch (error) {
+        console.error('Failed to toggle mute:', error);
+      }
+    }
+    
+    async function endLiveKitSession() {
+      if (voiceManager) {
+        await voiceManager.disconnect();
+        voiceManager = null;
+      }
+      isLiveKitStarted = false;
+      isLiveKitMuted = false;
+      closeLiveKitVoicePanel();
+      
+      // Reset UI
+      document.getElementById('livekitStartBtn').style.display = 'block';
+      document.getElementById('livekitActiveControls').style.display = 'none';
+    }
   </script>
 </body>
 </html>
