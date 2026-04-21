@@ -69,7 +69,15 @@ class TokenResponse(BaseModel):
 
 @router.post("/token", response_model=TokenResponse)
 async def create_token(req: TokenRequest):
-    """Generate a signed LiveKit room token for the web frontend."""
+    """Generate a signed LiveKit room token for web frontend."""
+    # Debug: Try to get body
+    try:
+        body = req.json()
+        print(f"DEBUG: Request body: {body}")
+    except Exception as e:
+        print(f"ERROR: Failed to parse JSON: {e}")
+        raise HTTPException(422, f"Invalid JSON: {e}")
+
     if not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
         raise HTTPException(503, "LiveKit not configured")
 
