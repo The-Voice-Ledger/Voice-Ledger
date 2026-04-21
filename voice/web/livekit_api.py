@@ -14,9 +14,9 @@ import logging
 import os
 import time
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, Union
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ async def _dispatch_agent(room_name: str) -> None:
 # ── Request / Response models ────────────────────────────────────────
 
 class TokenRequest(BaseModel):
-    user_id: Optional[str] = "anonymous"
+    user_id: Optional[Union[str, int]] = "anonymous"
     user_name: Optional[str] = "Guest"
     user_role: Optional[str] = "user"
     user_did: Optional[str] = None
@@ -68,22 +68,11 @@ class TokenResponse(BaseModel):
 # ── Endpoints ────────────────────────────────────────────────────────
 
 @router.post("/token", response_model=TokenResponse)
-async def create_token(request: Request):
+async def create_token(req: TokenRequest):
     """Generate a signed LiveKit room token for web frontend."""
-    # Debug: Try to get body
     try:
-        body = await request.json()
+        body = req.json()
         print(f"DEBUG: Request body: {body}")
-        print(f"DEBUG: Body type: {type(body)}")
-        
-        # Manually extract fields with defaults
-        user_id = body.get("user_id", "anonymous") if isinstance(body, dict) else "anonymous"
-        user_name = body.get("user_name", "Guest") if isinstance(body, dict) else "Guest"
-        user_role = body.get("user_role", "user") if isinstance(body, dict) else "user"
-        user_did = body.get("user_did") if isinstance(body, dict) else None
-        
-        print(f"DEBUG: Extracted - user_id={user_id}, user_name={user_name}, user_role={user_role}, user_did={user_did}")
-        
     except Exception as e:
         print(f"ERROR: Failed to parse JSON: {e}")
         raise HTTPException(422, f"Invalid JSON: {e}")
@@ -95,26 +84,26 @@ async def create_token(request: Request):
     from livekit.api import AccessToken, VideoGrants  # pyright: ignore[reportMissingImports]
 
     # Unique room per user session
-    room_name = f"voice-{user_id}-{int(time.time())}"
+    room_name = f"voice-{req.user_id}-{int(time.time())}"
 
     # Metadata the agent reads to identify the user
     metadata = json.dumps({
-        "name": user_name,
-        "role": user_role,
-        "user_id": user_id,
-        "user_did": user_did,
+        "name": req.user_name,
+        "role": req.user_role,
+        "user_id": req.user_id,
+        "user_did": req.user_did,
     })
 
     token = (
         AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
-        .with_identity(str(user_id))
-        .with_name(user_name or "Guest")
+        .with_identity(str(req.user_id))
+        .with_name(req.user_name or "Guest")
         .with_metadata(metadata)
         .with_grants(VideoGrants(room_join=True, room=room_name))
         .with_ttl(timedelta(hours=1))
     )
 
-    logger.info("LiveKit token issued: room=%s user=%s", room_name, user_id)
+    logger.info("LiveKit token issued: room=%s user=%s", room_name, req.user_id)
 
     return TokenResponse(
         token=token.to_jwt(),
