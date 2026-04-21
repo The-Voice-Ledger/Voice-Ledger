@@ -213,7 +213,7 @@ const FINANCING_CHANNELS = [
 ]
 
 const MOAT_LAYERS = [
-  { label: 'Farmer Relationships', desc: '1,000+ registered farmers with DIDs, GPS-verified plots, production history', icon: 'FR' },
+  { label: 'Farmer Relationships', desc: 'Objective: 1,000+ registered farmers with DIDs, GPS-verified plots, and production history', icon: 'FR' },
   { label: 'Data Depth', desc: 'Years of production data, quality records, compliance history, voice recordings', icon: 'DD' },
   { label: 'Shipping Exclusivity', desc: 'Contractual logistics partnership. Physical oracle confirmations are the trust anchor.', icon: 'SE' },
   { label: 'Track Record', desc: 'Every completed container builds the case for the next LP. Default rates, cycle times, yield.', icon: 'TR' },
