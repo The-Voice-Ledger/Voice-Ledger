@@ -46,6 +46,21 @@ export class LiveKitVoiceManager {
       this.userName = userName || 'Telegram User'
       this.userRole = userRole
 
+      // Request microphone permission for Telegram environment only
+      if (window.Telegram?.WebApp) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach(track => track.stop())
+          console.log('[VoiceLedger] Telegram microphone permission granted')
+        } catch (err) {
+          console.error('[VoiceLedger] Telegram microphone permission denied:', err.name)
+          if (err.name === 'NotAllowedError') {
+            throw new Error('Microphone permission required. Please enable in Telegram settings.')
+          }
+          throw err
+        }
+      }
+
       // Check if LiveKit is configured
       const health = await liveKitHealth()
       if (!health.configured) {
