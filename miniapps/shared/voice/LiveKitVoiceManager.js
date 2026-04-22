@@ -60,7 +60,7 @@ export class LiveKitVoiceManager {
         agentName: 'voice-agent' // Request agent dispatch
       })
 
-      // Create and connect to room
+      // Create and connect to room with Telegram-specific settings
       this.room = new Room({
         audioCaptureDefaults: {
           deviceId: undefined,
@@ -69,10 +69,13 @@ export class LiveKitVoiceManager {
           autoGainControl: true,
         },
         publishDefaults: {
-          audioPreset: 'musicHighQuality',
+          audioPreset: 'speech', // Use speech preset for better voice quality
           videoSimulcastLayers: [],
         },
         adaptiveStream: true,
+        // Telegram-specific settings
+        dynacast: true,
+        stopLocalTrackOnUnpublish: true,
       })
 
       // Set up event listeners
@@ -93,6 +96,7 @@ export class LiveKitVoiceManager {
     }
   }
 
+  
   /**
    * Set up LiveKit room event listeners
    */
