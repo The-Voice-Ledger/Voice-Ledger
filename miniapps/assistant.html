@@ -2,13 +2,59 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Voice Ledger &ndash; Assistant</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="/miniapps/shared/theme.css">
   <style>
     html,body{height:100%;overflow:hidden}
     body{padding:0 0 56px;display:flex;flex-direction:column;background:var(--bg)}
+    
+    /* Override body constraints when LiveKit panel is shown */
+    body.livekit-panel-open {
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
+    
+    .livekit-voice-panel {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: none !important;
+      max-height: none !important;
+      z-index: 99999 !important;
+      overflow: hidden !important;
+      display: none !important;
+      flex: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+    }
+    
+    .livekit-voice-panel[style*="display: flex"] {
+      display: flex !important;
+    }
+    
+    /* Override body constraints when LiveKit panel is open */
+    body.livekit-panel-open {
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: block !important;
+      height: 100vh !important;
+    }
+    
+    /* Ensure main content container is also overridden */
+    body.livekit-panel-open > * {
+      display: none !important;
+    }
+    
+    body.livekit-panel-open .livekit-voice-panel {
+      display: flex !important;
+    }
 
     .chat-header{
       display:flex;align-items:center;gap:12px;
@@ -205,8 +251,8 @@
     </button>
   </div>
 
-  <!-- LiveKit Voice Panel - Popup overlay matching web-frontend -->
-  <div class="livekit-voice-panel" id="livekitVoicePanel" style="display: none; position: fixed; inset: 0; z-index: 9999; overflow: hidden;">
+  <!-- LiveKit Voice Panel - Popup overlay -->
+  <div class="livekit-voice-panel" id="livekitVoicePanel" style="display: none;">
     <!-- Background -->
     <div style="position: absolute; inset: 0; background: linear-gradient(to bottom right, #1a1a1a, #2d2d2d, #0a0a0a);"></div>
     
@@ -214,7 +260,7 @@
     <audio id="roomAudioRenderer" style="position: absolute; inset: 0;" autoplay playsinline></audio>
     
     <!-- Main content -->
-    <div style="position: relative; z-index: 10; height: 100vh; display: flex; flex-direction: column;">
+    <div style="position: relative; z-index: 10; width: 100vw; height: 100vh; display: flex; flex-direction: column;">
       <!-- Top bar -->
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -230,87 +276,158 @@
           </svg>
         </button>
       </div>
-      
-      <!-- Center content -->
-      <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
-        <!-- Central orb -->
-        <div id="livekitOrb" style="width: 200px; height: 200px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 24px; transition: all 1s; opacity: 0.25;">
-          <svg width="200" height="200" viewBox="0 0 200 200" style="position: absolute; inset: 0;">
-            <defs>
-              <radialGradient id="orb-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#10B981" stop-opacity="0.25"></stop>
-                <stop offset="100%" stop-color="#10B981" stop-opacity="0"></stop>
-              </radialGradient>
-            </defs>
-            <circle cx="100" cy="100" r="95" fill="none" stroke="#10B981" stroke-width="0.5" stroke-dasharray="3 9" stroke-opacity="0.3">
-              <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="20s" repeatCount="indefinite"></animateTransform>
-            </circle>
-            <circle cx="100" cy="100" r="80" fill="none" stroke="#10B981" stroke-width="0.3" stroke-opacity="0.2">
-              <animateTransform attributeName="transform" type="rotate" from="360 100 100" to="0 100 100" dur="15s" repeatCount="indefinite"></animateTransform>
-            </circle>
-            <circle cx="100" cy="100" fill="none" stroke="#10B981" stroke-width="0.6" stroke-opacity="0.1">
-              <animate attributeName="r" values="65;70;65" dur="3s" repeatCount="indefinite"></animate>
-            </circle>
-            <circle cx="100" cy="100" r="45" fill="url(#orb-glow)" opacity="0.5"></circle>
-          </svg>
-          <div id="livekitOrbContent" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
-            <!-- Idle mic icon -->
-            <svg width="60" height="60" viewBox="0 0 80 80" fill="none">
-              <circle cx="40" cy="40" r="25" fill="rgba(16,185,129,0.25)" opacity="0.8">
-                <animate attributeName="r" values="23;27;23" dur="4s" repeatCount="indefinite"></animate>
-                <animate attributeName="opacity" values="0.6;0.9;0.6" dur="4s" repeatCount="indefinite"></animate>
-              </circle>
-              <rect x="36" y="28" width="8" height="14" rx="4" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.7"></rect>
-              <path d="M32 40a8 8 0 0016 0" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.7"></path>
-              <path d="M40 48v5" stroke="#fff" stroke-width="1.5" opacity="0.7"></path>
-            </svg>
+
+      <!-- Split Panel Content -->
+      <div style="flex: 1; display: flex; min-height: 0;">
+        <!-- LEFT PANEL: Central Orb and Controls (45% width) -->
+        <div style="width: 45%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
+          <!-- Central glowing orb with state -->
+          <div id="livekitOrb" style="width: 200px; height: 200px; border-radius: 50%; background: radial-gradient(circle, rgba(16,185,129,0.3) 0%, rgba(16,185,129,0.1) 50%, transparent 70%); display: flex; align-items: center; justify-content: center; position: relative; transition: all 0.3s ease;">
+            <!-- Inner orb -->
+            <div style="width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, rgba(16,185,129,0.5) 0%, rgba(16,185,129,0.2) 50%, transparent 70%); display: flex; align-items: center; justify-content: center;">
+              <!-- State indicator -->
+              <div id="livekitStateDot" style="width: 16px; height: 16px; border-radius: 50%; background: #10B981; box-shadow: 0 0 12px rgba(16,185,129,0.4);"></div>
+            </div>
+            
+            <!-- Pulsing ring animation -->
+            <div style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(16,185,129,0.3); animation: pulse-ring 2s infinite;"></div>
           </div>
-        </div>
-        
-        <!-- State label -->
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 32px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div id="livekitStateDot" style="width: 8px; height: 8px; border-radius: 50%; background-color: #9CA3AF; box-shadow: 0 0 8px rgba(107,114,128,0.15);"></div>
-            <span id="livekitStateLabel" style="color: #9CA3AF; font-size: 14px; font-weight: 500;">Disconnected</span>
+          
+          <!-- State label + dot (mt-6 = 24px spacing -->
+          <div style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="livekitStateDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.4);"></div>
+              <span id="livekitStateLabel" style="color: rgba(255,255,255,0.8); font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Ready</span>
+            </div>
           </div>
-          <span id="livekitUserInfo" style="color: rgba(255,255,255,0.2); font-size: 11px; font-family: monospace; display: none;">Guest</span>
-        </div>
-        
-        <!-- Controls -->
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
-          <div id="livekitConnectError" style="display: none; padding: 12px 16px; border-radius: 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #FCA5A5; font-size: 12px; text-align: center; max-width: 300px;"></div>
-          
-          <button id="livekitStartBtn" onclick="initializeLiveKit()" style="padding: 16px 32px; border-radius: 16px; border: none; background: linear-gradient(to bottom right, #10B981, #059669); color: white; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16,185,129,0.3);" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 6px 16px rgba(16,185,129,0.4)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(16,185,129,0.3)'">
-            Start Voice Session
-          </button>
-          
-          <div id="livekitActiveControls" style="display: none; gap: 16px;">
-            <button id="livekitMuteBtn" onclick="toggleLiveKitMute()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Mute microphone">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="2" width="6" height="11" rx="3"></rect>
-                <path d="M5 12a7 7 0 0014 0"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-              </svg>
+
+          <!-- Controls (mt-8 = 32px spacing  -->
+          <div style="margin-top: 32px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+            <div id="livekitConnectError" style="display: none; padding: 12px 16px; border-radius: 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #FCA5A5; font-size: 12px; text-align: center; max-width: 300px;"></div>
+            
+            <button id="livekitStartBtn" onclick="initializeLiveKit()" style="padding: 16px 32px; border-radius: 16px; border: none; background: linear-gradient(to bottom right, #10B981, #059669); color: white; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16,185,129,0.3);" onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 6px 16px rgba(16,185,129,0.4)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(16,185,129,0.3)'">
+              Start Voice Session
             </button>
-            <button onclick="endLiveKitSession()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(239,68,68,0.15); color: #F87171; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; border: 1px solid rgba(239,68,68,0.1);" title="End voice session">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.73.8 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-6-6A19.79 19.79 0 012 4.18 2 2 0 014 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 002.59 3.4z"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-              </svg>
-            </button>
+            
+            <div id="livekitActiveControls" style="display: none; gap: 16px;">
+              <button id="livekitMuteBtn" onclick="toggleLiveKitMute()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Mute microphone">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="2" width="6" height="11" rx="3"></rect>
+                  <path d="M5 12a7 7 0 0014 0"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+              <button onclick="endLiveKitSession()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(239,68,68,0.15); color: #F87171; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; border: 1px solid rgba(239,68,68,0.1);" title="End voice session">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.73.8 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-6-6A19.79 19.79 0 012 4.18 2 2 2 0 014 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 002.59 3.4z"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              </button>
+            </div>
+            
+            <!-- Footer -->
+            <div style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+              <span style="font-size: 9px; color: rgba(255,255,255,0.15); font-family: 'Display', sans-serif; letter-spacing: 0.05em;">The Voice Ledger</span>
+              <span style="font-size: 8px; color: rgba(255,255,255,0.08); font-family: 'Mono', monospace; letter-spacing: 0.025em;">Powered by LiveKit • Deepgram • OpenAI</span>
+            </div>
           </div>
-          
-          <span id="livekitMutedIndicator" style="color: rgba(245,158,11,0.6); font-size: 10px; font-family: monospace; display: none; animation: pulse 1.5s infinite;">microphone muted</span>
         </div>
-        
-        <!-- Footer -->
-        <div style="position: absolute; bottom: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
-          <span style="color: rgba(255,255,255,0.15); font-size: 9px;">The Voice Ledger</span>
-          <span style="color: rgba(255,255,255,0.08); font-size: 8px; font-family: monospace;">Powered by LiveKit</span>
+
+        <!-- RIGHT PANEL: Transcript (55% width) -->
+        <div style="width: 55%; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 20px;">
+          
+          <!-- Welcome Cards-->
+          <div id="welcomeCards" style="width: 100%;">
+            <!-- Section header with tech accent -->
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+              <div style="position: relative;">
+                <div style="width: 4px; height: 20px; border-radius: 2px; background: linear-gradient(to bottom, #10B981, #06B6D4, #8B5CF6);"></div>
+                <div style="position: absolute; inset: -4px; width: 12px; height: 28px; border-radius: 6px; background: rgba(16,185,129,0.1); filter: blur(4px);"></div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="welcomeHeaderText" style="color: rgba(255,255,255,0.6); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">What I can do</span>
+                <svg width="40" height="1" style="color: rgba(255,255,255,0.1);">
+                  <line x1="0" y1="0.5" x2="40" y2="0.5" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" />
+                </svg>
+              </div>
+            </div>
+
+            <!-- Welcome card-->
+            <div id="welcomeCard" style="margin-bottom: 16px; position: relative; border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);">
+              <svg style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;" viewBox="0 0 300 40" preserveAspectRatio="none" fill="none">
+                <path d="M0 20h80 M80 20v-10 M80 10h40 M120 10v10 M120 20h60 M180 20v-8 M180 12h120" stroke="#10B981" stroke-width="0.3" opacity="0.08" />
+                <circle cx="80" cy="20" r="1.5" fill="#10B981" opacity="0.1" />
+                <circle cx="120" cy="20" r="1.5" fill="#06B6D4" opacity="0.1" />
+                <circle cx="180" cy="20" r="1.5" fill="#8B5CF6" opacity="0.08" />
+              </svg>
+              <p style="position: relative; z-index: 10; color: rgba(255,255,255,0.3); font-size: 11px; padding: 10px; line-height: 1.5;">
+                Start a voice session and ask me anything about your Ethiopian coffee supply chain.
+              </p>
+            </div>
+          </div>
+
+          <!-- JavaScript to handle isStarted logic -->
+          <script>
+            // Update welcome section based on LiveKit state
+            function updateWelcomeSection() {
+              const welcomeCards = document.getElementById('welcomeCards');
+              
+              if (isLiveKitStarted) {
+                // Hide entire welcome section when session starts
+                if (welcomeCards) {
+                  welcomeCards.style.display = 'none';
+                }
+              } else {
+                // Show entire welcome section when not started
+                if (welcomeCards) {
+                  welcomeCards.style.display = 'block';
+                }
+              }
+            }
+            
+            // Call this function when LiveKit state changes
+            document.addEventListener('DOMContentLoaded', function() {
+              // Override updateLiveKitState to also update welcome section
+              const originalUpdateLiveKitState = window.updateLiveKitState;
+              window.updateLiveKitState = function(state) {
+                originalUpdateLiveKitState(state);
+                updateWelcomeSection();
+              };
+            });
+          </script>
+
+          <!-- Transcript Section
+          <div id="livekitTranscriptSection" style="display: none; flex: 1; flex-direction: column; gap: 12px;">
+            <!-- Transcript Header -->
+            <button id="transcriptToggleBtn" onclick="toggleTranscript()" style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: none; background: rgba(255,255,255,0.04); border-radius: 8px; color: rgba(255,255,255,0.25); font-size: 11px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(8px); width: fit-content;">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1">
+                <path d="M2 4h8M2 6h6M2 8h7" />
+              </svg>
+              <span id="transcriptToggleText">Show transcript</span>
+              <span id="transcriptCount" style="margin-left: auto; font-size: 9px; color: rgba(255,255,255,0.15);">0 segments</span>
+            </button>
+            
+            <!-- Transcript Content -->
+            <div id="transcriptContent" style="display: none; flex: 1; overflow-y: auto; border-radius: 12px; padding: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(8px); max-height: 400px;">
+              <div id="transcriptMessages" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Transcript messages will be added here -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+      
+      <!-- Footer -->
+      <div style="display: flex; justify-content: center; align-items: center; gap: 4px; padding: 20px; color: rgba(255,255,255,0.15); font-size: 9px;">
+        <span>The Voice Ledger</span>
+        <span>·</span>
+        <span style="font-family: monospace;">Powered by LiveKit</span>
+      </div>
     </div>
+    
+    <!-- Audio renderer for agent playback -->
+    <audio id="roomAudioRenderer" style="position: absolute; inset: 0;" autoplay playsinline></audio>
   </div>
 
   <script src="/miniapps/shared/i18n.js"></script>
@@ -570,22 +687,77 @@
           console.log('LiveKit state changed:', oldState, '->', newState);
           updateLiveKitState(newState);
           
-          // Let LiveKit agent handle state transitions automatically
-          if (newState === 'speaking') {
-            console.log('Agent started speaking');
-          }
+          // Update transcript visibility when state changes (like web-frontend)
+          updateTranscriptVisibility();
           
-          // Update UI based on state
+          
+        // Update UI based on state
           if (newState === 'connected' && !isLiveKitStarted) {
             isLiveKitStarted = true;
             document.getElementById('livekitStartBtn').style.display = 'none';
             document.getElementById('livekitActiveControls').style.display = 'flex';
+            
+            // Auto-unmute microphone when session connects
+            if (!voiceManager.isRecordingActive()) {
+              console.log('[VoiceLedger] Auto-unmuting microphone on session start');
+              setTimeout(() => {
+                if (voiceManager && voiceManager.isReady()) {
+                  toggleLiveKitMute();
+                }
+              }, 100); // Small delay to ensure room is fully ready
+            }
+            
+            // Sync UI state
+            isLiveKitMuted = !voiceManager.isRecordingActive();
+            const muteBtn = document.getElementById('livekitMuteBtn');
+            const mutedIndicator = document.getElementById('livekitMutedIndicator');
+            if (muteBtn) {
+              muteBtn.style.background = isLiveKitMuted ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.08)';
+              muteBtn.style.color = isLiveKitMuted ? '#F59E0B' : 'rgba(255,255,255,0.7)';
+              muteBtn.title = isLiveKitMuted ? 'Unmute microphone' : 'Mute microphone';
+            }
+            if (mutedIndicator) {
+              mutedIndicator.style.display = isLiveKitMuted ? 'block' : 'none';
+            }
             
             // Set up track handlers AFTER room is connected
             console.log('Setting up track handlers after connection, room exists:', !!voiceManager.room);
             if (voiceManager.room) {
               console.log('Room object:', voiceManager.room);
               console.log('RoomEvent available:', !!RoomEvent);
+              
+              // Set up transcription handler AFTER room is fully ready
+              try {
+                voiceManager.room.unregisterTextStreamHandler('lk.transcription');
+              } catch (error) {
+                // Ignore if no handler was registered
+              }
+              
+              // Register for agent transcriptions (handle both interim and final streams for real-time)
+              voiceManager.room.registerTextStreamHandler('lk.transcription', async (reader, participantInfo) => {
+                try {
+                  // Use async iterator for real-time chunk processing
+                  for await (const chunk of reader) {
+                    
+                    // Check if this is a transcription
+                    const isTranscription = reader.info?.attributes['lk.transcribed_track_id'] != null;
+                    const isFinal = reader.info?.attributes['lk.transcription_final'] === 'true';
+                    const segmentId = reader.info?.attributes['lk.segment_id'];
+                    const participantIdentity = participantInfo?.identity || 'unknown';
+                    
+                    if (isTranscription && chunk.trim()) {
+                      // Determine if it's user or agent based on participant identity
+                      const isUser = participantIdentity.includes('user') || !participantIdentity.includes('agent');
+                      const speaker = isUser ? 'USER' : 'AI';
+                      
+                      // Update transcriptions array immediately (real-time)
+                      updateTranscriptions(chunk.trim(), isUser, segmentId, isFinal);
+                    }
+                  }
+                } catch (error) {
+                  console.error('[VoiceLedger] Error reading transcription stream:', error);
+                }
+              });
               
               // Handle all track events
               voiceManager.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -724,11 +896,13 @@
     // LiveKit UI functions
     function showLiveKitVoicePanel() {
       document.getElementById('livekitVoicePanel').style.display = 'flex';
+      document.body.classList.add('livekit-panel-open');
       updateLiveKitState('disconnected');
     }
     
     function closeLiveKitVoicePanel() {
       document.getElementById('livekitVoicePanel').style.display = 'none';
+      document.body.classList.remove('livekit-panel-open');
       if (voiceManager && voiceManager.isRecordingActive()) {
         voiceManager.stopRecording();
       }
@@ -779,10 +953,6 @@
         
         console.log('[VoiceLedger] Connected to LiveKit room!');
         
-        // Start recording to enable voice detection
-        await vm.startRecording();
-        console.log('[VoiceLedger] Voice detection enabled - ready for conversation');
-        
       } catch (error) {
         console.error('[VoiceLedger] session.start() failed:', error);
         const errorEl = document.getElementById('livekitConnectError');
@@ -827,7 +997,7 @@
         return;
       }
       
-      // If already connected, just toggle mute/unmute (like web-frontend)
+      // If already connected, just toggle mute/unmute
       if (voiceManager.isReady()) {
         await toggleLiveKitMute();
         return;
@@ -842,21 +1012,180 @@
 
     async function toggleRecording() {
       try {
-        // Try haptic feedback (may not be supported in older Telegram versions)
+        // Try haptic feedback
         try {
           tg.HapticFeedback?.impactOccurred?.('light');
         } catch (hapticErr) {
           // Ignore haptic feedback errors
         }
-
-        // Just show the LiveKit popup, don't start session yet
         showLiveKitVoicePanel();
       } catch (err) {
         console.error('Error showing LiveKit panel:', err);
       }
     }
 
-    // Don't initialize LiveKit on page load - only when user clicks mic button (like web-frontend)
+    // Transcript functionality
+    let transcriptVisible = false; // Default to hidden
+    let agentTranscriptions = [];
+
+    function toggleTranscript() {
+      transcriptVisible = !transcriptVisible;
+      const content = document.getElementById('transcriptContent');
+      const toggleText = document.getElementById('transcriptToggleText');
+      
+      if (transcriptVisible) {
+        content.style.display = 'block';
+        toggleText.textContent = 'Hide transcript';
+      } else {
+        content.style.display = 'none';
+        toggleText.textContent = 'Show transcript';
+      }
+    }
+
+    // Update transcript UI visibility
+    function updateTranscriptVisibility() {
+      const sectionElement = document.getElementById('livekitTranscriptSection');
+      const isStarted = voiceManager && voiceManager.state !== 'disconnected' && voiceManager.state !== 'connecting';
+      const hasTranscriptions = agentTranscriptions.length > 0;
+      
+      
+      // Show transcript section only when LiveKit is connected AND transcriptions exist
+      if (isStarted && hasTranscriptions) {
+        sectionElement.style.display = 'block';
+      } else {
+        sectionElement.style.display = 'none';
+      }
+    }
+
+    // Simple structured transcription update
+    function updateTranscriptions(text, isUser, segmentId, isFinal) {
+      
+      // Update or add transcription segment
+      const existingSegment = agentTranscriptions.find(seg => seg.segmentId === segmentId);
+      
+      if (existingSegment) {
+        // Append to existing segment
+        if (!existingSegment.accumulatedText) {
+          existingSegment.accumulatedText = '';
+        }
+        
+        // Check if this is a new word or continuation
+        if (existingSegment.lastText && text.startsWith(existingSegment.lastText)) {
+          // Continuation - append the new part
+          const newPart = text.slice(existingSegment.lastText.length);
+          existingSegment.accumulatedText += newPart;
+        } else {
+          // New word or different text - append with space if needed
+          if (existingSegment.accumulatedText && !existingSegment.accumulatedText.endsWith(' ')) {
+            existingSegment.accumulatedText += ' ';
+          }
+          existingSegment.accumulatedText += text;
+        }
+        
+        existingSegment.text = existingSegment.accumulatedText;
+        existingSegment.isFinal = isFinal;
+        existingSegment.lastText = text;
+      } else {
+        // Add new segment with accumulated text tracking
+        agentTranscriptions.push({
+          id: segmentId || Date.now().toString(),
+          text: text,
+          accumulatedText: text,
+          isUser: isUser,
+          segmentId: segmentId,
+          isFinal: isFinal,
+          lastText: text
+        });
+      }
+      
+      // Render transcriptions
+      renderTranscriptions();
+      
+      // Update transcript UI visibility
+      updateTranscriptVisibility();
+      
+      // Auto-show transcript content when first transcription arrives
+      if (agentTranscriptions.length === 1 && !transcriptVisible) {
+        transcriptVisible = true;
+        const content = document.getElementById('transcriptContent');
+        const toggleText = document.getElementById('transcriptToggleText');
+        content.style.display = 'block';
+        toggleText.textContent = 'Hide transcript';
+      }
+    }
+
+    // Render transcriptions
+    function renderTranscriptions() {
+      const messagesContainer = document.getElementById('transcriptMessages');
+      const countElement = document.getElementById('transcriptCount');
+      
+      // Clear and re-render (simple approach like web-frontend)
+      messagesContainer.innerHTML = '';
+      
+      agentTranscriptions.forEach((seg, i) => {
+        const messageDiv = document.createElement('div');
+        messageDiv.style.cssText = 'font-size: 12px; line-height: 1.4; color: rgba(16,185,129,0.6);';
+        
+        const label = document.createElement('span');
+        label.style.cssText = 'font-family: monospace; font-size: 9px; color: rgba(255,255,255,0.15); margin-right: 6px;';
+        label.textContent = seg.isUser ? 'USER' : 'AI';
+        
+        const textSpan = document.createElement('span');
+        textSpan.style.cssText = seg.isFinal ? 'color: rgba(16,185,129,0.8);' : 'color: rgba(16,185,129,0.5);';
+        textSpan.textContent = seg.text;
+        
+        messageDiv.appendChild(label);
+        messageDiv.appendChild(textSpan);
+        messagesContainer.appendChild(messageDiv);
+      });
+      
+      // Update count
+      countElement.textContent = `${agentTranscriptions.length} segment${agentTranscriptions.length !== 1 ? 's' : ''}`;
+      
+      // Auto-scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+    }
+
+    function addTranscriptMessage(text, isUser = false) {
+      
+      const messagesContainer = document.getElementById('transcriptMessages');
+      const countElement = document.getElementById('transcriptCount');
+      const sectionElement = document.getElementById('livekitTranscriptSection');
+      
+      // Show transcript section if not visible
+      if (sectionElement.style.display === 'none') {
+        sectionElement.style.display = 'block';
+      }
+      
+      // Add message
+      const messageDiv = document.createElement('div');
+      messageDiv.style.cssText = 'font-size: 12px; line-height: 1.4; color: rgba(16,185,129,0.6);';
+      
+      const label = document.createElement('span');
+      label.style.cssText = 'font-family: monospace; font-size: 9px; color: rgba(255,255,255,0.15); margin-right: 6px;';
+      label.textContent = isUser ? 'USER' : 'AI';
+      
+      const textSpan = document.createElement('span');
+      textSpan.textContent = text;
+      
+      messageDiv.appendChild(label);
+      messageDiv.appendChild(textSpan);
+      messagesContainer.appendChild(messageDiv);
+      
+      // Update count
+      transcriptMessages.push({ text, isUser, timestamp: Date.now() });
+      countElement.textContent = `${transcriptMessages.length} segment${transcriptMessages.length !== 1 ? 's' : ''}`;
+      
+      // Auto-scroll to bottom
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Auto-show transcript if this is the first message
+      if (transcriptMessages.length === 1 && !transcriptVisible) {
+        toggleTranscript();
+      }
+      
+    }
 
     chatInput.addEventListener('input', () => {
       chatInput.style.height = 'auto';
@@ -892,7 +1221,7 @@
     vlTabBar('assistant');
     render();
     
-    // LiveKit control functions (matching web-frontend)
+    // LiveKit control functions
     async function toggleLiveKitMute() {
       if (!voiceManager || !voiceManager.isReady()) return;
       
@@ -922,12 +1251,19 @@
     
     async function endLiveKitSession() {
       if (voiceManager) {
+        // Reset transcription handler flag before disconnecting
+        voiceManager.transcriptionHandlerRegistered = false;
         await voiceManager.disconnect();
         voiceManager = null;
       }
       isLiveKitStarted = false;
       isLiveKitMuted = false;
       closeLiveKitVoicePanel();
+      
+      // Reset transcript state
+      agentTranscriptions = [];
+      transcriptVisible = false;
+      updateTranscriptVisibility();
       
       // Reset UI
       document.getElementById('livekitStartBtn').style.display = 'block';
