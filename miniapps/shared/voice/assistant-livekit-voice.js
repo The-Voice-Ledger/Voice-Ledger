@@ -1,0 +1,657 @@
+(() => {
+  const state = {
+    tg: null,
+    micBtn: null,
+    voiceManager: null,
+    isLiveKitStarted: false,
+    isLiveKitMuted: false,
+    voiceActivityTimeout: null,
+    isVoiceDetectionEnabled: false,
+    transcriptVisible: false,
+    transcriptManuallyHidden: false,
+    agentTranscriptions: [],
+    depsPromise: null,
+    RoomEvent: null,
+    liveKitVoiceManager: null,
+  };
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === 'true') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.addEventListener('load', () => {
+        script.dataset.loaded = 'true';
+        resolve();
+      }, { once: true });
+      script.addEventListener('error', reject, { once: true });
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureDependencies() {
+    if (state.depsPromise) return state.depsPromise;
+
+    state.depsPromise = (async () => {
+      await loadScript('/miniapps/shared/voice/assistant-livekit-panel.js');
+      await loadScript('/miniapps/shared/api/livekit.js?v=2025041901');
+      const liveKitImports = await import('/miniapps/shared/voice/livekit-imports.js');
+      const voiceManagerModule = await import('/miniapps/shared/voice/LiveKitVoiceManager.js');
+
+      state.RoomEvent = liveKitImports.RoomEvent;
+      window.STATE_COLORS = liveKitImports.STATE_COLORS;
+      window.STATE_LABELS = liveKitImports.STATE_LABELS;
+      state.liveKitVoiceManager = voiceManagerModule.liveKitVoiceManager;
+    })();
+
+    return state.depsPromise;
+  }
+
+  async function initializeVoiceManager() {
+    if (state.voiceManager) return state.voiceManager;
+
+    await ensureDependencies();
+
+    try {
+      state.voiceManager = state.liveKitVoiceManager;
+
+      state.voiceManager.onStateChange((newState, oldState) => {
+        console.log('LiveKit state changed:', oldState, '->', newState);
+        updateLiveKitState(newState);
+
+        // Update transcript visibility when state changes (like web-frontend)
+        updateTranscriptVisibility();
+
+        // Update UI based on state
+        if (newState === 'connected' && !state.isLiveKitStarted) {
+          state.isLiveKitStarted = true;
+          document.getElementById('livekitStartBtn').style.display = 'none';
+          document.getElementById('livekitActiveControls').style.display = 'flex';
+
+          // Auto-unmute microphone when session connects
+          if (!state.voiceManager.isRecordingActive()) {
+            console.log('[VoiceLedger] Auto-unmuting microphone on session start');
+            setTimeout(() => {
+              if (state.voiceManager && state.voiceManager.isReady()) {
+                toggleLiveKitMute();
+              }
+            }, 100); // Small delay to ensure room is fully ready
+          }
+
+          // Sync UI state
+          state.isLiveKitMuted = !state.voiceManager.isRecordingActive();
+          const muteBtn = document.getElementById('livekitMuteBtn');
+          const mutedIndicator = document.getElementById('livekitMutedIndicator');
+          if (muteBtn) {
+            muteBtn.style.background = state.isLiveKitMuted ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.08)';
+            muteBtn.style.color = state.isLiveKitMuted ? '#F59E0B' : 'rgba(255,255,255,0.7)';
+            muteBtn.title = state.isLiveKitMuted ? 'Unmute microphone' : 'Mute microphone';
+          }
+          if (mutedIndicator) {
+            mutedIndicator.style.display = state.isLiveKitMuted ? 'block' : 'none';
+          }
+
+          // Set up track handlers AFTER room is connected
+          console.log('Setting up track handlers after connection, room exists:', !!state.voiceManager.room);
+          if (state.voiceManager.room) {
+            console.log('Room object:', state.voiceManager.room);
+            console.log('RoomEvent available:', !!state.RoomEvent);
+
+            // Set up transcription handler AFTER room is fully ready
+            try {
+              state.voiceManager.room.unregisterTextStreamHandler('lk.transcription');
+            } catch (error) {
+              // Ignore if no handler was registered
+            }
+
+            // Register for agent transcriptions (handle both interim and final streams for real-time)
+            state.voiceManager.room.registerTextStreamHandler('lk.transcription', async (reader, participantInfo) => {
+              try {
+                // Use async iterator for real-time chunk processing
+                for await (const chunk of reader) {
+
+                  // Check if this is a transcription
+                  const isTranscription = reader.info?.attributes['lk.transcribed_track_id'] != null;
+                  const isFinal = reader.info?.attributes['lk.transcription_final'] === 'true';
+                  const segmentId = reader.info?.attributes['lk.segment_id'];
+                  const participantIdentity = participantInfo?.identity || 'unknown';
+
+                  if (isTranscription && chunk.trim()) {
+                    // Determine if it's user or agent based on participant identity
+                    const isUser = participantIdentity.includes('user') || !participantIdentity.includes('agent');
+
+                    // Update transcriptions array immediately (real-time)
+                    updateTranscriptions(chunk.trim(), isUser, segmentId, isFinal);
+                  }
+                }
+              } catch (error) {
+                console.error('[VoiceLedger] Error reading transcription stream:', error);
+              }
+            });
+
+            // Handle all track events
+            state.voiceManager.room.on(state.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+              console.log('Track subscribed:', track.kind, 'from participant:', participant.identity, 'isLocal:', participant.isLocal);
+              console.log('Track condition check:', {
+                isAudio: track.kind === 'audio',
+                notLocal: !participant.isLocal,
+                shouldHandle: track.kind === 'audio' && !participant.isLocal
+              });
+
+              // Only handle remote audio tracks (not our own microphone)
+              if (track.kind === 'audio' && !participant.isLocal) {
+                console.log('Remote audio track detected!');
+                console.log('Track details:', {
+                  kind: track.kind,
+                  source: track.source,
+                  enabled: track.enabled,
+                  muted: track.muted,
+                  participant: participant.identity,
+                  isLocal: participant.isLocal
+                });
+
+                const audioElement = document.getElementById('roomAudioRenderer');
+                if (audioElement) {
+                  console.log('Audio element found, attaching track...');
+
+                  // Clear any existing tracks first
+                  while (audioElement.firstChild) {
+                    audioElement.removeChild(audioElement.firstChild);
+                  }
+
+                  // Attach the new track
+                  track.attach(audioElement);
+                  console.log('Audio track attached successfully');
+
+                  // Debug audio element after attachment
+                  console.log('Audio element after attachment:', {
+                    srcObject: audioElement.srcObject ? 'has srcObject' : 'no srcObject',
+                    paused: audioElement.paused,
+                    muted: audioElement.muted,
+                    volume: audioElement.volume,
+                    readyState: audioElement.readyState,
+                    currentTime: audioElement.currentTime
+                  });
+
+                  // Force play with multiple attempts
+                  const attemptPlay = async () => {
+                    try {
+                      await audioElement.play();
+                      console.log('Audio playback started successfully!');
+                    } catch (e) {
+                      console.log('Audio play failed:', e);
+                      console.log('Trying alternative approach...');
+
+                      // Try unmute and set volume
+                      audioElement.muted = false;
+                      audioElement.volume = 1.0;
+
+                      // Try again after a short delay
+                      setTimeout(() => {
+                        audioElement.play().then(() => {
+                          console.log('Audio playback started on retry!');
+                        }).catch(e2 => {
+                          console.log('Audio play failed on retry too:', e2);
+                        });
+                      }, 100);
+                    }
+                  };
+
+                  // Try to play immediately
+                  attemptPlay();
+
+                  // Also try on user interaction
+                  const startAudioOnInteraction = () => {
+                    console.log('User interaction detected, starting audio...');
+                    attemptPlay();
+                    document.removeEventListener('click', startAudioOnInteraction);
+                    document.removeEventListener('touchstart', startAudioOnInteraction);
+                  };
+
+                  document.addEventListener('click', startAudioOnInteraction, { once: true });
+                  document.addEventListener('touchstart', startAudioOnInteraction, { once: true });
+
+                } else {
+                  console.error('roomAudioRenderer element not found');
+                }
+              } else {
+                console.log('Ignoring non-remote audio track:', track.kind, participant.isLocal);
+              }
+            });
+
+            // Also handle existing tracks that might already be subscribed
+            console.log('Checking existing remote participants...', state.voiceManager.room.remoteParticipants.length);
+            state.voiceManager.room.remoteParticipants.forEach((participant, index) => {
+              console.log(`Participant ${index}:`, {
+                identity: participant.identity,
+                isLocal: participant.isLocal,
+                trackPublications: participant.trackPublications.length
+              });
+
+              participant.trackPublications.forEach((publication) => {
+                console.log('Publication:', {
+                  kind: publication.kind,
+                  source: publication.source,
+                  track: !!publication.track,
+                  isLocal: publication.isLocal
+                });
+
+                if (publication.kind === 'audio' && publication.track && !publication.isLocal) {
+                  console.log('Found existing remote audio track, attaching...');
+                  const audioElement = document.getElementById('roomAudioRenderer');
+                  if (audioElement) {
+                    publication.track.attach(audioElement);
+                    audioElement.play().then(() => {
+                      console.log('Existing track audio started!');
+                    }).catch(e => {
+                      console.log('Play failed for existing track:', e);
+                    });
+                  } else {
+                    console.error('Audio element not found for existing track');
+                  }
+                }
+              });
+            });
+          }
+        }
+      });
+
+      return state.voiceManager;
+    } catch (error) {
+      console.error('Failed to initialize voice manager:', error);
+      throw error;
+    }
+  }
+
+  function showLiveKitVoicePanel() {
+    document.getElementById('livekitVoicePanel').style.display = 'flex';
+    document.body.classList.add('livekit-panel-open');
+    updateLiveKitState('disconnected');
+  }
+
+  function closeLiveKitVoicePanel() {
+    document.getElementById('livekitVoicePanel').style.display = 'none';
+    document.body.classList.remove('livekit-panel-open');
+    if (state.voiceManager && state.voiceManager.isRecordingActive()) {
+      state.voiceManager.stopRecording();
+    }
+  }
+
+  function updateLiveKitState(stateName) {
+    const { STATE_COLORS, STATE_LABELS } = window.STATE_COLORS ? window : { STATE_COLORS: {}, STATE_LABELS: {} };
+    const colors = STATE_COLORS[stateName] || { dot: '#9CA3AF', glow: 'rgba(107,114,128,0.15)' };
+    const label = STATE_LABELS[stateName] || stateName;
+    const isPulsing = ['listening', 'connecting', 'thinking'].includes(stateName);
+
+    const stateDot = document.getElementById('livekitStateDot');
+    const stateLabel = document.getElementById('livekitStateLabel');
+
+    if (stateDot) {
+      stateDot.style.backgroundColor = colors.dot;
+      stateDot.style.boxShadow = `0 0 8px ${colors.glow}`;
+      stateDot.style.animation = isPulsing ? 'pulse 1.5s infinite' : 'none';
+    }
+
+    if (stateLabel) {
+      stateLabel.textContent = label;
+      stateLabel.style.color = colors.dot;
+    }
+
+    // Update orb
+    const orb = document.getElementById('livekitOrb');
+    if (orb) {
+      orb.style.boxShadow = `0 0 60px 12px ${colors.glow}, 0 0 120px 24px ${colors.glow}`;
+      orb.style.opacity = (stateName === 'speaking' || stateName === 'listening') ? 0.7 : 0.25;
+    }
+    window.assistantLiveKitPanel?.updateWelcomeSection(state.isLiveKitStarted);
+  }
+
+  async function initializeLiveKit() {
+    try {
+      console.log('[VoiceLedger] Starting voice session...');
+      updateLiveKitState('connecting');
+
+      // Initialize voice manager
+      const vm = await initializeVoiceManager();
+
+      // Connect to LiveKit room with agent (like web-frontend's session.start())
+      await vm.connect(
+        state.tg?.initDataUnsafe?.user?.id || 'anonymous',
+        state.tg?.initDataUnsafe?.user?.first_name || 'Guest',
+        'user'
+      );
+
+      console.log('[VoiceLedger] Connected to LiveKit room!');
+
+    } catch (error) {
+      console.error('[VoiceLedger] session.start() failed:', error);
+      const errorEl = document.getElementById('livekitConnectError');
+      if (errorEl) {
+        errorEl.textContent = error.message || 'Failed to connect. Check microphone permissions.';
+        errorEl.style.display = 'block';
+      }
+      updateLiveKitState('failed');
+    }
+  }
+
+  function enableVoiceActivityDetection() {
+    if (state.isVoiceDetectionEnabled || !state.voiceManager) return;
+
+    state.isVoiceDetectionEnabled = true;
+    console.log('Enabling continuous voice activity detection');
+
+    // Start in listening mode
+    updateLiveKitState('listening');
+
+    // Set up voice activity monitoring (this would need to be implemented in LiveKitVoiceManager)
+    // For now, we'll use the manual recording as a fallback
+  }
+
+  function disableVoiceActivityDetection() {
+    state.isVoiceDetectionEnabled = false;
+    if (state.voiceActivityTimeout) {
+      clearTimeout(state.voiceActivityTimeout);
+      state.voiceActivityTimeout = null;
+    }
+    console.log('Disabling voice activity detection');
+  }
+
+  async function toggleLiveKitRecording() {
+    // Only initialize once, like web-frontend
+    if (!state.voiceManager) {
+      await initializeLiveKit();
+      return;
+    }
+
+    // If already connected, just toggle mute/unmute
+    if (state.voiceManager.isReady()) {
+      await toggleLiveKitMute();
+      return;
+    }
+  }
+
+  function initializeFallbackVoice() {
+    console.log('Using fallback voice recording');
+    state.voiceManager = window.VoiceManager; // Use original VoiceManager
+  }
+
+  async function toggleRecording() {
+    try {
+      await ensureDependencies();
+      // Try haptic feedback
+      try {
+        state.tg?.HapticFeedback?.impactOccurred?.('light');
+      } catch (hapticErr) {
+        // Ignore haptic feedback errors
+      }
+      showLiveKitVoicePanel();
+    } catch (err) {
+      console.error('Error showing LiveKit panel:', err);
+    }
+  }
+
+  function toggleTranscript() {
+    const isStarted = state.voiceManager && state.voiceManager.state !== 'disconnected' && state.voiceManager.state !== 'connecting';
+    if (!isStarted || state.agentTranscriptions.length === 0) return;
+
+    state.transcriptVisible = !state.transcriptVisible;
+    const content = document.getElementById('transcriptContent');
+    const toggleText = document.getElementById('transcriptToggleText');
+    if (!content || !toggleText) return;
+
+    if (state.transcriptVisible) {
+      state.transcriptManuallyHidden = false;
+      content.style.display = 'block';
+      toggleText.textContent = 'Hide transcript';
+    } else {
+      state.transcriptManuallyHidden = true;
+      content.style.display = 'none';
+      toggleText.textContent = 'Show transcript';
+    }
+  }
+
+  function updateTranscriptVisibility() {
+    const sectionElement = document.getElementById('livekitTranscriptSection');
+    const content = document.getElementById('transcriptContent');
+    const toggleText = document.getElementById('transcriptToggleText');
+    const isStarted = state.voiceManager && state.voiceManager.state !== 'disconnected' && state.voiceManager.state !== 'connecting';
+    const hasTranscriptions = state.agentTranscriptions.length > 0;
+
+    // Show transcript section only when LiveKit is connected AND transcriptions exist
+    if (sectionElement) {
+      if (isStarted && hasTranscriptions) {
+        sectionElement.style.display = 'flex';
+      } else {
+        sectionElement.style.display = 'none';
+        state.transcriptVisible = false;
+        if (content) content.style.display = 'none';
+        if (toggleText) toggleText.textContent = 'Show transcript';
+      }
+    }
+  }
+
+  function resetTranscriptUI() {
+    const content = document.getElementById('transcriptContent');
+    const toggleText = document.getElementById('transcriptToggleText');
+
+    state.agentTranscriptions = [];
+    state.transcriptVisible = false;
+    state.transcriptManuallyHidden = false;
+
+    renderTranscriptions();
+    updateTranscriptVisibility();
+
+    if (content) content.style.display = 'none';
+    if (toggleText) toggleText.textContent = 'Show transcript';
+  }
+
+  function updateTranscriptions(text, isUser, segmentId, isFinal) {
+
+    // Update or add transcription segment
+    const existingSegment = state.agentTranscriptions.find(seg => seg.segmentId === segmentId);
+
+    if (existingSegment) {
+      // Append to existing segment
+      if (!existingSegment.accumulatedText) {
+        existingSegment.accumulatedText = '';
+      }
+
+      // Check if this is a new word or continuation
+      if (existingSegment.lastText && text.startsWith(existingSegment.lastText)) {
+        // Continuation - append the new part
+        const newPart = text.slice(existingSegment.lastText.length);
+        existingSegment.accumulatedText += newPart;
+      } else {
+        // New word or different text - append with space if needed
+        if (existingSegment.accumulatedText && !existingSegment.accumulatedText.endsWith(' ')) {
+          existingSegment.accumulatedText += ' ';
+        }
+        existingSegment.accumulatedText += text;
+      }
+
+      existingSegment.text = existingSegment.accumulatedText;
+      existingSegment.isFinal = isFinal;
+      existingSegment.lastText = text;
+    } else {
+      // Add new segment with accumulated text tracking
+      state.agentTranscriptions.push({
+        id: segmentId || Date.now().toString(),
+        text: text,
+        accumulatedText: text,
+        isUser: isUser,
+        segmentId: segmentId,
+        isFinal: isFinal,
+        lastText: text
+      });
+    }
+
+    // Render transcriptions
+    renderTranscriptions();
+
+    // Update transcript UI visibility
+    updateTranscriptVisibility();
+
+  }
+
+  function renderTranscriptions() {
+    const messagesContainer = document.getElementById('transcriptMessages');
+    const countElement = document.getElementById('transcriptCount');
+    if (!messagesContainer || !countElement) return;
+
+    // Clear and re-render (simple approach like web-frontend)
+    messagesContainer.innerHTML = '';
+
+    state.agentTranscriptions.forEach((seg, i) => {
+      const messageDiv = document.createElement('div');
+      messageDiv.style.cssText = 'font-size: 12px; line-height: 1.4; color: rgba(16,185,129,0.6);';
+
+      const label = document.createElement('span');
+      label.style.cssText = 'font-family: monospace; font-size: 9px; color: rgba(255,255,255,0.15); margin-right: 6px;';
+      label.textContent = seg.isUser ? 'USER' : 'AI';
+
+      const textSpan = document.createElement('span');
+      textSpan.style.cssText = seg.isFinal ? 'color: rgba(16,185,129,0.8);' : 'color: rgba(16,185,129,0.5);';
+      textSpan.textContent = seg.text;
+
+      messageDiv.appendChild(label);
+      messageDiv.appendChild(textSpan);
+      messagesContainer.appendChild(messageDiv);
+    });
+
+    // Update count
+    countElement.textContent = `${state.agentTranscriptions.length} segment${state.agentTranscriptions.length !== 1 ? 's' : ''}`;
+
+    // Auto-scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  function addTranscriptMessage(text, isUser = false) {
+    const messagesContainer = document.getElementById('transcriptMessages');
+    const countElement = document.getElementById('transcriptCount');
+    const sectionElement = document.getElementById('livekitTranscriptSection');
+    if (!messagesContainer || !countElement || !sectionElement) return;
+
+    // Show transcript section if not visible
+    if (sectionElement.style.display === 'none') {
+      sectionElement.style.display = 'block';
+    }
+
+    // Add message
+    const messageDiv = document.createElement('div');
+    messageDiv.style.cssText = 'font-size: 12px; line-height: 1.4; color: rgba(16,185,129,0.6);';
+
+    const label = document.createElement('span');
+    label.style.cssText = 'font-family: monospace; font-size: 9px; color: rgba(255,255,255,0.15); margin-right: 6px;';
+    label.textContent = isUser ? 'USER' : 'AI';
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = text;
+
+    messageDiv.appendChild(label);
+    messageDiv.appendChild(textSpan);
+    messagesContainer.appendChild(messageDiv);
+
+    // Update count
+    transcriptMessages.push({ text, isUser, timestamp: Date.now() });
+    countElement.textContent = `${transcriptMessages.length} segment${transcriptMessages.length !== 1 ? 's' : ''}`;
+
+    // Auto-scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    // Auto-show transcript if this is the first message
+    if (transcriptMessages.length === 1 && !state.transcriptVisible) {
+      toggleTranscript();
+    }
+  }
+
+  async function toggleLiveKitMute() {
+    if (!state.voiceManager || !state.voiceManager.isReady()) return;
+
+    try {
+      // Use Room-based recording toggle
+      await state.voiceManager.toggleRecording();
+
+      // Update muted state
+      state.isLiveKitMuted = !state.voiceManager.isRecordingActive();
+      console.log('[VoiceLedger] Microphone', state.isLiveKitMuted ? 'muted' : 'unmuted');
+
+      // Update UI
+      const muteBtn = document.getElementById('livekitMuteBtn');
+      const mutedIndicator = document.getElementById('livekitMutedIndicator');
+      if (muteBtn) {
+        muteBtn.style.background = state.isLiveKitMuted ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.08)';
+        muteBtn.style.color = state.isLiveKitMuted ? '#F59E0B' : 'rgba(255,255,255,0.7)';
+        muteBtn.title = state.isLiveKitMuted ? 'Unmute microphone' : 'Mute microphone';
+      }
+      if (mutedIndicator) {
+        mutedIndicator.style.display = state.isLiveKitMuted ? 'block' : 'none';
+      }
+    } catch (error) {
+      console.error('Failed to toggle mute:', error);
+    }
+  }
+
+  async function endLiveKitSession() {
+    if (state.voiceManager) {
+      // Reset transcription handler flag before disconnecting
+      state.voiceManager.transcriptionHandlerRegistered = false;
+      await state.voiceManager.disconnect();
+      state.voiceManager = null;
+    }
+    state.isLiveKitStarted = false;
+    state.isLiveKitMuted = false;
+    closeLiveKitVoicePanel();
+
+    // Reset transcript state
+    resetTranscriptUI();
+
+    // Reset UI
+    const startBtn = document.getElementById('livekitStartBtn');
+    const activeControls = document.getElementById('livekitActiveControls');
+    if (startBtn) startBtn.style.display = 'block';
+    if (activeControls) activeControls.style.display = 'none';
+  }
+
+  function init({ tg, micBtn }) {
+    state.tg = tg;
+    state.micBtn = micBtn;
+
+    if (state.micBtn && !state.micBtn.dataset.livekitVoiceBound) {
+      state.micBtn.addEventListener('click', toggleRecording);
+      state.micBtn.dataset.livekitVoiceBound = 'true';
+    }
+
+    ensureDependencies().catch(error => {
+      console.error('Failed to initialize LiveKit voice dependencies:', error);
+    });
+  }
+
+  function isReady() {
+    return !!(state.voiceManager && state.voiceManager.isReady());
+  }
+
+  window.closeLiveKitVoicePanel = closeLiveKitVoicePanel;
+  window.initializeLiveKit = initializeLiveKit;
+  window.toggleLiveKitMute = toggleLiveKitMute;
+  window.endLiveKitSession = endLiveKitSession;
+  window.toggleTranscript = toggleTranscript;
+
+  window.AssistantLiveKitVoice = {
+    init,
+    isReady,
+    updateState: updateLiveKitState,
+    toggleRecording,
+    toggleMute: toggleLiveKitMute,
+    endSession: endLiveKitSession,
+  };
+})();
