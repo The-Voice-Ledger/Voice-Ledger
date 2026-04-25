@@ -10,6 +10,10 @@
     transcriptVisible: false,
     transcriptManuallyHidden: false,
     agentTranscriptions: [],
+    agentAttributeState: null,
+    boundRoom: null,
+    currentUiState: 'disconnected',
+    derivedStateTimeout: null,
     depsPromise: null,
     RoomEvent: null,
     liveKitVoiceManager: null,
@@ -64,10 +68,20 @@
 
     try {
       state.voiceManager = state.liveKitVoiceManager;
+      state.voiceManager.onRoomReady?.((room) => {
+        bindAgentStateListeners(room);
+      });
 
       state.voiceManager.onStateChange((newState, oldState) => {
         console.log('LiveKit state changed:', oldState, '->', newState);
-        updateLiveKitState(newState);
+        if (['connecting', 'disconnected', 'failed'].includes(newState)) {
+          updateLiveKitState(newState);
+          if (newState === 'disconnected' || newState === 'failed') {
+            state.agentAttributeState = null;
+          }
+        } else if (newState === 'connected') {
+          syncAgentStateFromRoom(state.voiceManager.room) || applyDerivedState(getDefaultUiState());
+        }
 
         // Update transcript visibility when state changes (like web-frontend)
         updateTranscriptVisibility();
@@ -106,6 +120,8 @@
           if (state.voiceManager.room) {
             console.log('Room object:', state.voiceManager.room);
             console.log('RoomEvent available:', !!state.RoomEvent);
+            bindAgentStateListeners(state.voiceManager.room);
+            syncAgentStateFromRoom(state.voiceManager.room);
 
             // Set up transcription handler AFTER room is fully ready
             try {
@@ -129,6 +145,14 @@
                   if (isTranscription && chunk.trim()) {
                     // Determine if it's user or agent based on participant identity
                     const isUser = participantIdentity.includes('user') || !participantIdentity.includes('agent');
+
+                    if (!state.agentAttributeState) {
+                      if (isUser) {
+                        applyDerivedState(isFinal ? 'thinking' : 'listening', isFinal ? 12000 : null);
+                      } else {
+                        applyDerivedState('speaking', isFinal ? 1200 : null);
+                      }
+                    }
 
                     // Update transcriptions array immediately (real-time)
                     updateTranscriptions(chunk.trim(), isUser, segmentId, isFinal);
@@ -187,6 +211,9 @@
                   const attemptPlay = async () => {
                     try {
                       await audioElement.play();
+                      if (!state.agentAttributeState) {
+                        applyDerivedState('speaking');
+                      }
                       console.log('Audio playback started successfully!');
                     } catch (e) {
                       console.log('Audio play failed:', e);
@@ -199,6 +226,9 @@
                       // Try again after a short delay
                       setTimeout(() => {
                         audioElement.play().then(() => {
+                          if (!state.agentAttributeState) {
+                            applyDerivedState('speaking');
+                          }
                           console.log('Audio playback started on retry!');
                         }).catch(e2 => {
                           console.log('Audio play failed on retry too:', e2);
@@ -220,6 +250,30 @@
 
                   document.addEventListener('click', startAudioOnInteraction, { once: true });
                   document.addEventListener('touchstart', startAudioOnInteraction, { once: true });
+
+                  audioElement.onplaying = () => {
+                    if (!state.agentAttributeState) {
+                      applyDerivedState('speaking');
+                    }
+                  };
+
+                  audioElement.onwaiting = () => {
+                    if (!state.agentAttributeState) {
+                      applyDerivedState('thinking', 8000);
+                    }
+                  };
+
+                  audioElement.onpause = () => {
+                    if (!state.agentAttributeState) {
+                      applyDerivedState(getDefaultUiState(), 300);
+                    }
+                  };
+
+                  audioElement.onended = () => {
+                    if (!state.agentAttributeState) {
+                      applyDerivedState(getDefaultUiState(), 300);
+                    }
+                  };
 
                 } else {
                   console.error('roomAudioRenderer element not found');
@@ -279,6 +333,94 @@
     updateLiveKitState('disconnected');
   }
 
+  function clearDerivedStateTimeout() {
+    if (state.derivedStateTimeout) {
+      clearTimeout(state.derivedStateTimeout);
+      state.derivedStateTimeout = null;
+    }
+  }
+
+  function isAgentParticipant(participant) {
+    const identity = participant?.identity || '';
+    return identity.includes('agent') || !!participant?.attributes?.['lk.agent.state'];
+  }
+
+  function syncAgentStateFromParticipant(participant) {
+    if (!isAgentParticipant(participant)) return false;
+
+    const agentState = participant?.attributes?.['lk.agent.state'] || null;
+    state.agentAttributeState = agentState;
+
+    if (agentState) {
+      clearDerivedStateTimeout();
+      updateLiveKitState(agentState);
+      return true;
+    }
+
+    return false;
+  }
+
+  function syncAgentStateFromRoom(room) {
+    if (!room || !room.remoteParticipants) return false;
+
+    let found = false;
+    room.remoteParticipants.forEach((participant) => {
+      if (!found && syncAgentStateFromParticipant(participant)) {
+        found = true;
+      }
+    });
+
+    return found;
+  }
+
+  function bindAgentStateListeners(room) {
+    if (!room || state.boundRoom === room || !state.RoomEvent) return;
+    state.boundRoom = room;
+
+    room.on(state.RoomEvent.ParticipantConnected, (participant) => {
+      syncAgentStateFromParticipant(participant);
+    });
+
+    room.on(state.RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
+      if (!isAgentParticipant(participant)) return;
+      if (Object.prototype.hasOwnProperty.call(changed, 'lk.agent.state')) {
+        syncAgentStateFromParticipant(participant);
+      }
+    });
+  }
+
+  function getDefaultUiState() {
+    if (!state.voiceManager || !state.voiceManager.isReady()) {
+      return state.isLiveKitStarted ? 'connecting' : 'disconnected';
+    }
+
+    if (state.agentAttributeState) {
+      return state.agentAttributeState;
+    }
+
+    if (state.isLiveKitMuted || !state.voiceManager.isRecordingActive()) {
+      return 'idle';
+    }
+
+    return 'listening';
+  }
+
+  function applyDerivedState(stateName, resetAfterMs = null) {
+    if (state.agentAttributeState && ['initializing', 'idle', 'listening', 'thinking', 'speaking'].includes(stateName)) {
+      return;
+    }
+
+    clearDerivedStateTimeout();
+    updateLiveKitState(stateName);
+
+    if (resetAfterMs) {
+      state.derivedStateTimeout = setTimeout(() => {
+        state.derivedStateTimeout = null;
+        updateLiveKitState(getDefaultUiState());
+      }, resetAfterMs);
+    }
+  }
+
   function closeLiveKitVoicePanel() {
     document.getElementById('livekitVoicePanel').style.display = 'none';
     document.body.classList.remove('livekit-panel-open');
@@ -288,10 +430,12 @@
   }
 
   function updateLiveKitState(stateName) {
+    const uiStateName = stateName === 'connected' ? 'idle' : stateName;
+    state.currentUiState = uiStateName;
     const { STATE_COLORS, STATE_LABELS } = window.STATE_COLORS ? window : { STATE_COLORS: {}, STATE_LABELS: {} };
-    const colors = STATE_COLORS[stateName] || { dot: '#9CA3AF', glow: 'rgba(107,114,128,0.15)' };
-    const label = STATE_LABELS[stateName] || stateName;
-    const isPulsing = ['listening', 'connecting', 'thinking'].includes(stateName);
+    const colors = STATE_COLORS[uiStateName] || { dot: '#9CA3AF', glow: 'rgba(107,114,128,0.15)' };
+    const label = STATE_LABELS[uiStateName] || uiStateName;
+    const isPulsing = ['listening', 'connecting', 'thinking'].includes(uiStateName);
 
     const stateDot = document.getElementById('livekitStateDot');
     const stateLabel = document.getElementById('livekitStateLabel');
@@ -311,7 +455,7 @@
     const orb = document.getElementById('livekitOrb');
     if (orb) {
       orb.style.boxShadow = `0 0 60px 12px ${colors.glow}, 0 0 120px 24px ${colors.glow}`;
-      orb.style.opacity = (stateName === 'speaking' || stateName === 'listening') ? 0.7 : 0.25;
+      orb.style.opacity = (uiStateName === 'speaking' || uiStateName === 'listening') ? 0.7 : 0.25;
     }
     window.assistantLiveKitPanel?.updateWelcomeSection(state.isLiveKitStarted);
   }
@@ -330,6 +474,8 @@
         state.tg?.initDataUnsafe?.user?.first_name || 'Guest',
         'user'
       );
+
+      syncAgentStateFromRoom(vm.room) || applyDerivedState(getDefaultUiState());
 
       console.log('[VoiceLedger] Connected to LiveKit room!');
 
@@ -596,6 +742,7 @@
       if (mutedIndicator) {
         mutedIndicator.style.display = state.isLiveKitMuted ? 'block' : 'none';
       }
+      applyDerivedState(getDefaultUiState());
     } catch (error) {
       console.error('Failed to toggle mute:', error);
     }
@@ -610,6 +757,9 @@
     }
     state.isLiveKitStarted = false;
     state.isLiveKitMuted = false;
+    state.agentAttributeState = null;
+    state.boundRoom = null;
+    clearDerivedStateTimeout();
     closeLiveKitVoicePanel();
 
     // Reset transcript state
@@ -640,6 +790,17 @@
     return !!(state.voiceManager && state.voiceManager.isReady());
   }
 
+  function externalUpdateState(stateName) {
+    if (!state.voiceManager || !state.voiceManager.isReady()) {
+      updateLiveKitState(stateName);
+      return;
+    }
+
+    if (['connecting', 'disconnected', 'failed'].includes(stateName)) {
+      updateLiveKitState(stateName);
+    }
+  }
+
   window.closeLiveKitVoicePanel = closeLiveKitVoicePanel;
   window.initializeLiveKit = initializeLiveKit;
   window.toggleLiveKitMute = toggleLiveKitMute;
@@ -649,7 +810,7 @@
   window.AssistantLiveKitVoice = {
     init,
     isReady,
-    updateState: updateLiveKitState,
+    updateState: externalUpdateState,
     toggleRecording,
     toggleMute: toggleLiveKitMute,
     endSession: endLiveKitSession,

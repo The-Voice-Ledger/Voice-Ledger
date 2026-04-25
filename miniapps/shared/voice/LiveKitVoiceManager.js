@@ -27,6 +27,7 @@ export class LiveKitVoiceManager {
     this.transcriptCallback = null
     this.stateChangeCallback = null
     this.audioLevelCallback = null
+    this.roomReadyCallback = null
     
     // State management
     this.state = 'disconnected' // disconnected, connecting, connected, listening, thinking, speaking
@@ -95,6 +96,9 @@ export class LiveKitVoiceManager {
 
       // Set up event listeners
       this.setupEventListeners()
+      if (this.roomReadyCallback) {
+        this.roomReadyCallback(this.room)
+      }
 
       // Connect to LiveKit room
       await this.room.connect(tokenData.url, tokenData.token)
@@ -273,6 +277,13 @@ export class LiveKitVoiceManager {
    */
   onAudioLevel(callback) {
     this.audioLevelCallback = callback
+  }
+
+  /**
+   * Set callback for when the room instance is created
+   */
+  onRoomReady(callback) {
+    this.roomReadyCallback = callback
   }
 
   /**
