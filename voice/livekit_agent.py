@@ -30,6 +30,7 @@ import logging
 from typing import Annotated
 
 from dotenv import load_dotenv
+from openai import OpenAI as OpenAIClient
 
 load_dotenv()
 
@@ -48,6 +49,114 @@ logger = logging.getLogger("voice-ledger-agent")
 
 # ── Action card topic ────────────────────────────────────────────────
 ACTION_TOPIC = "vl.action"
+
+
+# ── LLM/TTS provider selection (OpenAI primary, Gemini fallback) ─────
+_GEMINI_OPENAI_BASE_URL = os.getenv(
+    "GEMINI_OPENAI_BASE_URL",
+    "https://generativelanguage.googleapis.com/v1beta/openai/",
+)
+
+
+def _openai_healthcheck_enabled() -> bool:
+    return os.getenv("LIVEKIT_OPENAI_HEALTHCHECK", "true").lower() in ("1", "true", "yes")
+
+
+def _fallback_enabled() -> bool:
+    return os.getenv("LLM_FALLBACK_ENABLED", "true").lower() in ("1", "true", "yes")
+
+
+def _is_retryable_openai_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        if status_code in (408, 409, 429):
+            return True
+        if status_code >= 500:
+            return True
+    keywords = (
+        "insufficient_quota",
+        "quota",
+        "billing",
+        "rate limit",
+        "timeout",
+        "connection",
+        "service unavailable",
+        "internal server error",
+    )
+    return any(k in text for k in keywords)
+
+
+def _openai_llm_healthy() -> bool:
+    """
+    Lightweight health check to decide whether to route LiveKit LLM to OpenAI.
+    If OpenAI is down/quota-limited, session falls back to Gemini.
+    """
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        return False
+    if not _openai_healthcheck_enabled():
+        return True
+
+    model = os.getenv("LIVEKIT_OPENAI_HEALTHCHECK_MODEL", "gpt-4o-mini")
+    try:
+        client = OpenAIClient(api_key=openai_key, timeout=8.0, max_retries=0)
+        client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "ok"}],
+            max_tokens=1,
+            temperature=0,
+        )
+        return True
+    except Exception as e:
+        if _is_retryable_openai_error(e):
+            logger.warning("OpenAI health check failed (retryable): %s", e)
+            return False
+        # Non-retryable errors should still fail closed for safety.
+        logger.warning("OpenAI health check failed (non-retryable): %s", e)
+        return False
+
+
+def _build_livekit_llm():
+    """
+    Returns: (llm_instance, provider_name, model_name)
+    """
+    openai_model = os.getenv("LIVEKIT_OPENAI_MODEL", "gpt-4o-mini")
+    gemini_model = os.getenv("LIVEKIT_GEMINI_MODEL", "gemini-2.5-flash")
+    temperature = float(os.getenv("LIVEKIT_LLM_TEMPERATURE", "0.2"))
+
+    if _openai_llm_healthy():
+        llm = openai.LLM(model=openai_model, temperature=temperature)
+        return llm, "openai", openai_model
+
+    if _fallback_enabled() and os.getenv("GEMINI_API_KEY"):
+        llm = openai.LLM(
+            model=gemini_model,
+            api_key=os.getenv("GEMINI_API_KEY"),
+            base_url=_GEMINI_OPENAI_BASE_URL,
+            temperature=temperature,
+        )
+        return llm, "gemini", gemini_model
+
+    # Last-resort path if Gemini key is absent: keep OpenAI configured.
+    llm = openai.LLM(model=openai_model, temperature=temperature)
+    return llm, "openai", openai_model
+
+
+def _build_livekit_tts(provider_name: str):
+    """
+    Keep voice output functional during Gemini fallback by using Deepgram TTS.
+    """
+    if provider_name == "gemini":
+        deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+        deepgram_tts_model = os.getenv("LIVEKIT_DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en")
+        if deepgram_key:
+            return deepgram.TTS(model=deepgram_tts_model, api_key=deepgram_key)
+        logger.warning("Gemini LLM selected but DEEPGRAM_API_KEY missing; falling back to OpenAI TTS")
+
+    openai_tts_model = os.getenv("LIVEKIT_OPENAI_TTS_MODEL", "tts-1")
+    openai_tts_voice = os.getenv("LIVEKIT_OPENAI_TTS_VOICE", "nova")
+    return openai.TTS(model=openai_tts_model, voice=openai_tts_voice)
 
 
 async def _send_action_card(ctx: RunContext, card: dict) -> None:
@@ -1087,10 +1196,15 @@ async def handle_session(ctx: agents.JobContext):
         user_name, user_id, user_role, is_guest,
     )
 
+    llm_instance, llm_provider, llm_model = _build_livekit_llm()
+    tts_instance = _build_livekit_tts(llm_provider)
+
+    logger.info("LiveKit provider selection: llm_provider=%s, llm_model=%s", llm_provider, llm_model)
+
     session = AgentSession(
         stt=deepgram.STT(model="nova-2", language="en-US"),
-        llm=openai.LLM(model="gpt-4o-mini", temperature=0.2),
-        tts=openai.TTS(model="tts-1", voice="nova"),
+        llm=llm_instance,
+        tts=tts_instance,
         vad=silero.VAD.load(),
         userdata={
             "user_id": user_id,
