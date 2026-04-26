@@ -23,6 +23,7 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from openai import OpenAI
 from dotenv import load_dotenv
+from voice.providers.llm_fallback import chat_completion_with_fallback
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -95,7 +96,8 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
         lang_names = {"en": "English", "am": "Amharic"}
         src_name = lang_names.get(source_lang, source_lang)
         tgt_name = lang_names.get(target_lang, target_lang)
-        resp = _client.chat.completions.create(
+        resp, provider_used = chat_completion_with_fallback(
+            primary_client=_client,
             model="gpt-4o-mini",
             messages=[
                 {
@@ -112,7 +114,9 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
         )
         translated = resp.choices[0].message.content.strip()
         if translated:
-            logger.info(f"GPT translated {source_lang}→{target_lang} ({len(text)} chars)")
+            logger.info(
+                f"Translated {source_lang}→{target_lang} via {provider_used} ({len(text)} chars)"
+            )
             return translated
     except Exception as e:
         logger.warning(f"GPT translation also failed: {e}")
@@ -447,7 +451,8 @@ class AgentExecutor:
                 )
                 
                 # Call the model
-                response = _client.chat.completions.create(
+                response, provider_used = chat_completion_with_fallback(
+                    primary_client=_client,
                     model=self.model,
                     messages=messages,
                     tools=self.tools,
@@ -455,6 +460,7 @@ class AgentExecutor:
                     temperature=AGENT_TEMPERATURE,
                     max_tokens=1000,
                 )
+                logger.info(f"Agent LLM provider: {provider_used}")
                 
                 total_tokens += response.usage.total_tokens if response.usage else 0
                 choice = response.choices[0]

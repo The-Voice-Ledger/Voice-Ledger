@@ -13,6 +13,7 @@ import json
 from typing import Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
+from voice.providers.llm_fallback import chat_completion_with_fallback
 
 from .conversation_manager import ConversationManager
 
@@ -398,12 +399,14 @@ When user wants to create (batch, RFQ, offer), start appropriate workflow.
         logger.info(f"Sending English conversation to GPT-4 for user {user_id}, turn {ConversationManager.get_turn_count(user_id)}")
         
         # Call GPT-4
-        response = client.chat.completions.create(
-            model="gpt-4",
+        response, provider_used = chat_completion_with_fallback(
+            primary_client=client,
+            model=os.getenv("ENGLISH_CONVERSATION_MODEL", "gpt-4"),
             messages=messages,
             temperature=0.7,
-            max_tokens=500
+            max_tokens=500,
         )
+        logger.info(f"English conversation provider: {provider_used}")
         
         assistant_response = response.choices[0].message.content.strip()
         

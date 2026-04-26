@@ -9,6 +9,7 @@ import os
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
+from voice.providers.llm_fallback import chat_completion_with_fallback
 
 # Load environment variables
 load_dotenv()
@@ -185,14 +186,15 @@ For split_batch:
 If a field is not mentioned, set it to null. Do NOT add explanations, only JSON."""
 
     try:
-        response = client.chat.completions.create(
+        response, _provider_used = chat_completion_with_fallback(
+            primary_client=client,
             model="gpt-4o-mini",  # Upgraded from gpt-3.5-turbo for better intent accuracy
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": transcript}
             ],
             temperature=0.1,
-            max_tokens=300
+            max_tokens=300,
         )
         
         # Parse the GPT response

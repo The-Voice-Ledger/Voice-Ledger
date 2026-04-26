@@ -12,6 +12,7 @@ import logging
 from typing import Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
+from voice.providers.llm_fallback import chat_completion_with_fallback
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -104,20 +105,24 @@ Output: {"confidence": 0.2, "extracted_fields": {"quantity_kg": null, "variety":
 Now analyze the user's message."""
 
     try:
-        response = client.chat.completions.create(
+        response, provider_used = chat_completion_with_fallback(
+            primary_client=client,
             model="gpt-4o-mini",  # Cheaper and faster than gpt-4
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Language: {language}\nMessage: {transcript}"}
             ],
             temperature=0.3,  # Lower temperature for more consistent extraction
-            response_format={"type": "json_object"}  # Force JSON response
+            response_format={"type": "json_object"},  # Force JSON response
         )
         
         result_text = response.choices[0].message.content
         result = json.loads(result_text)
         
-        logger.info(f"Voice RFQ extraction: confidence={result.get('confidence')}, fields={len([f for f in result.get('extracted_fields', {}).values() if f is not None])}/6")
+        logger.info(
+            f"Voice RFQ extraction via {provider_used}: confidence={result.get('confidence')}, "
+            f"fields={len([f for f in result.get('extracted_fields', {}).values() if f is not None])}/6"
+        )
         
         return result
         
