@@ -39,6 +39,7 @@ def test_build_livekit_llm_falls_back_to_gemini_when_openai_unhealthy(monkeypatc
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
     monkeypatch.setenv("LLM_FALLBACK_ENABLED", "true")
     monkeypatch.delenv("LIVEKIT_LLM_PROVIDER", raising=False)
+    monkeypatch.setattr(m, "lk_google", None)
 
     monkeypatch.setattr(m, "_openai_llm_healthy", lambda: False)
 
@@ -64,6 +65,7 @@ def test_build_livekit_llm_respects_gemini_mode(monkeypatch):
 
     monkeypatch.setenv("LIVEKIT_LLM_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
+    monkeypatch.setattr(m, "lk_google", None)
 
     captured = {}
 

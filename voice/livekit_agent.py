@@ -28,6 +28,7 @@ if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_SERVICE_NAME
 import json
 import logging
 import time
+import uuid
 from typing import Annotated
 
 from dotenv import load_dotenv
@@ -45,6 +46,11 @@ from livekit.agents import (  # pyright: ignore[reportMissingImports]
     room_io,
 )
 from livekit.plugins import deepgram, openai, silero  # pyright: ignore[reportMissingImports]
+
+try:
+    from livekit.plugins import google as lk_google  # pyright: ignore[reportMissingImports]
+except Exception:  # pragma: no cover - optional dependency in some environments
+    lk_google = None
 
 logger = logging.getLogger("voice-ledger-agent")
 
@@ -181,6 +187,15 @@ def _build_livekit_llm():
 
     if mode == "gemini":
         if os.getenv("GEMINI_API_KEY"):
+            if lk_google is not None:
+                llm = lk_google.LLM(
+                    model=gemini_model,
+                    api_key=os.getenv("GEMINI_API_KEY"),
+                    temperature=temperature,
+                )
+                return llm, "gemini", gemini_model
+
+            logger.warning("livekit.plugins.google unavailable; using OpenAI-compatible Gemini endpoint")
             llm = openai.LLM(
                 model=gemini_model,
                 api_key=os.getenv("GEMINI_API_KEY"),
@@ -199,12 +214,20 @@ def _build_livekit_llm():
         return llm, "openai", openai_model
 
     if _fallback_enabled() and os.getenv("GEMINI_API_KEY"):
-        llm = openai.LLM(
-            model=gemini_model,
-            api_key=os.getenv("GEMINI_API_KEY"),
-            base_url=_GEMINI_OPENAI_BASE_URL,
-            temperature=temperature,
-        )
+        if lk_google is not None:
+            llm = lk_google.LLM(
+                model=gemini_model,
+                api_key=os.getenv("GEMINI_API_KEY"),
+                temperature=temperature,
+            )
+        else:
+            logger.warning("livekit.plugins.google unavailable; using OpenAI-compatible Gemini endpoint")
+            llm = openai.LLM(
+                model=gemini_model,
+                api_key=os.getenv("GEMINI_API_KEY"),
+                base_url=_GEMINI_OPENAI_BASE_URL,
+                temperature=temperature,
+            )
         return llm, "gemini", gemini_model
 
     # Last-resort path if Gemini key is absent: keep OpenAI configured.
@@ -254,6 +277,25 @@ async def _send_action_card(ctx: RunContext, card: dict) -> None:
         )
     except Exception as e:
         logger.warning("Failed to send action card: %s", e)
+
+
+async def _send_assistant_transcript(ctx: agents.JobContext, text: str) -> None:
+    """
+    Emit assistant transcript chunks on lk.transcription so web clients can
+    render text even when server-side transcription is unavailable.
+    """
+    try:
+        await ctx.room.local_participant.send_text(
+            text,
+            topic="lk.transcription",
+            attributes={
+                "lk.transcribed_track_id": "assistant",
+                "lk.transcription_final": "true",
+                "lk.segment_id": str(uuid.uuid4()),
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to send assistant transcript: %s", e)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -1339,19 +1381,18 @@ async def handle_session(ctx: agents.JobContext):
             "manage marketplace transactions, check compliance, and more.",
         )
 
-    greeting = (
-        f"Greet {user_name} warmly by name. Then briefly tell them what you "
-        f"can help with. Say something like: '{what_i_can_do}' "
-        f"Keep the whole greeting to 3-4 sentences, conversational and warm. "
-        f"Do NOT list features with bullet points — speak naturally."
+    greeting_text = (
+        f"Hello {user_name}! Welcome to The Voice Ledger. "
+        f"{what_i_can_do} Just tell me what you need, and I will help right away."
     )
     try:
-        speech = session.generate_reply(instructions=greeting)
+        speech = session.say(greeting_text)
         await speech
+        await _send_assistant_transcript(ctx, greeting_text)
         logger.info("Greeting delivered for user=%s", user_name)
     except Exception as e:
         _maybe_trip_openai_circuit_from_exception(e, llm_provider)
-        logger.error("generate_reply failed, falling back to say(): %s", e)
+        logger.error("greeting say() failed: %s", e)
         try:
             fallback = (
                 f"Hello {user_name}! Welcome to The Voice Ledger. "
@@ -1359,9 +1400,10 @@ async def handle_session(ctx: agents.JobContext):
             )
             speech = session.say(fallback)
             await speech
+            await _send_assistant_transcript(ctx, fallback)
         except Exception as e2:
             _maybe_trip_openai_circuit_from_exception(e2, llm_provider)
-            logger.error("say() fallback also failed: %s", e2)
+            logger.error("greeting fallback say() also failed: %s", e2)
 
 
 if __name__ == "__main__":
