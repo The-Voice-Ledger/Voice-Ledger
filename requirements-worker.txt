@@ -12,13 +12,13 @@ python-dotenv==1.0.0
 python-dateutil==2.8.2
 
 # LiveKit Real-Time Voice Agent
-livekit>=1.1.0
-livekit-agents>=1.4.0
-livekit-api>=1.1.0
-livekit-plugins-deepgram>=1.4.0
-livekit-plugins-google>=1.4.0
-livekit-plugins-openai>=1.4.0
-livekit-plugins-silero>=1.4.0
+livekit==1.1.5
+livekit-agents==1.5.6
+livekit-api==1.1.0
+livekit-plugins-deepgram==1.5.6
+livekit-plugins-google==1.5.6
+livekit-plugins-openai==1.5.6
+livekit-plugins-silero==1.5.6
 
 # OpenAI (LLM + TTS)
 openai>=1.12.0
