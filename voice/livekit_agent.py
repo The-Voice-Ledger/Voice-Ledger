@@ -27,6 +27,7 @@ if os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_SERVICE_NAME
 
 import json
 import logging
+import time
 from typing import Annotated
 
 from dotenv import load_dotenv
@@ -57,6 +58,8 @@ _GEMINI_OPENAI_BASE_URL = os.getenv(
     "https://generativelanguage.googleapis.com/v1beta/openai/",
 )
 
+_OPENAI_CIRCUIT_OPEN_UNTIL = 0.0
+
 
 def _openai_healthcheck_enabled() -> bool:
     return os.getenv("LIVEKIT_OPENAI_HEALTHCHECK", "true").lower() in ("1", "true", "yes")
@@ -64,6 +67,50 @@ def _openai_healthcheck_enabled() -> bool:
 
 def _fallback_enabled() -> bool:
     return os.getenv("LLM_FALLBACK_ENABLED", "true").lower() in ("1", "true", "yes")
+
+
+def _livekit_llm_provider_mode() -> str:
+    """
+    Provider selection mode for LiveKit sessions.
+    Supported: auto (default), openai, gemini.
+    """
+    mode = os.getenv("LIVEKIT_LLM_PROVIDER", "auto").strip().lower()
+    if mode in {"auto", "openai", "gemini"}:
+        return mode
+    logger.warning("Invalid LIVEKIT_LLM_PROVIDER=%s, falling back to auto", mode)
+    return "auto"
+
+
+def _livekit_tts_provider_mode() -> str:
+    """
+    TTS provider mode for LiveKit sessions.
+    Supported: auto (default), openai, deepgram.
+    """
+    mode = os.getenv("LIVEKIT_TTS_PROVIDER", "auto").strip().lower()
+    if mode in {"auto", "openai", "deepgram"}:
+        return mode
+    logger.warning("Invalid LIVEKIT_TTS_PROVIDER=%s, falling back to auto", mode)
+    return "auto"
+
+
+def _openai_circuit_open() -> bool:
+    return time.time() < _OPENAI_CIRCUIT_OPEN_UNTIL
+
+
+def _trip_openai_circuit(reason: str) -> None:
+    global _OPENAI_CIRCUIT_OPEN_UNTIL
+    ttl_sec = int(os.getenv("LIVEKIT_OPENAI_CIRCUIT_TTL_SEC", "900"))
+    _OPENAI_CIRCUIT_OPEN_UNTIL = time.time() + max(1, ttl_sec)
+    logger.warning(
+        "OpenAI circuit opened for %ss (%s). New sessions will prefer Gemini.",
+        ttl_sec,
+        reason,
+    )
+
+
+def _clear_openai_circuit() -> None:
+    global _OPENAI_CIRCUIT_OPEN_UNTIL
+    _OPENAI_CIRCUIT_OPEN_UNTIL = 0.0
 
 
 def _is_retryable_openai_error(exc: Exception) -> bool:
@@ -95,6 +142,9 @@ def _openai_llm_healthy() -> bool:
     openai_key = os.getenv("OPENAI_API_KEY")
     if not openai_key:
         return False
+    if _openai_circuit_open():
+        logger.info("OpenAI circuit is open; treating OpenAI as unhealthy for this session")
+        return False
     if not _openai_healthcheck_enabled():
         return True
 
@@ -107,6 +157,7 @@ def _openai_llm_healthy() -> bool:
             max_tokens=1,
             temperature=0,
         )
+        _clear_openai_circuit()
         return True
     except Exception as e:
         if _is_retryable_openai_error(e):
@@ -124,6 +175,24 @@ def _build_livekit_llm():
     openai_model = os.getenv("LIVEKIT_OPENAI_MODEL", "gpt-4o-mini")
     gemini_model = os.getenv("LIVEKIT_GEMINI_MODEL", "gemini-2.5-flash")
     temperature = float(os.getenv("LIVEKIT_LLM_TEMPERATURE", "0.2"))
+    mode = _livekit_llm_provider_mode()
+
+    logger.info("LiveKit LLM provider mode=%s", mode)
+
+    if mode == "gemini":
+        if os.getenv("GEMINI_API_KEY"):
+            llm = openai.LLM(
+                model=gemini_model,
+                api_key=os.getenv("GEMINI_API_KEY"),
+                base_url=_GEMINI_OPENAI_BASE_URL,
+                temperature=temperature,
+            )
+            return llm, "gemini", gemini_model
+        logger.warning("LIVEKIT_LLM_PROVIDER=gemini but GEMINI_API_KEY is missing; using OpenAI")
+
+    if mode == "openai":
+        llm = openai.LLM(model=openai_model, temperature=temperature)
+        return llm, "openai", openai_model
 
     if _openai_llm_healthy():
         llm = openai.LLM(model=openai_model, temperature=temperature)
@@ -147,16 +216,32 @@ def _build_livekit_tts(provider_name: str):
     """
     Keep voice output functional during Gemini fallback by using Deepgram TTS.
     """
-    if provider_name == "gemini":
-        deepgram_key = os.getenv("DEEPGRAM_API_KEY")
-        deepgram_tts_model = os.getenv("LIVEKIT_DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en")
+    tts_mode = _livekit_tts_provider_mode()
+    deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+    deepgram_tts_model = os.getenv("LIVEKIT_DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en")
+
+    use_deepgram = False
+    if tts_mode == "deepgram":
+        use_deepgram = True
+    elif tts_mode == "auto":
+        # In fallback-capable deployments, keep voice output independent from OpenAI credits.
+        use_deepgram = bool(deepgram_key) and (provider_name == "gemini" or _fallback_enabled())
+
+    if use_deepgram:
         if deepgram_key:
             return deepgram.TTS(model=deepgram_tts_model, api_key=deepgram_key)
-        logger.warning("Gemini LLM selected but DEEPGRAM_API_KEY missing; falling back to OpenAI TTS")
+        logger.warning("Deepgram TTS selected but DEEPGRAM_API_KEY missing; falling back to OpenAI TTS")
 
     openai_tts_model = os.getenv("LIVEKIT_OPENAI_TTS_MODEL", "tts-1")
     openai_tts_voice = os.getenv("LIVEKIT_OPENAI_TTS_VOICE", "nova")
     return openai.TTS(model=openai_tts_model, voice=openai_tts_voice)
+
+
+def _maybe_trip_openai_circuit_from_exception(exc: Exception, llm_provider: str) -> None:
+    if llm_provider != "openai" or not _fallback_enabled() or not os.getenv("GEMINI_API_KEY"):
+        return
+    if _is_retryable_openai_error(exc):
+        _trip_openai_circuit(str(exc))
 
 
 async def _send_action_card(ctx: RunContext, card: dict) -> None:
@@ -1265,6 +1350,7 @@ async def handle_session(ctx: agents.JobContext):
         await speech
         logger.info("Greeting delivered for user=%s", user_name)
     except Exception as e:
+        _maybe_trip_openai_circuit_from_exception(e, llm_provider)
         logger.error("generate_reply failed, falling back to say(): %s", e)
         try:
             fallback = (
@@ -1274,6 +1360,7 @@ async def handle_session(ctx: agents.JobContext):
             speech = session.say(fallback)
             await speech
         except Exception as e2:
+            _maybe_trip_openai_circuit_from_exception(e2, llm_provider)
             logger.error("say() fallback also failed: %s", e2)
 
 
