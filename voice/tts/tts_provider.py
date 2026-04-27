@@ -82,10 +82,68 @@ class TTSProvider:
                 logger.info(f"TTS cache MISS for text: {text[:50]}...")
         
         # Generate new audio
+        audio = None
         if language == 'am':
             audio = await TTSProvider._addis_ai_tts(text, voice)
         else:
-            audio = await TTSProvider._openai_tts(text, voice, output_format)
+            # Try OpenAI first
+            try:
+                audio = await TTSProvider._openai_tts(text, voice, output_format)
+            except Exception as openai_error:
+                logger.warning(f"OpenAI TTS failed: {openai_error}")
+                
+                # Try Deepgram TTS fallback (same as LiveKit agent)
+                try:
+                    import os
+                    
+                    deepgram_key = os.getenv("DEEPGRAM_API_KEY")
+                    deepgram_model = os.getenv("LIVEKIT_DEEPGRAM_TTS_MODEL", "aura-2-andromeda-en")
+                    
+                    if deepgram_key:
+                        logger.info("Attempting Deepgram TTS fallback")
+                        
+                        # Generate speech using Deepgram API directly
+                        try:
+                            import httpx
+                            
+                            # Deepgram API endpoint
+                            deepgram_url = f"https://api.deepgram.com/v1/speak?model={deepgram_model}"
+                            
+                            async with httpx.AsyncClient(timeout=30.0) as client:
+                                response = await client.post(
+                                    deepgram_url,
+                                    headers={
+                                        "Authorization": f"Token {deepgram_key}",
+                                        "Content-Type": "application/json"
+                                    },
+                                    json={"text": text}
+                                )
+                                response.raise_for_status()
+                                
+                                # Get audio data from response
+                                audio_data = response.content
+                                if audio_data:
+                                    logger.info("Deepgram TTS fallback successful")
+                                    audio = audio_data
+                                else:
+                                    logger.warning("Deepgram TTS fallback returned empty audio")
+                                    raise openai_error
+                                    
+                        except httpx.HTTPStatusError as http_error:
+                            logger.error(f"Deepgram TTS HTTP error: {http_error.response.status_code} - {http_error.response.text}")
+                            raise openai_error
+                        except Exception as synthesis_error:
+                            logger.error(f"Deepgram TTS synthesis failed: {synthesis_error}")
+                            raise openai_error
+                            
+                    else:
+                        logger.warning("Deepgram TTS API key not available for fallback")
+                        raise openai_error
+                        
+                except Exception as fallback_error:
+                    logger.error(f"Deepgram TTS fallback failed: {fallback_error}")
+                    # Re-raise original OpenAI error if fallback fails
+                    raise openai_error
         
         # Cache the generated audio
         if TTS_CACHE_AVAILABLE and audio:
