@@ -38,7 +38,7 @@ window.vlI18n = (() => {
       /* ── Assistant ───────────────────────── */
       assistant_title: 'Voice Ledger Assistant',
       assistant_subtitle: 'Ask anything about your coffee supply chain',
-      assistant_empty_title: 'How can I help?',
+      assistant_empty_title: 'How can I help you today?',
       assistant_empty_desc: 'Ask about batches, RFQs, traceability, compliance, or anything else.',
       assistant_prompt_1: 'Show my batches',
       assistant_prompt_2: 'Available containers',
@@ -207,7 +207,7 @@ window.vlI18n = (() => {
       /* ── Assistant ───────────────────────── */
       assistant_title: 'Voice Ledger ረዳት',
       assistant_subtitle: 'ስለ ቡና አቅርቦት ሰንሰለትዎ ይጠይቁ',
-      assistant_empty_title: 'እንዴት ልረዳዎ?',
+      assistant_empty_title: 'እንዴት ልረዳዎ ዛሁ?',
       assistant_empty_desc: 'ስለ ጥቅሎች፣ RFQ፣ ክትትል፣ ተገዢነት ወይም ሌላ ማንኛውንም ነገር ይጠይቁ።',
       assistant_prompt_1: 'ጥቅሎቼን አሳይ',
       assistant_prompt_2: 'ያሉ ኮንቴይነሮች',

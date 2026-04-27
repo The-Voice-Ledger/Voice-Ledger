@@ -27,37 +27,16 @@
       display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;
     }
 
-    .empty-state{
-      flex:1;display:flex;flex-direction:column;
-      align-items:center;justify-content:center;
-      text-align:center;padding:24px;gap:16px;
+    .home-cards-empty{
+      flex:1;display:flex;align-items:center;justify-content:center;
+      padding:0;
     }
-    .empty-icon{
-      position:relative;
-      width:96px;height:96px;border-radius:50%;
-      background:linear-gradient(135deg,var(--stone-100),var(--stone-50));
-      display:flex;align-items:center;justify-content:center;
-    }
-    .empty-icon img{width:48px;height:48px;object-fit:contain;opacity:.75}
-    .empty-icon::after{
-      content:'';position:absolute;inset:0;border-radius:50%;
-      border:2px solid var(--stone-300);opacity:.3;
-      animation:pulse-ring 1.2s cubic-bezier(.215,.61,.355,1) infinite;
-    }
-    @keyframes pulse-ring{0%{opacity:1;transform:scale(.8)}to{opacity:0;transform:scale(1.4)}}
-    .empty-state h3{font-size:18px;font-weight:700;color:var(--stone-800);margin:0}
-    .empty-state p{font-size:13px;color:var(--stone-400);margin:0;max-width:260px;line-height:1.5}
-
-    .prompt-grid{
-      display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:320px;
-    }
-    .prompt-pill{
-      padding:10px 12px;border-radius:12px;
-      background:white;border:1px solid var(--border);
-      font-size:12px;color:var(--stone-600);text-align:left;
-      cursor:pointer;transition:all .15s;line-height:1.4;
-    }
-    .prompt-pill:active{background:var(--stone-50);transform:scale(.97)}
+    
+    /* Hide old empty state styles (kept for compatibility) */
+    .empty-state{display:none!important}
+    .empty-icon{display:none}
+    .prompt-grid{display:none}
+    .prompt-pill{display:none}
 
     .msg{display:flex;gap:8px;max-width:88%;animation:fadeUp .2s ease}
     .msg.user{align-self:flex-end;flex-direction:row-reverse}
@@ -175,16 +154,8 @@
   </div>
 
   <div class="messages" id="messages">
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon"><img src="https://violet-rainy-toad-577.mypinata.cloud/ipfs/bafybeic6pclaqgbaaz6qqvlz2ssjgbzae4y7e76d2pobbwfxs2cviwgyqa" alt="WAGA Coffee"></div>
-      <h3 data-i18n="assistant_empty_title">How can I help?</h3>
-      <p data-i18n="assistant_empty_desc">Ask about batches, RFQs, traceability, compliance, or anything else.</p>
-      <div class="prompt-grid" id="promptGrid">
-        <div class="prompt-pill" data-prompt="Show my batches" data-i18n="assistant_prompt_1">Show my batches</div>
-        <div class="prompt-pill" data-prompt="What containers are available?" data-i18n="assistant_prompt_2">Available containers</div>
-        <div class="prompt-pill" data-prompt="Check EUDR compliance for my last batch" data-i18n="assistant_prompt_3">EUDR compliance</div>
-        <div class="prompt-pill" data-prompt="Trace lineage for batch ETH-001" data-i18n="assistant_prompt_4">Trace a batch</div>
-      </div>
+    <div class="home-cards-empty" id="emptyState">
+      <!-- Home cards will be rendered here by JavaScript -->
     </div>
   </div>
 
@@ -205,6 +176,7 @@
     </button>
   </div>
 
+  <script src="/miniapps/shared/voice/assistant-home-cards.js"></script>
   <script src="/miniapps/shared/voice/assistant-livekit-voice.js"></script>
   <script src="/miniapps/shared/i18n.js"></script>
   <script src="/miniapps/shared/tab-bar.js"></script>
@@ -244,7 +216,31 @@
     function render() {
       const hasMessages = messages.length > 0;
       document.getElementById('newChatBtn').classList.toggle('show', hasMessages);
-      if (!hasMessages) { emptyState.style.display = 'flex'; return; }
+      
+      if (!hasMessages) {
+        emptyState.style.display = 'block';
+        
+        // Get translated prompts
+        const prompts = [
+          { text: vlI18n?.t('assistant_prompt_1') || 'Show my batches', key: 'assistant_prompt_1' },
+          { text: vlI18n?.t('assistant_prompt_2') || 'What containers are available?', key: 'assistant_prompt_2' },
+          { text: vlI18n?.t('assistant_prompt_3') || 'Check EUDR compliance for my last batch', key: 'assistant_prompt_3' },
+          { text: vlI18n?.t('assistant_prompt_4') || 'Trace lineage for batch ETH-001', key: 'assistant_prompt_4' }
+        ];
+        
+        window.AssistantHomeCards?.render(emptyState, {
+          prompts: prompts,
+          greetingTitle: vlI18n?.t('assistant_empty_title') || 'How can I help you today?',
+          greetingSubtitle: 'Choose how you\'d like to interact',
+          onPromptClick: (promptText) => sendText(promptText),
+          onVoiceClick: () => {
+            // Trigger voice input
+            micBtn.click();
+          }
+        });
+        return;
+      }
+      
       emptyState.style.display = 'none';
       let html = '';
       for (const m of messages) {
@@ -420,7 +416,6 @@
         audio.onended = () => {
           console.log('TTS audio finished');
           URL.revokeObjectURL(url);
-          // Let LiveKit agent handle state transition back to listening
         };
         
         audio.onerror = () => {
@@ -442,14 +437,6 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(chatInput.value); }
     });
     sendBtn.addEventListener('click', () => sendText(chatInput.value));
-
-    document.querySelectorAll('.prompt-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        // Use the visible (translated) text so Amharic users send Amharic prompts
-        const text = pill.textContent.trim();
-        if (text) sendText(text);
-      });
-    });
 
     const newChatBtn = document.getElementById('newChatBtn');
     newChatBtn.addEventListener('click', () => {
