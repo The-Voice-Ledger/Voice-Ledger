@@ -49,6 +49,67 @@
     
     body.livekit-panel-open .livekit-voice-panel {
       display: flex !important;
+    }
+    
+    /* Pulse animations */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    
+    @keyframes pulse-ring {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.1);
+        opacity: 0.5;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    /* Action cards styling */
+    .action-cards-wrapper {
+      margin: 12px 0;
+      padding: 0;
+    }
+    
+    .action-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(8px);
+      margin-bottom: 12px;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    
+    .card-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+      margin: 0;
+    }
+    
+    .animate-card-trace {
+      stroke-dasharray: 60 540;
+      animation: dash 20s linear infinite;
+    }
+    
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -600;
+      }
     }`;
     document.head.appendChild(style);
   }
@@ -99,15 +160,15 @@
             <div style="position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(16,185,129,0.3); animation: pulse-ring 2s infinite;"></div>
           </div>
           
-          <!-- State label + dot (mt-6 = 24px spacing -->
+          <!-- State label + dot -->
           <div style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <div id="livekitStateDot" style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.4);"></div>
+              <div id="livekitStateDotSmall" style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.4);"></div>
               <span id="livekitStateLabel" style="color: rgba(255,255,255,0.8); font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">Ready</span>
             </div>
           </div>
 
-          <!-- Controls (mt-8 = 32px spacing  -->
+          <!-- Controls -->
           <div style="margin-top: 32px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
             <div id="livekitConnectError" style="display: none; padding: 12px 16px; border-radius: 12px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #FCA5A5; font-size: 12px; text-align: center; max-width: 300px;"></div>
             
@@ -126,7 +187,7 @@
               </button>
               <button onclick="endLiveKitSession()" style="width: 56px; height: 56px; border-radius: 50%; border: none; background: rgba(239,68,68,0.15); color: #F87171; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; border: 1px solid rgba(239,68,68,0.1);" title="End voice session">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.73.8 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-6-6A19.79 19.79 0 012 4.18 2 2 2 0 014 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 002.59 3.4z"></path>
+                  <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.73.8 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-6-6A19.79 19.79 0 012 4.18 2 2 0 014 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 002.59 3.4z"></path>
                   <line x1="1" y1="1" x2="23" y2="23"></line>
                 </svg>
               </button>
@@ -135,7 +196,7 @@
             <!-- Footer -->
             <div style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 4px;">
               <span style="font-size: 9px; color: rgba(255,255,255,0.15); font-family: 'Display', sans-serif; letter-spacing: 0.05em;">The Voice Ledger</span>
-              <span style="font-size: 8px; color: rgba(255,255,255,0.08); font-family: 'Mono', monospace; letter-spacing: 0.025em;">Powered by LiveKit â€¢ Deepgram â€¢ OpenAI</span>
+              <span style="font-size: 8px; color: rgba(255,255,255,0.08); font-family: 'Mono', monospace; letter-spacing: 0.025em;">Powered by LiveKit • Deepgram • OpenAI</span>
             </div>
           </div>
         </div>
@@ -191,19 +252,35 @@
               </div>
             </div>
           </div>
+
+          <!-- Action Cards Section -->
+          <div id="actionCardsSection" style="display: none; flex-direction: column; gap: 12px;">
+            <!-- Action Cards Header -->
+            <button id="actionCardsToggleBtn" onclick="toggleActionCards()" style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: none; background: rgba(255,255,255,0.04); border-radius: 8px; color: rgba(255,255,255,0.25); font-size: 11px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(8px); width: fit-content;">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1">
+                <rect x="2" y="2" width="8" height="8" rx="2" />
+              </svg>
+              <span id="actionCardsToggleText">Show actions</span>
+              <span id="actionCardsCount" style="margin-left: auto; font-size: 9px; color: rgba(255,255,255,0.15);">0 actions</span>
+            </button>
+            
+            <!-- Action Cards Content -->
+            <div id="actionCardsContent" style="display: none; overflow: hidden; border-radius: 12px; padding: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); backdrop-filter: blur(8px);">
+              <div id="actionCardsContainer" style="display: flex; flex-direction: column; gap: 8px;">
+                <!-- Action cards will be added here -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       
       <!-- Footer -->
       <div style="display: flex; justify-content: center; align-items: center; gap: 4px; padding: 20px; color: rgba(255,255,255,0.15); font-size: 9px;">
         <span>The Voice Ledger</span>
-        <span>Â·</span>
+        <span>·</span>
         <span style="font-family: monospace;">Powered by LiveKit</span>
       </div>
     </div>
-    
-    <!-- Audio renderer for agent playback -->
-    <audio id="roomAudioRenderer" style="position: absolute; inset: 0;" autoplay playsinline></audio>
   </div>`);
   }
 
@@ -225,6 +302,90 @@
       } else {
         welcomeCards.style.display = 'block';
       }
+    },
+    
+    resetToInitialState() {
+      const startBtn = document.getElementById('livekitStartBtn');
+      const activeControls = document.getElementById('livekitActiveControls');
+      const connectError = document.getElementById('livekitConnectError');
+      
+      if (startBtn) startBtn.style.display = 'block';
+      if (activeControls) activeControls.style.display = 'none';
+      if (connectError) connectError.style.display = 'none';
+      
+      // Reset welcome section
+      this.updateWelcomeSection(false);
+    },
+    
+    showActionCards() {
+      const actionCardsSection = document.getElementById('actionCardsSection');
+      const actionCardsContent = document.getElementById('actionCardsContent');
+      if (actionCardsSection && actionCardsContent) {
+        actionCardsSection.style.display = 'flex';
+        actionCardsContent.style.display = 'block';
+      }
+    },
+    
+    hideActionCards() {
+      const actionCardsSection = document.getElementById('actionCardsSection');
+      const actionCardsContent = document.getElementById('actionCardsContent');
+      if (actionCardsSection && actionCardsContent) {
+        actionCardsSection.style.display = 'none';
+        actionCardsContent.style.display = 'none';
+      }
+    },
+    
+    addActionCard(cardData) {
+      const actionCardsContent = document.getElementById('actionCardsContainer');
+      const actionCardsSection = document.getElementById('actionCardsSection');
+      const actionCardsCount = document.getElementById('actionCardsCount');
+      
+      if (!actionCardsContent || !window.ActionCards) return;
+      
+      // Create action cards instance if needed
+      if (!window.actionCards) {
+        window.actionCards = new window.ActionCards(actionCardsContent);
+      }
+      
+      // Add the card
+      window.actionCards.addCard(cardData);
+      
+      // Show the action cards section
+      if (actionCardsSection) {
+        actionCardsSection.style.display = 'flex';
+      }
+      
+      // Update count
+      if (actionCardsCount) {
+        const currentCount = parseInt(actionCardsCount.textContent) || 0;
+        actionCardsCount.textContent = `${currentCount + 1} actions`;
+      }
+    },
+    
+    clearActionCards() {
+      const actionCardsContent = document.getElementById('actionCardsContainer');
+      const actionCardsSection = document.getElementById('actionCardsSection');
+      const actionCardsCount = document.getElementById('actionCardsCount');
+      
+      if (actionCardsContent) {
+        actionCardsContent.innerHTML = '';
+      }
+      
+      // Hide the action cards section
+      if (actionCardsSection) {
+        actionCardsSection.style.display = 'none';
+      }
+      
+      // Reset count
+      if (actionCardsCount) {
+        actionCardsCount.textContent = '0 actions';
+      }
+      
+      // Clear the action cards instance
+      if (window.actionCards) {
+        window.actionCards = null;
+      }
     }
   };
-})();
+  
+  })();

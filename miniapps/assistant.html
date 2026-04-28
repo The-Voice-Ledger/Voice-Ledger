@@ -178,6 +178,8 @@
 
   <script src="/miniapps/shared/voice/assistant-home-cards.js"></script>
   <script src="/miniapps/shared/voice/assistant-livekit-voice.js"></script>
+  <script src="/miniapps/shared/voice/assistant-livekit-panel.js"></script>
+  <script src="/miniapps/shared/voice/action-cards.js"></script>
   <script src="/miniapps/shared/i18n.js"></script>
   <script src="/miniapps/shared/tab-bar.js"></script>
 <script>
@@ -452,7 +454,44 @@
 
     vlTabBar('assistant');
     render();
+    
+    // Debug: Check if ActionCards is available
+    console.log('[DEBUG] ActionCards available at init:', !!window.ActionCards);
+    console.log('[DEBUG] assistantLiveKitPanel available at init:', !!window.assistantLiveKitPanel);
+    
+    // Check if LiveKit panel was injected
+    setTimeout(() => {
+      const panel = document.getElementById('livekitVoicePanel');
+      console.log('[DEBUG] LiveKit panel injected:', !!panel);
+    }, 1000);
+    
     window.AssistantLiveKitVoice?.init({ tg, micBtn });
+
+    // Debug: Add test function for action cards
+    window.testActionCard = function() {
+      console.log('Testing action card...');
+      if (window.assistantLiveKitPanel && window.ActionCards) {
+        const testCard = {
+          type: 'batch_detail',
+          data: {
+            batch_id: 'TEST-001',
+            origin: 'Ethiopia',
+            status: 'Active',
+            weight: 1000,
+            grade: 'Premium'
+          }
+        };
+        window.assistantLiveKitPanel.addActionCard(testCard);
+        console.log('Test action card added');
+      } else {
+        console.error('Action cards not available:', {
+          panel: !!window.assistantLiveKitPanel,
+          actionCards: !!window.ActionCards
+        });
+      }
+    };
+    
+    // Auto-test disabled - remove test action cards at startup
   </script>
 </body>
 </html>

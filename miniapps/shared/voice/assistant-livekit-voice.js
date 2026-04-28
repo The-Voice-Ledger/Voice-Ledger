@@ -17,6 +17,7 @@
     depsPromise: null,
     RoomEvent: null,
     liveKitVoiceManager: null,
+    isDisconnecting: false,
   };
 
   function loadScript(src) {
@@ -27,8 +28,16 @@
           resolve();
           return;
         }
-        existing.addEventListener('load', resolve, { once: true });
-        existing.addEventListener('error', reject, { once: true });
+        
+        // Check if script is actually loaded by testing for global variables
+        if (src.includes('assistant-livekit-panel.js') && window.assistantLiveKitPanel) {
+          existing.dataset.loaded = 'true';
+          resolve();
+          return;
+        }
+        
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', (e) => reject(e), { once: true });
         return;
       }
 
@@ -38,24 +47,38 @@
         script.dataset.loaded = 'true';
         resolve();
       }, { once: true });
-      script.addEventListener('error', reject, { once: true });
+      script.addEventListener('error', (e) => reject(e), { once: true });
       document.head.appendChild(script);
     });
   }
 
   async function ensureDependencies() {
-    if (state.depsPromise) return state.depsPromise;
+    if (state.depsPromise) {
+      return state.depsPromise;
+    }
 
     state.depsPromise = (async () => {
-      await loadScript('/miniapps/shared/voice/assistant-livekit-panel.js');
-      await loadScript('/miniapps/shared/api/livekit.js?v=2025041901');
-      const liveKitImports = await import('/miniapps/shared/voice/livekit-imports.js');
-      const voiceManagerModule = await import('/miniapps/shared/voice/LiveKitVoiceManager.js');
+      try {
+        // Check if dependencies are already available
+        if (window.assistantLiveKitPanel && window.liveKitVoiceManager) {
+          state.RoomEvent = window.RoomEvent || null;
+          state.liveKitVoiceManager = window.liveKitVoiceManager;
+          return;
+        }
 
-      state.RoomEvent = liveKitImports.RoomEvent;
-      window.STATE_COLORS = liveKitImports.STATE_COLORS;
-      window.STATE_LABELS = liveKitImports.STATE_LABELS;
-      state.liveKitVoiceManager = voiceManagerModule.liveKitVoiceManager;
+        await loadScript('/miniapps/shared/voice/assistant-livekit-panel.js');
+        await loadScript('/miniapps/shared/api/livekit.js?v=2025041901');
+        const liveKitImports = await import('/miniapps/shared/voice/livekit-imports.js');
+        const voiceManagerModule = await import('/miniapps/shared/voice/LiveKitVoiceManager.js');
+
+        state.RoomEvent = liveKitImports.RoomEvent;
+        window.STATE_COLORS = liveKitImports.STATE_COLORS;
+        window.STATE_LABELS = liveKitImports.STATE_LABELS;
+        state.liveKitVoiceManager = voiceManagerModule.liveKitVoiceManager;
+      } catch (error) {
+        console.error('ensureDependencies failed:', error);
+        throw error;
+      }
     })();
 
     return state.depsPromise;
@@ -73,11 +96,10 @@
       });
 
       state.voiceManager.onStateChange((newState, oldState) => {
-        console.log('LiveKit state changed:', oldState, '->', newState);
         if (['connecting', 'disconnected', 'failed'].includes(newState)) {
           updateLiveKitState(newState);
-          if (newState === 'disconnected' || newState === 'failed') {
-            state.agentAttributeState = null;
+          if ((newState === 'disconnected' || newState === 'failed') && !state.isDisconnecting) {
+            endLiveKitSession();
           }
         } else if (newState === 'connected') {
           syncAgentStateFromRoom(state.voiceManager.room) || applyDerivedState(getDefaultUiState());
@@ -94,7 +116,6 @@
 
           // Auto-unmute microphone when session connects
           if (!state.voiceManager.isRecordingActive()) {
-            console.log('[VoiceLedger] Auto-unmuting microphone on session start');
             setTimeout(() => {
               if (state.voiceManager && state.voiceManager.isReady()) {
                 toggleLiveKitMute();
@@ -116,10 +137,7 @@
           }
 
           // Set up track handlers AFTER room is connected
-          console.log('Setting up track handlers after connection, room exists:', !!state.voiceManager.room);
           if (state.voiceManager.room) {
-            console.log('Room object:', state.voiceManager.room);
-            console.log('RoomEvent available:', !!state.RoomEvent);
             bindAgentStateListeners(state.voiceManager.room);
             syncAgentStateFromRoom(state.voiceManager.room);
 
@@ -163,49 +181,75 @@
               }
             });
 
+            // Register for action cards from LiveKit agent
+            if (window.ActionCards) {
+              try {
+                state.voiceManager.room.registerTextStreamHandler('vl.action', async (reader, participantInfo) => {
+                  try {
+                    for await (const chunk of reader) {
+                      if (chunk.trim()) {
+                        // Parse action card JSON
+                        try {
+                          const actionCard = JSON.parse(chunk);
+                          
+                          // Fix data structure - move any top-level arrays/objects to data property if needed
+                          if (!actionCard.data) {
+                            // Handle array types first
+                            const arrayKeys = ['rfqs', 'containers', 'batches', 'offers', 'pools', 'commitments', 'events'];
+                            const foundArrayKey = arrayKeys.find(key => Array.isArray(actionCard[key]));
+                            
+                            if (foundArrayKey) {
+                              actionCard.data = { [foundArrayKey]: actionCard[foundArrayKey] };
+                            } else {
+                              // For single item types, move all non-type properties to data
+                              const dataProps = {};
+                              Object.keys(actionCard).forEach(key => {
+                                if (key !== 'type') {
+                                  dataProps[key] = actionCard[key];
+                                }
+                              });
+                              
+                              if (Object.keys(dataProps).length > 0) {
+                                actionCard.data = dataProps;
+                              }
+                            }
+                          }
+                          
+                          // Add action card using the panel helper
+                          window.assistantLiveKitPanel?.addActionCard(actionCard);
+                          
+                          // Show action cards section when cards are added
+                          const actionCardsSection = document.getElementById('actionCardsSection');
+                          if (actionCardsSection) {
+                            actionCardsSection.style.display = 'flex';
+                          }
+                        } catch (parseError) {
+                          console.error('Failed to parse action card:', parseError);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error reading action cards stream:', error);
+                  }
+                });
+              } catch (error) {
+                console.error('Failed to register action cards handler:', error);
+              }
+            }
+
             // Handle all track events
             state.voiceManager.room.on(state.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-              console.log('Track subscribed:', track.kind, 'from participant:', participant.identity, 'isLocal:', participant.isLocal);
-              console.log('Track condition check:', {
-                isAudio: track.kind === 'audio',
-                notLocal: !participant.isLocal,
-                shouldHandle: track.kind === 'audio' && !participant.isLocal
-              });
-
               // Only handle remote audio tracks (not our own microphone)
               if (track.kind === 'audio' && !participant.isLocal) {
-                console.log('Remote audio track detected!');
-                console.log('Track details:', {
-                  kind: track.kind,
-                  source: track.source,
-                  enabled: track.enabled,
-                  muted: track.muted,
-                  participant: participant.identity,
-                  isLocal: participant.isLocal
-                });
-
                 const audioElement = document.getElementById('roomAudioRenderer');
                 if (audioElement) {
-                  console.log('Audio element found, attaching track...');
-
                   // Clear any existing tracks first
                   while (audioElement.firstChild) {
                     audioElement.removeChild(audioElement.firstChild);
                   }
 
-                  // Attach the new track
+                  // Attach new track
                   track.attach(audioElement);
-                  console.log('Audio track attached successfully');
-
-                  // Debug audio element after attachment
-                  console.log('Audio element after attachment:', {
-                    srcObject: audioElement.srcObject ? 'has srcObject' : 'no srcObject',
-                    paused: audioElement.paused,
-                    muted: audioElement.muted,
-                    volume: audioElement.volume,
-                    readyState: audioElement.readyState,
-                    currentTime: audioElement.currentTime
-                  });
 
                   // Force play with multiple attempts
                   const attemptPlay = async () => {
@@ -214,11 +258,7 @@
                       if (!state.agentAttributeState) {
                         applyDerivedState('speaking');
                       }
-                      console.log('Audio playback started successfully!');
                     } catch (e) {
-                      console.log('Audio play failed:', e);
-                      console.log('Trying alternative approach...');
-
                       // Try unmute and set volume
                       audioElement.muted = false;
                       audioElement.volume = 1.0;
@@ -229,9 +269,8 @@
                           if (!state.agentAttributeState) {
                             applyDerivedState('speaking');
                           }
-                          console.log('Audio playback started on retry!');
-                        }).catch(e2 => {
-                          console.log('Audio play failed on retry too:', e2);
+                        }).catch(() => {
+                          // Audio play failed, but continue
                         });
                       }, 100);
                     }
@@ -240,16 +279,8 @@
                   // Try to play immediately
                   attemptPlay();
 
-                  // Also try on user interaction
-                  const startAudioOnInteraction = () => {
-                    console.log('User interaction detected, starting audio...');
-                    attemptPlay();
-                    document.removeEventListener('click', startAudioOnInteraction);
-                    document.removeEventListener('touchstart', startAudioOnInteraction);
-                  };
-
-                  document.addEventListener('click', startAudioOnInteraction, { once: true });
-                  document.addEventListener('touchstart', startAudioOnInteraction, { once: true });
+                  document.addEventListener('click', attemptPlay, { once: true });
+                  document.addEventListener('touchstart', attemptPlay, { once: true });
 
                   audioElement.onplaying = () => {
                     if (!state.agentAttributeState) {
@@ -328,7 +359,13 @@
   }
 
   function showLiveKitVoicePanel() {
-    document.getElementById('livekitVoicePanel').style.display = 'flex';
+    const panel = document.getElementById('livekitVoicePanel');
+    console.log('[DEBUG] showLiveKitVoicePanel called, panel exists:', !!panel);
+    if (!panel) {
+      console.error('[ERROR] LiveKit panel not found in DOM!');
+      return;
+    }
+    panel.style.display = 'flex';
     document.body.classList.add('livekit-panel-open');
     updateLiveKitState('disconnected');
   }
@@ -468,7 +505,7 @@
       // Initialize voice manager
       const vm = await initializeVoiceManager();
 
-      // Connect to LiveKit room with agent (like web-frontend's session.start())
+      // Connect to LiveKit room with agent
       await vm.connect(
         state.tg?.initDataUnsafe?.user?.id || 'anonymous',
         state.tg?.initDataUnsafe?.user?.first_name || 'Guest',
@@ -513,7 +550,7 @@
   }
 
   async function toggleLiveKitRecording() {
-    // Only initialize once, like web-frontend
+    // Only initialize once
     if (!state.voiceManager) {
       await initializeLiveKit();
       return;
@@ -532,15 +569,25 @@
   }
 
   async function toggleRecording() {
+    console.log('[DEBUG] toggleRecording called');
     try {
-      await ensureDependencies();
+      // For now, skip dependencies and just show the panel
+      console.log('[DEBUG] Skipping dependencies, showing panel directly...');
       // Try haptic feedback
       try {
         state.tg?.HapticFeedback?.impactOccurred?.('light');
       } catch (hapticErr) {
         // Ignore haptic feedback errors
       }
+      console.log('[DEBUG] About to call showLiveKitVoicePanel...');
       showLiveKitVoicePanel();
+      
+      // Load dependencies in background after showing panel
+      ensureDependencies().then(() => {
+        console.log('[DEBUG] Dependencies loaded in background');
+      }).catch(err => {
+        console.error('[DEBUG] Background dependency loading failed:', err);
+      });
     } catch (err) {
       console.error('Error showing LiveKit panel:', err);
     }
@@ -601,6 +648,27 @@
     if (toggleText) toggleText.textContent = 'Show transcript';
   }
 
+  function toggleActionCards() {
+    const content = document.getElementById('actionCardsContent');
+    const toggleText = document.getElementById('actionCardsToggleText');
+    
+    if (!content || !toggleText) {
+      console.error('[VoiceLedger] Action cards toggle elements not found');
+      return;
+    }
+    
+    const isVisible = content.style.display !== 'none';
+    
+    if (isVisible) {
+      content.style.display = 'none';
+      toggleText.textContent = 'Show actions';
+    } else {
+      content.style.display = 'block';
+      toggleText.textContent = 'Hide actions';
+    }
+    
+  }
+
   function updateTranscriptions(text, isUser, segmentId, isFinal) {
 
     // Update or add transcription segment
@@ -654,7 +722,7 @@
     const countElement = document.getElementById('transcriptCount');
     if (!messagesContainer || !countElement) return;
 
-    // Clear and re-render (simple approach like web-frontend)
+    // Clear and re-render
     messagesContainer.innerHTML = '';
 
     state.agentTranscriptions.forEach((seg, i) => {
@@ -749,27 +817,34 @@
   }
 
   async function endLiveKitSession() {
-    if (state.voiceManager) {
-      // Reset transcription handler flag before disconnecting
-      state.voiceManager.transcriptionHandlerRegistered = false;
-      await state.voiceManager.disconnect();
-      state.voiceManager = null;
+    if (state.isDisconnecting) return; // Prevent recursive calls
+    
+    state.isDisconnecting = true;
+    try {
+      if (state.voiceManager) {
+        // Reset transcription handler flag before disconnecting
+        state.voiceManager.transcriptionHandlerRegistered = false;
+        await state.voiceManager.disconnect();
+        state.voiceManager = null;
+      }
+      state.isLiveKitStarted = false;
+      state.isLiveKitMuted = false;
+      state.agentAttributeState = null;
+      state.boundRoom = null;
+      clearDerivedStateTimeout();
+      closeLiveKitVoicePanel();
+
+      // Reset transcript state
+      resetTranscriptUI();
+
+      // Clear action cards
+      window.assistantLiveKitPanel?.clearActionCards();
+      
+      // Reset panel UI to initial state
+      window.assistantLiveKitPanel?.resetToInitialState();
+    } finally {
+      state.isDisconnecting = false;
     }
-    state.isLiveKitStarted = false;
-    state.isLiveKitMuted = false;
-    state.agentAttributeState = null;
-    state.boundRoom = null;
-    clearDerivedStateTimeout();
-    closeLiveKitVoicePanel();
-
-    // Reset transcript state
-    resetTranscriptUI();
-
-    // Reset UI
-    const startBtn = document.getElementById('livekitStartBtn');
-    const activeControls = document.getElementById('livekitActiveControls');
-    if (startBtn) startBtn.style.display = 'block';
-    if (activeControls) activeControls.style.display = 'none';
   }
 
   function init({ tg, micBtn }) {
@@ -806,6 +881,7 @@
   window.toggleLiveKitMute = toggleLiveKitMute;
   window.endLiveKitSession = endLiveKitSession;
   window.toggleTranscript = toggleTranscript;
+  window.toggleActionCards = toggleActionCards;
 
   window.AssistantLiveKitVoice = {
     init,
@@ -813,6 +889,7 @@
     updateState: externalUpdateState,
     toggleRecording,
     toggleMute: toggleLiveKitMute,
+    toggleActionCards,
     endSession: endLiveKitSession,
   };
 })();
