@@ -221,7 +221,12 @@ class ActionCards {
     const batches = card.data?.batches || [];
     const baseCard = this.createBaseCard(`Batches (${card.data?.count || batches.length})`);
     const content = document.createElement('div');
-    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5; max-height: 300px; overflow-y: auto;';
+    
+    // Mobile-responsive: horizontal scroll on small screens, normal layout on big screens
+    const isMobile = window.innerWidth < 640;
+    content.style.cssText = isMobile 
+      ? 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5; max-height: 300px; overflow-x: auto; overflow-y: hidden; width: 100%;'
+      : 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5; max-height: 300px; overflow-y: auto;';
     
     // Helper function to get status color
     const getStatusColor = (status) => {
@@ -243,15 +248,23 @@ class ActionCards {
       // Create batch list content
       const batchListContent = document.createElement('div');
       batchListContent.className = 'batch-list-content';
-      batchListContent.innerHTML = visibleBatches.map(batch => `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;">
+      batchListContent.innerHTML = visibleBatches.map(batch => {
+        // Mobile-responsive styling
+        const isMobile = window.innerWidth < 640;
+        const itemStyle = isMobile 
+          ? 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 200px; flex-shrink: 0;'
+          : 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;';
+        
+        return `
+        <div style="${itemStyle}">
           <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden;">
             <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.7); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.batch_id || batch.id}</div>
             <div style="font-size: 10px; color: rgba(255, 255, 255, 0.3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.origin || 'Unknown'}${batch.variety ? ` • ${batch.variety}` : ''}</div>
           </div>
           <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${getStatusColor(batch.status)}20; color: ${getStatusColor(batch.status)}; font-weight: 500; margin-left: 8px; flex-shrink: 0;">${batch.status || 'UNKNOWN'}</div>
         </div>
-      `).join('');
+      `;
+      }).join('');
       
       content.appendChild(batchListContent);
       
@@ -265,28 +278,44 @@ class ActionCards {
         showButton.addEventListener('click', () => {
           if (!isExpanded) {
             // Show all batches
-            batchListContent.innerHTML = allBatches.map(batch => `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;">
+            batchListContent.innerHTML = allBatches.map(batch => {
+                // Mobile-responsive styling
+                const isMobile = window.innerWidth < 640;
+                const itemStyle = isMobile 
+                  ? 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 200px; flex-shrink: 0;'
+                  : 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;';
+                
+                return `
+              <div style="${itemStyle}">
                 <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden;">
                   <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.7); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.batch_id || batch.id}</div>
                   <div style="font-size: 10px; color: rgba(255, 255, 255, 0.3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.origin || 'Unknown'}${batch.variety ? ` • ${batch.variety}` : ''}</div>
                 </div>
                 <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${getStatusColor(batch.status)}20; color: ${getStatusColor(batch.status)}; font-weight: 500; margin-left: 8px; flex-shrink: 0;">${batch.status || 'UNKNOWN'}</div>
               </div>
-            `).join('');
+            `;
+              }).join('');
             showButton.textContent = 'Show less';
             isExpanded = true;
           } else {
             // Show only first 4 batches
-            batchListContent.innerHTML = visibleBatches.map(batch => `
-              <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;">
+            batchListContent.innerHTML = visibleBatches.map(batch => {
+                // Mobile-responsive styling
+                const isMobile = window.innerWidth < 640;
+                const itemStyle = isMobile 
+                  ? 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 200px; flex-shrink: 0;'
+                  : 'display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); min-width: 0;';
+                
+                return `
+              <div style="${itemStyle}">
                 <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden;">
                   <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.7); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.batch_id || batch.id}</div>
                   <div style="font-size: 10px; color: rgba(255, 255, 255, 0.3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${batch.origin || 'Unknown'}${batch.variety ? ` • ${batch.variety}` : ''}</div>
                 </div>
                 <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: ${getStatusColor(batch.status)}20; color: ${getStatusColor(batch.status)}; font-weight: 500; margin-left: 8px; flex-shrink: 0;">${batch.status || 'UNKNOWN'}</div>
               </div>
-            `).join('');
+            `;
+              }).join('');
             showButton.textContent = `Show all ${allBatches.length} batches...`;
             isExpanded = false;
           }
