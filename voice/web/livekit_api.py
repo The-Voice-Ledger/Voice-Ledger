@@ -54,7 +54,7 @@ async def _dispatch_agent(room_name: str) -> None:
         logger.warning("Agent dispatch failed (will rely on auto-dispatch): %s", e)
 
 
-def _map_telegram_user_id(telegram_user_id: Union[str, int]) -> int:
+def _map_telegram_user_id(telegram_user_id: Union[str, int]) -> Optional[int]:
     """Map Telegram user_id to internal UserIdentity.id.."""
     if telegram_user_id == "anonymous" or not telegram_user_id:
         return None
@@ -100,8 +100,13 @@ async def create_token(req: TokenRequest):
         print(f"ERROR: Failed to parse JSON: {e}")
         raise HTTPException(422, f"Invalid JSON: {e}")
     
-    # Check if request is from Telegram or not
-    is_telegram = "X-Telegram-User-Id" in req.headers
+    # Check if request is from Telegram by user_id type/length
+    # Telegram user_ids are large numbers (10 digits), internal IDs are smaller (1-4 digits)
+    user_id = req.user_id
+    is_telegram = (
+        isinstance(user_id, int) and user_id > 1000000000 or  # Large int = Telegram
+        (isinstance(user_id, str) and len(user_id) > 9 and user_id.isdigit())  # Long string = Telegram
+    )
     
     if not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
         raise HTTPException(503, "LiveKit not configured")
