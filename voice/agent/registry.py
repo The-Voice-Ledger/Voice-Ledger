@@ -1574,6 +1574,9 @@ class ToolRegistry:
         """
         from services.batch_service import query_batches as svc_query_batches
 
+        # For general batch queries (no specific batch_id), show all batches
+        # For specific batch lookups, apply user filter
+        show_all = not args.get("batch_id")
         result = svc_query_batches(
             db,
             batch_id=args.get("batch_id"),
@@ -1581,6 +1584,7 @@ class ToolRegistry:
             origin=args.get("origin"),
             user_id=user_id,
             limit=args.get("limit", 10),
+            show_all=show_all,
         )
 
         if result["single"] and result["found"]:

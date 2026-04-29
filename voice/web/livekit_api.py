@@ -54,6 +54,25 @@ async def _dispatch_agent(room_name: str) -> None:
         logger.warning("Agent dispatch failed (will rely on auto-dispatch): %s", e)
 
 
+def _map_telegram_user_id(telegram_user_id: Union[str, int]) -> int:
+    """Map Telegram user_id to internal UserIdentity.id.."""
+    if telegram_user_id == "anonymous" or not telegram_user_id:
+        return None
+    
+    try:
+        from database.connection import get_db
+        from database.models import UserIdentity
+        
+        with get_db() as db:
+            user = db.query(UserIdentity).filter(
+                UserIdentity.telegram_user_id == str(telegram_user_id)
+            ).first()
+            return user.id if user else None
+    except Exception as e:
+        logger.warning("Failed to map Telegram user_id %s: %s", telegram_user_id, e)
+        return None
+
+
 # ── Request / Response models ────────────────────────────────────────
 
 class TokenRequest(BaseModel):
@@ -81,20 +100,31 @@ async def create_token(req: TokenRequest):
         print(f"ERROR: Failed to parse JSON: {e}")
         raise HTTPException(422, f"Invalid JSON: {e}")
     
+    # Check if request is from Telegram or not
+    is_telegram = "X-Telegram-User-Id" in req.headers
+    
     if not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
         raise HTTPException(503, "LiveKit not configured")
 
     # Lazy import — livekit-api is only needed for token signing
     from livekit.api import AccessToken, VideoGrants  # pyright: ignore[reportMissingImports]
 
+    # Map Telegram user_id to internal user_id
+    if is_telegram:
+        internal_user_id = _map_telegram_user_id(req.user_id)
+    else:
+        internal_user_id = req.user_id
+    
     # Unique room per user session
     room_name = f"voice-{req.user_id}-{int(time.time())}"
 
     # Metadata the agent reads to identify the user
+    # Use internal user_id for database operations, original for identity
     metadata = json.dumps({
         "name": req.user_name,
         "role": req.user_role,
-        "user_id": req.user_id,
+        "user_id": internal_user_id,  # Use mapped internal user_id
+        "original_user_id": req.user_id,  # Keep original for reference
         "user_did": req.user_did,
     })
 

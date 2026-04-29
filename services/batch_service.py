@@ -24,6 +24,7 @@ def query_batches(
     origin: Optional[str] = None,
     user_id: Optional[int] = None,
     limit: int = 10,
+    show_all: bool = False,
 ) -> Dict[str, Any]:
     """
     Query coffee batches from the database.
@@ -76,7 +77,7 @@ def query_batches(
         query = query.filter(CoffeeBatch.status == status.upper())
     if origin:
         query = query.filter(CoffeeBatch.origin.ilike(f"%{origin}%"))
-    if user_id:
+    if user_id and not show_all:
         query = query.filter(CoffeeBatch.created_by_user_id == user_id)
 
     batches = query.order_by(CoffeeBatch.created_at.desc()).limit(limit).all()

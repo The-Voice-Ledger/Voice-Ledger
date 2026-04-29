@@ -505,9 +505,12 @@ async def query_batches(
     from services.batch_service import query_batches as svc_query_batches
 
     with _get_db() as db:
+        # For general batch queries (no specific batch_id), show all batches
+        # For specific batch lookups, apply user filter
+        show_all = batch_id is None
         result = svc_query_batches(
             db, batch_id=batch_id, status=status,
-            origin=origin, user_id=_uid(ctx), limit=limit,
+            origin=origin, user_id=_uid(ctx), limit=limit, show_all=show_all,
         )
 
     if result["single"] and result["found"]:
