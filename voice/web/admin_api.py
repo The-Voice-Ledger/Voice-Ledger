@@ -11,13 +11,13 @@ Date: December 24, 2025
 Lab 17: Admin Dashboard
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from database.connection import get_db
 from database.models import (
-    UserIdentity, Organization, CoffeeBatch, 
-    RFQ, RFQOffer, RFQAcceptance, PendingRegistration
+    UserIdentity, Organization, CoffeeBatch,
+    RFQ, RFQOffer, RFQAcceptance, PendingRegistration, UATIssue
 )
 from voice.web.auth import require_admin, require_admin_flexible, create_jwt_token
 from pydantic import BaseModel
@@ -599,3 +599,118 @@ def get_registration_analytics(
             "period_days": days,
             "by_role": {role: count for role, count in role_counts}
         }
+
+
+# ============================================================
+# UAT ISSUE REPORTING
+# ============================================================
+
+class UATIssueCreate(BaseModel):
+    page: str
+    category: str = "bug"
+    severity: str = "minor"
+    title: str = ""
+    description: str = ""
+    context_json: dict = {}
+    browser_info: str = ""
+    console_errors: list = []
+
+
+class UATIssueUpdate(BaseModel):
+    status: Optional[str] = None
+    resolution_notes: Optional[str] = None
+
+
+@router.post("/api/v1/uat/issues")
+def create_uat_issue(body: UATIssueCreate, request: Request):
+    """Submit a UAT issue. No auth required — anonymous submissions allowed."""
+    # Optionally attach the authenticated user if a valid token is present
+    from voice.web.auth import get_optional_user
+    user = get_optional_user(request)
+
+    with get_db() as db:
+        issue = UATIssue(
+            user_id=user.id if user else None,
+            user_name=f"{user.telegram_first_name or ''} {user.telegram_last_name or ''}".strip() if user else "Anonymous",
+            user_phone=user.phone_number or "" if user else "",
+            page=body.page,
+            category=body.category,
+            severity=body.severity,
+            title=body.title,
+            description=body.description,
+            context_json=body.context_json,
+            browser_info=body.browser_info,
+            console_errors=body.console_errors,
+        )
+        db.add(issue)
+        db.commit()
+        db.refresh(issue)
+        return {"id": issue.id, "status": issue.status}
+
+
+@router.get("/api/v1/uat/issues")
+def list_uat_issues(
+    status: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    page: Optional[str] = Query(None),
+    limit: int = Query(100, le=200),
+    offset: int = Query(0, ge=0),
+    admin: UserIdentity = Depends(require_admin_flexible),
+):
+    """List UAT issues. Admins see all issues."""
+    with get_db() as db:
+        q = db.query(UATIssue)
+        if status:
+            q = q.filter(UATIssue.status == status)
+        if severity:
+            q = q.filter(UATIssue.severity == severity)
+        if page:
+            q = q.filter(UATIssue.page == page)
+        total = q.count()
+        rows = q.order_by(UATIssue.created_at.desc()).offset(offset).limit(limit).all()
+        return {
+            "total": total,
+            "issues": [
+                {
+                    "id": r.id,
+                    "page": r.page,
+                    "category": r.category,
+                    "severity": r.severity,
+                    "title": r.title,
+                    "description": r.description,
+                    "status": r.status,
+                    "user_name": r.user_name,
+                    "user_phone": r.user_phone,
+                    "browser_info": r.browser_info,
+                    "console_errors": r.console_errors,
+                    "context_json": r.context_json,
+                    "resolution_notes": r.resolution_notes,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+                }
+                for r in rows
+            ],
+        }
+
+
+@router.patch("/api/v1/uat/issues/{issue_id}")
+def update_uat_issue(
+    issue_id: int,
+    body: UATIssueUpdate,
+    admin: UserIdentity = Depends(require_admin_flexible),
+):
+    """Update UAT issue status / resolution notes. Admin only."""
+    with get_db() as db:
+        issue = db.query(UATIssue).filter_by(id=issue_id).first()
+        if not issue:
+            raise HTTPException(status_code=404, detail="Issue not found")
+        if body.status:
+            issue.status = body.status
+            if body.status in ("fixed", "verified", "wont_fix"):
+                issue.resolved_at = datetime.utcnow()
+        if body.resolution_notes is not None:
+            issue.resolution_notes = body.resolution_notes
+        issue.updated_at = datetime.utcnow()
+        db.commit()
+        return {"success": True, "id": issue.id, "status": issue.status}
+

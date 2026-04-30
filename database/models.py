@@ -839,6 +839,40 @@ class BuyerCommitment(Base):
     buyer = relationship("UserIdentity", foreign_keys=[buyer_id])
     organization = relationship("Organization", foreign_keys=[organization_id])
 
+class UATIssue(Base):
+    """UAT issue reports submitted via the floating bug-reporter widget."""
+    __tablename__ = "uat_issues"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("user_identities.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_name = Column(String(128), nullable=False, default="")
+    user_phone = Column(String(20), nullable=False, default="")
+
+    page = Column(String(128), nullable=False)
+    # category: bug | data | feature | performance | other
+    category = Column(String(32), nullable=False, default="bug")
+    # severity: blocker | major | minor | cosmetic
+    severity = Column(String(16), nullable=False, default="minor")
+
+    title = Column(String(256), nullable=False, default="")
+    description = Column(Text, nullable=False, default="")
+
+    context_json = Column(JSON, nullable=False, default=dict)
+    browser_info = Column(String(512), nullable=False, default="")
+    console_errors = Column(JSON, nullable=False, default=list)
+
+    # status: open | in_progress | fixed | verified | wont_fix
+    status = Column(String(20), nullable=False, default="open", index=True)
+    resolution_notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+
+    # Relationship
+    reporter = relationship("UserIdentity", foreign_keys=[user_id])
+
+
 # Database connection
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)

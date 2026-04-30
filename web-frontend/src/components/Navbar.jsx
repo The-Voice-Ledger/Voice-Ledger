@@ -33,6 +33,9 @@ export default function Navbar() {
     { to: '/tracking',   label: t('nav_tracking') },
     { to: '/compliance', label: t('nav_compliance') },
     { to: '/dpp',        label: t('nav_dpp') },
+    ...(isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN')
+      ? [{ to: '/admin', label: t('nav_admin', 'Admin') }]
+      : []),
   ]
 
   const ABOUT_LINKS = [
@@ -219,6 +222,7 @@ export default function Navbar() {
             {navLink('/tracking', t('nav_tracking'), true)}
             {navLink('/compliance', t('nav_compliance'), true)}
             {navLink('/dpp', t('nav_dpp'), true)}
+            {isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') && navLink('/admin', t('nav_admin', 'Admin'), true)}
             {!isAuthenticated && (
               <Link
                 to="/login"

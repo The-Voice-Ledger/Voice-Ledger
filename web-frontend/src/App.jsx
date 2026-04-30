@@ -12,7 +12,11 @@ import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
 import HowItWorks from './pages/HowItWorks'
 import Platform from './pages/Platform'
+import Admin from './pages/Admin'
+import UATWidget from './components/UATWidget'
 import { TopographicBg } from './components/svg/LightBackgrounds'
+
+const UAT_MODE = import.meta.env.VITE_UAT_MODE === 'true'
 
 /* Lightweight footer for the chat page so it doesn't overwhelm the input */
 function MiniFooter() {
@@ -46,10 +50,12 @@ export default function App() {
           <Route path="/tracking" element={<Tracking />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/platform" element={<Platform />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/about" element={<Navigate to="/how-it-works" replace />} />
         </Routes>
       </main>
       {pathname === '/assistant' ? <MiniFooter /> : <Footer />}
+      {UAT_MODE && <UATWidget />}
       </div>
     </div>
   )

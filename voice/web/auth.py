@@ -245,6 +245,31 @@ def require_admin_flexible(user: UserIdentity = Depends(get_current_user_flexibl
     return user
 
 
+def get_optional_user(request) -> Optional[UserIdentity]:
+    """
+    Extract the authenticated user from a raw Request object without raising errors.
+    Returns None if no valid token is present.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.replace("Bearer ", "")
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+    except Exception:
+        return None
+
+    with get_db() as db:
+        from sqlalchemy.orm import joinedload
+        user = db.query(UserIdentity).options(joinedload(UserIdentity.organization)).filter_by(id=user_id).first()
+        if user:
+            db.expunge(user)
+        return user
+
+
 def verify_pin(phone_number: str, pin: str, db: Session) -> Optional[UserIdentity]:
     """
     Verify user's phone number and PIN.
