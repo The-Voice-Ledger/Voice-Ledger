@@ -132,6 +132,11 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
             logger.info("Routing to contact handler (phone registration)")
             return await handle_contact_shared(update_data)
         
+        # Handle document messages (preserves EXIF/GPS data)
+        if 'document' in message:
+            logger.info("Routing to document handler (GPS verification)")
+            return await handle_document_message(update_data)
+        
         # Handle photo messages (for farm GPS verification)
         if 'photo' in message:
             logger.info("Routing to photo handler (GPS verification)")
@@ -366,7 +371,7 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
                 user_id=user_id,
                 message=response.get('message', '✅ Photo processed'),
                 parse_mode=response.get('parse_mode'),
-                inline_keyboard=response.get('inline_keyboard')
+                reply_markup=response.get('inline_keyboard')
             )
             
             return {"ok": True, "message": "Registration photo processed"}
@@ -496,6 +501,119 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         logger.error(f"Error handling photo: {e}", exc_info=True)
+        return {"ok": True, "message": f"Error: {str(e)}"}
+
+
+async def handle_document_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Handle document upload from Telegram (preserves EXIF/GPS data for farmer registration).
+    
+    Args:
+        update_data: Telegram Update dict containing document
+        
+    Returns:
+        Response dict for Telegram
+    """
+    try:
+        message = update_data.get('message', {})
+        user = message.get('from', {})
+        document = message.get('document', {})
+        
+        user_id = user.get('id')
+        
+        if not document:
+            logger.error("Document message but no document found")
+            return {"ok": True, "message": "No document in message"}
+        
+        # Check file type (only accept images)
+        mime_type = document.get('mime_type', '')
+        if not mime_type.startswith('image/'):
+            logger.warning(f"Non-image document uploaded: {mime_type}")
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message="❌ Please upload an image file (JPG/PNG) as a document.",
+                send_voice=False
+            )
+            return {"ok": True, "message": "Invalid document type"}
+        
+        document_file_id = document.get('file_id')
+        file_name = document.get('file_name', 'unknown')
+        
+        logger.info(f"User {user_id} sent document: {file_name} ({mime_type})")
+        
+        # Check if user is in registration flow expecting a photo
+        from voice.telegram.register_handler import (
+            conversation_states, 
+            STATE_UPLOAD_FARM_PHOTO,
+            handle_farm_photo_upload
+        )
+        
+        # Priority 1: Check for farmer registration photo
+        if user_id in conversation_states and conversation_states[user_id]['state'] == STATE_UPLOAD_FARM_PHOTO:
+            # Get file URL from Telegram
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            if not bot_token:
+                raise ValueError("TELEGRAM_BOT_TOKEN not configured")
+            
+            # Get file path and download document
+            import requests
+            file_info_response = requests.get(
+                f"https://api.telegram.org/bot{bot_token}/getFile",
+                params={'file_id': document_file_id},
+                timeout=10
+            )
+            file_info_response.raise_for_status()
+            
+            if 'result' not in file_info_response.json():
+                return {"ok": True, "message": "Failed to get file info"}
+            
+            file_path = file_info_response.json()['result']['file_path']
+            document_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+            
+            # Process registration document with GPS extraction (preserves EXIF!)
+            response = await handle_farm_photo_upload(user_id, document_file_id, document_url)
+            
+            # Send response to user
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response.get('message', '✅ Document processed (EXIF preserved)'),
+                parse_mode=response.get('parse_mode'),
+                reply_markup=response.get('inline_keyboard')
+            )
+            
+            return {"ok": True, "message": "Registration document processed"}
+        
+        # Not in registration flow - send help message
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=(
+                f"📄 Document received: {file_name}\n\n"
+                f"This feature is for GPS photo uploads during farmer registration.\n\n"
+                f"Please use /register to start the registration process."
+            ),
+            send_voice=False
+        )
+        
+        return {"ok": True, "message": "Document processed"}
+        
+    except Exception as e:
+        logger.error(f"Error processing document: {e}", exc_info=True)
+        
+        # Send error message
+        processor = get_processor()
+        await processor.send_notification(
+            channel_name='telegram',
+            user_id=user_id,
+            message=f"❌ Failed to process document: {str(e)}\n\nPlease try again.",
+            send_voice=False  # Error message - text only
+        )
+        
         return {"ok": True, "message": f"Error: {str(e)}"}
 
 

@@ -21,6 +21,7 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
+import piexif
 
 logger = logging.getLogger(__name__)
 
@@ -106,35 +107,97 @@ class GPSPhotoVerifier:
             else:
                 raise GPSExtractionError(f"Unsupported image source type: {type(image_source)}")
             
-            # Extract EXIF data
-            exif = image._getexif()
+            # Extract EXIF data with multiple fallback methods
+            gps_data = {}
+            exif_data = {}
+            extraction_method = "unknown"
             
-            if not exif:
-                logger.warning("No EXIF data found in image")
+            # Method 1: Try piexif first (best for GPS data)
+            try:
+                exif_dict = piexif.load(image.info.get("exif", b""))
+                
+                # Get GPS data
+                if "GPS" in exif_dict and exif_dict["GPS"]:
+                    gps_data = exif_dict["GPS"]
+                    extraction_method = "piexif"
+                    logger.info(f"Found GPS data via piexif: {len(gps_data)} tags")
+                
+                # Get other EXIF data
+                if "0th" in exif_dict:
+                    for tag_id, value in exif_dict["0th"].items():
+                        tag_name = TAGS.get(tag_id, tag_id)
+                        exif_data[tag_name] = value
+                
+                if "Exif" in exif_dict:
+                    for tag_id, value in exif_dict["Exif"].items():
+                        tag_name = TAGS.get(tag_id, tag_id)
+                        exif_data[tag_name] = value
+                
+                # If we found GPS data, we're good
+                if gps_data:
+                    logger.info(f"✅ EXIF extracted via piexif: {len(gps_data)} GPS tags")
+                else:
+                    logger.info("⚠️ piexif found EXIF but no GPS data")
+                    
+            except Exception as e:
+                logger.warning(f"piexif extraction failed: {e}")
+            
+            # Method 2: Fallback to PIL if piexif didn't find GPS
+            if not gps_data:
+                try:
+                    exif = image._getexif()
+                    
+                    if exif:
+                        extraction_method = "PIL"
+                        logger.info("Trying PIL EXIF extraction...")
+                        
+                        # Parse EXIF tags
+                        for tag_id, value in exif.items():
+                            tag = TAGS.get(tag_id, tag_id)
+                            exif_data[tag] = value
+                            
+                            # Extract GPS info
+                            if tag == "GPSInfo" and value:
+                                for gps_tag_id in value:
+                                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                                    gps_data[gps_tag_id] = value[gps_tag_id]
+                        
+                        if gps_data:
+                            logger.info(f"✅ EXIF extracted via PIL: {len(gps_data)} GPS tags")
+                        else:
+                            logger.info("⚠️ PIL found EXIF but no GPS data")
+                    else:
+                        logger.warning("PIL: No EXIF data found in image")
+                        
+                except Exception as e:
+                    logger.warning(f"PIL extraction failed: {e}")
+            
+            # Method 3: Last resort - try direct image info parsing
+            if not gps_data and hasattr(image, 'info'):
+                try:
+                    logger.info("Trying direct image info parsing...")
+                    # Some images store EXIF in image.info directly
+                    if 'exif' in image.info:
+                        logger.info("Found exif in image.info, attempting alternative parsing...")
+                        # This would need additional parsing logic
+                        extraction_method = "direct"
+                except Exception as e:
+                    logger.warning(f"Direct info parsing failed: {e}")
+            
+            # If still no GPS data after all methods
+            if not gps_data:
+                logger.warning(f"No GPS data found after trying all methods (tried: {extraction_method})")
                 return {
                     "has_gps": False,
-                    "error": "No EXIF data found",
-                    "timestamp": None,
-                    "device_make": None,
-                    "device_model": None
+                    "error": "No GPS coordinates found in photo (tried multiple EXIF formats)",
+                    "timestamp": self._extract_timestamp(exif_data),
+                    "device_make": exif_data.get('Make'),
+                    "device_model": exif_data.get('Model'),
+                    "extraction_method": extraction_method
                 }
             
-            # Parse EXIF tags
-            exif_data = {}
-            gps_data = {}
-            
-            for tag_id, value in exif.items():
-                tag = TAGS.get(tag_id, tag_id)
-                exif_data[tag] = value
-                
-                # Extract GPS info
-                if tag == "GPSInfo":
-                    for gps_tag_id in value:
-                        gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
-                        gps_data[gps_tag] = value[gps_tag_id]
-            
             # Check if GPS data exists
-            if not gps_data or 'GPSLatitude' not in gps_data or 'GPSLongitude' not in gps_data:
+            if not gps_data or (piexif.GPSIFD.GPSLatitude not in gps_data and 'GPSLatitude' not in gps_data):
                 logger.warning("No GPS coordinates in EXIF data")
                 return {
                     "has_gps": False,
@@ -144,20 +207,35 @@ class GPSPhotoVerifier:
                     "device_model": exif_data.get('Model')
                 }
             
-            # Convert GPS coordinates to decimal degrees
-            lat = self._convert_to_decimal_degrees(gps_data.get('GPSLatitude'))
-            lon = self._convert_to_decimal_degrees(gps_data.get('GPSLongitude'))
+            # Convert GPS coordinates to decimal degrees (handle both piexif and PIL formats)
+            lat_key = piexif.GPSIFD.GPSLatitude if piexif.GPSIFD.GPSLatitude in gps_data else 'GPSLatitude'
+            lon_key = piexif.GPSIFD.GPSLongitude if piexif.GPSIFD.GPSLongitude in gps_data else 'GPSLongitude'
+            lat_ref_key = piexif.GPSIFD.GPSLatitudeRef if piexif.GPSIFD.GPSLatitudeRef in gps_data else 'GPSLatitudeRef'
+            lon_ref_key = piexif.GPSIFD.GPSLongitudeRef if piexif.GPSIFD.GPSLongitudeRef in gps_data else 'GPSLongitudeRef'
+            
+            lat = self._convert_to_decimal_degrees(gps_data.get(lat_key))
+            lon = self._convert_to_decimal_degrees(gps_data.get(lon_key))
             
             # Adjust for hemisphere
-            if gps_data.get('GPSLatitudeRef') == 'S':
+            lat_ref = gps_data.get(lat_ref_key, b'N')
+            lon_ref = gps_data.get(lon_ref_key, b'E')
+            
+            # Handle both string and bytes references
+            if isinstance(lat_ref, bytes):
+                lat_ref = lat_ref.decode('utf-8')
+            if isinstance(lon_ref, bytes):
+                lon_ref = lon_ref.decode('utf-8')
+            
+            if lat_ref == 'S':
                 lat = -lat
-            if gps_data.get('GPSLongitudeRef') == 'W':
+            if lon_ref == 'W':
                 lon = -lon
             
             # Extract altitude if available
             altitude = None
-            if 'GPSAltitude' in gps_data:
-                altitude_data = gps_data['GPSAltitude']
+            alt_key = piexif.GPSIFD.GPSAltitude if piexif.GPSIFD.GPSAltitude in gps_data else 'GPSAltitude'
+            if alt_key in gps_data:
+                altitude_data = gps_data[alt_key]
                 if isinstance(altitude_data, tuple):
                     altitude = float(altitude_data[0]) / float(altitude_data[1])
                 else:
@@ -165,8 +243,9 @@ class GPSPhotoVerifier:
             
             # Extract GPS accuracy if available (DOP - Dilution of Precision)
             accuracy = None
-            if 'GPSDOP' in gps_data:
-                dop = gps_data['GPSDOP']
+            dop_key = piexif.GPSIFD.GPSDOP if piexif.GPSIFD.GPSDOP in gps_data else 'GPSDOP'
+            if dop_key in gps_data:
+                dop = gps_data[dop_key]
                 if isinstance(dop, tuple):
                     accuracy = float(dop[0]) / float(dop[1]) * 5  # Rough conversion to meters
             
@@ -180,7 +259,8 @@ class GPSPhotoVerifier:
                 "timestamp": self._extract_timestamp(exif_data),
                 "device_make": exif_data.get('Make'),
                 "device_model": exif_data.get('Model'),
-                "gps_timestamp": self._extract_gps_timestamp(gps_data)
+                "gps_timestamp": self._extract_gps_timestamp(gps_data, use_piexif=True),
+                "extraction_method": extraction_method
             }
             
             logger.info(f"GPS extracted: {lat:.6f}, {lon:.6f}")
@@ -236,8 +316,14 @@ class GPSPhotoVerifier:
         for field in ['DateTimeOriginal', 'DateTime', 'DateTimeDigitized']:
             if field in exif_data:
                 try:
+                    # Handle both bytes and strings (piexif stores as bytes)
+                    dt_value = exif_data[field]
+                    if isinstance(dt_value, bytes):
+                        dt_str = dt_value.decode('utf-8')
+                    else:
+                        dt_str = str(dt_value)
+                    
                     # EXIF datetime format: "YYYY:MM:DD HH:MM:SS"
-                    dt_str = str(exif_data[field])
                     dt = datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S")
                     return dt.isoformat()
                 except Exception as e:
@@ -246,20 +332,34 @@ class GPSPhotoVerifier:
         
         return None
     
-    def _extract_gps_timestamp(self, gps_data: Dict) -> Optional[str]:
+    def _extract_gps_timestamp(self, gps_data: Dict, use_piexif: bool = False) -> Optional[str]:
         """
         Extract GPS timestamp from GPS EXIF data.
         
         Args:
             gps_data: Parsed GPS EXIF data
+            use_piexif: Whether to use piexif tag format
             
         Returns:
             ISO 8601 formatted GPS timestamp, or None
         """
-        if 'GPSTimeStamp' in gps_data and 'GPSDateStamp' in gps_data:
+        if use_piexif:
+            # Use piexif tag format
+            time_key = piexif.GPSIFD.GPSTimeStamp if piexif.GPSIFD.GPSTimeStamp in gps_data else 'GPSTimeStamp'
+            date_key = piexif.GPSIFD.GPSDateStamp if piexif.GPSIFD.GPSDateStamp in gps_data else 'GPSDateStamp'
+        else:
+            # Use PIL tag format
+            time_key = 'GPSTimeStamp'
+            date_key = 'GPSDateStamp'
+        
+        if time_key in gps_data and date_key in gps_data:
             try:
-                time_data = gps_data['GPSTimeStamp']
-                date_str = gps_data['GPSDateStamp']
+                time_data = gps_data[time_key]
+                date_str = gps_data[date_key]
+                
+                # Handle bytes date string
+                if isinstance(date_str, bytes):
+                    date_str = date_str.decode('utf-8')
                 
                 # Convert time tuple to HH:MM:SS
                 hours = int(time_data[0][0] / time_data[0][1]) if isinstance(time_data[0], tuple) else int(time_data[0])

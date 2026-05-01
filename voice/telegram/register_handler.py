@@ -296,6 +296,8 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
                     "✅ በቅርብ ጊዜ የተነሳ (ባለፉት 7 ቀናት ውስጥ)\n"
                     "✅ GPS መረጃ መያዝ አለበት (አብዛኛዎቹ ስማርትፎኖች ይህንን በራስ ሰር ያከማቻሉ)\n"
                     "✅ ወደ ኢትዮጵያ መገኛ ቦታ መጠቆም አለበት\n\n"
+                    "📄 **እንደ ሰነድ ይልኩ** \n"
+                    "ቴሌግራም ፎቶ GPS መረጃውን ያጥፋል። እባክዎ ፎቶዎን እንደ ሰነድ ይልኩ።\n\n"
                     "የእርሻዎን ፎቶ ለመላክ አሁን ይጫኑ።\n\n"
                     "_ይህ በቡና ምርት ላይ ለ EUDR ማረጋገጫ ይረዳል።_"
                 )
@@ -307,7 +309,9 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
                     "✅ Taken recently (within 7 days)\n"
                     "✅ Must have GPS data (most smartphones auto-save this)\n"
                     "✅ Must show Ethiopia location\n\n"
-                    "Press the 📎 button and send a photo from your farm now.\n\n"
+                    "📄 **Upload as Document**\n"
+                    "Telegram removes GPS data from photos. Please upload as document to preserve GPS data.\n\n"
+                    "Press the 📎 button and send your photo as a document from your farm now.\n\n"
                     "_This helps verify your farm location for EU export compliance._"
                 )
             
@@ -1052,9 +1056,9 @@ async def handle_farm_photo_upload(user_id: int, photo_file_id: str, photo_file_
                     'message': (
                         "❌ *No GPS Data Found*\n\n"
                         "The photo does not contain GPS coordinates. Please:\n"
-                        "1. Enable Location Services in your phone settings\n"
-                        "2. Grant location permission to your Camera app\n"
-                        "3. Take a new photo and try again\n\n"
+                        "1. 📄 Upload as document (preserves GPS data)\n"
+                        "2. 📍 Share location directly\n"
+                        "3. Take a new photo with GPS enabled\n\n"
                         "Or skip for now."
                     ),
                     'parse_mode': 'Markdown',
