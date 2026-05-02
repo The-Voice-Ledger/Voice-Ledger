@@ -47,6 +47,7 @@ eth-account==0.13.7        # Account management and transaction signing
 qrcode[pil]==8.0           # QR code generation (updated for credential export)
 Pillow>=10.1.0             # Image processing
 fpdf2==2.8.3               # Server-side PDF generation for DPP passports
+piexif==1.1.3              # Embedding metadata in images (for DPP credentials)
 
 # -----------------------------
 # Lab 6: DevOps & Monitoring (Dashboard)
