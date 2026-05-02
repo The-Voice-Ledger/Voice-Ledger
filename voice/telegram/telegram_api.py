@@ -2028,9 +2028,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                     return {"ok": True}
                 
-                batches = db.query(CoffeeBatch).options(
-                    joinedload(CoffeeBatch.verifying_organization)
-                ).filter_by(
+                batches = db.query(CoffeeBatch).filter_by(
                     created_by_user_id=user.id
                 ).order_by(CoffeeBatch.created_at.desc()).limit(10).all()
                 
@@ -2067,9 +2065,8 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         # Add verification status
                         batch_info += f"   Status: {status_emoji} {b.status.replace('_', ' ').title()}\n"
                         
-                        # Add verifier info if verified
-                        if b.status == 'VERIFIED' and b.verifying_organization:
-                            batch_info += f"   Verified by: {b.verifying_organization.name}\n"
+                        # Add verification info if verified
+                        if b.status == 'VERIFIED':
                             if b.verified_at:
                                 batch_info += f"   Verified: {b.verified_at.strftime('%Y-%m-%d %H:%M')}\n"
                         
