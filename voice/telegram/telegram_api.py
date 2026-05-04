@@ -2108,6 +2108,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             db = SessionLocal()
             try:
+                # Get user object for verification
+                user = get_user_by_telegram_id(user_id, db_session=db)
+                if not user:
+                    await processor.send_notification(
+                        channel_name='telegram',
+                        user_id=user_id,
+                        message="❌ No identity found. Use /register to create one."
+                    )
+                    return {"ok": True}
                 
                 # Parse: /verify <gtin_or_batch_id> <verified_quantity> [notes]
                 parts = text.split(maxsplit=3)
@@ -2194,9 +2203,10 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                             claimed_quantity_kg=batch.quantity_kg,
                             variety=batch.variety,
                             origin=batch.origin,
-                            gtin=batch.gtin,
-                            verification_date=datetime.utcnow().isoformat(),
-                            notes=notes
+                            quality_notes=notes,
+                            verifier_did=user.did,
+                            verifier_name=user.telegram_first_name,
+                            has_photo_evidence=batch.has_photo_evidence
                         )
                         logger.info(f"Issued verification credential for batch {batch.batch_id}")
                     except Exception as e:
