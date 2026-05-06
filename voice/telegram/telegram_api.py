@@ -2104,7 +2104,7 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from ssi.user_identity import get_user_by_telegram_id
             from database.models import SessionLocal
             from database import get_batch_by_id_or_gtin
-            from datetime import datetime
+            from voice.telegram.verification_handler import _process_verification
             
             db = SessionLocal()
             try:
@@ -2159,91 +2159,49 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                     )
                     return {"ok": True}
                 
-                # Check if already verified
-                if batch.status == 'VERIFIED':
+                # Check batch status
+                if batch.status != 'PENDING_VERIFICATION':
                     await processor.send_notification(
                         channel_name='telegram',
                         user_id=user_id,
                         message=(
-                            f"ℹ️ *Already Verified*\n\n"
-                            f"📦 {batch.batch_id}\n"
-                            f"   {batch.quantity_kg} kg {batch.variety}\n"
-                            f"   Verified by: {batch.verifying_organization.name if batch.verifying_organization else 'Unknown'}\n"
-                            f"   Verified at: {batch.verified_at.strftime('%Y-%m-%d %H:%M') if batch.verified_at else 'Unknown'}"
+                            f"❌ Batch {identifier} already processed\n"
+                            f"Current status: {batch.status}"
                         )
                     )
                     return {"ok": True}
                 
-                # Verify batch
-                batch.status = "VERIFIED"
-                batch.verified_quantity = verified_quantity
-                batch.verification_notes = notes
-                batch.verified_by_did = user.did
-                batch.verifying_organization_id = user.organization_id
-                batch.verified_at = datetime.utcnow()
-                batch.verification_used = True
+                # Create verification session like voice handler
+                session = {
+                    'user_did': user.did,
+                    'organization_id': user.organization_id,
+                    'quality': {}  # No quality assessment in simple verify command
+                }
                 
-                db.commit()
-                
-                logger.info(
-                    f"Batch {batch.batch_id} verified by {user.telegram_first_name} "
-                    f"(role={user.role}, did={user.did})"
+                # Use the same verification processor as voice (includes token minting!)
+                result = await _process_verification(
+                    db=db,
+                    batch=batch,
+                    user_id=user_id,
+                    session=session,
+                    verified_quantity=verified_quantity,
+                    notes=notes or ""
                 )
                 
-                # Issue verification credential signed by cooperative
-                credential = None
-                if user.organization_id and batch.created_by_did:
-                    try:
-                        from ssi.verification_credentials import issue_verification_credential
-                        credential = issue_verification_credential(
-                            batch_id=batch.batch_id,
-                            farmer_did=batch.created_by_did,
-                            organization_id=user.organization_id,
-                            verified_quantity_kg=verified_quantity,
-                            claimed_quantity_kg=batch.quantity_kg,
-                            variety=batch.variety,
-                            origin=batch.origin,
-                            quality_notes=notes,
-                            verifier_did=user.did,
-                            verifier_name=user.telegram_first_name,
-                            has_photo_evidence=batch.has_photo_evidence
-                        )
-                        logger.info(f"Issued verification credential for batch {batch.batch_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to issue verification credential: {e}")
-                
-                # Send success message
-                diff = verified_quantity - batch.quantity_kg
-                diff_text = ""
-                if abs(diff) > 0.1:
-                    diff_sign = "+" if diff > 0 else ""
-                    diff_text = f"\n   Difference: {diff_sign}{diff:.1f} kg ({diff_sign}{(diff/batch.quantity_kg)*100:.1f}%)"
-                
-                # Escape Markdown special characters in batch_id
-                safe_batch_id = batch.batch_id.replace('_', '\\_')
-                notes_line = f"   Notes: {notes}\n" if notes else ""
-                credential_line = "✅ Verification credential issued" if credential else ""
-                
+                # Send success message using same format as voice
                 await processor.send_notification(
                     channel_name='telegram',
                     user_id=user_id,
-                    message=(
-                        f"✅ *Batch Verified*\n\n"
-                        f"📦 {safe_batch_id}\n"
-                        f"   GTIN: {batch.gtin}\n"
-                        f"   Claimed: {batch.quantity_kg} kg\n"
-                        f"   Verified: {verified_quantity} kg{diff_text}\n"
-                        f"   Variety: {batch.variety}\n"
-                        f"   Origin: {batch.origin}\n"
-                        f"{notes_line}\n"
-                        f"{credential_line}"
-                    )
+                    message=result.get('message', '✅ Batch verified successfully'),
+                    parse_mode='Markdown',
+                    send_voice=True
                 )
+                
+                logger.info(f"Telegram verification completed: {batch.batch_id} by {user.telegram_first_name}")
+                
             finally:
                 db.close()
             return {"ok": True, "message": "Batch verified"}
-        
-        # Handle /dpp command - Generate Digital Product Passport for aggregated container
         if text.startswith('/dpp'):
             # Check if command has parameter
             if not text.startswith('/dpp '):
