@@ -388,16 +388,44 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         if user_id not in conversation_states:
             return {'message': "❌ Session expired. Please /register again."}
         
-        # Transition to explicit location sharing instead of completing immediately
-        return await prompt_for_location_share(user_id)
+        # Route farmers to phone/PIN collection (existing logic in telegram_api.py)
+        session = conversation_states[user_id]
+        session['state'] = STATE_PHONE
+        set_session(user_id, session)
+        
+        return {
+            'message': (
+                "📱 *Share your phone number*\n\n"
+                "Tap the button below to share your number automatically, "
+                "or type it manually (e.g., +251912345678):"
+            ),
+            'parse_mode': 'Markdown',
+            'reply_keyboard': [
+                [{'text': '📱 Share My Phone Number', 'request_contact': True}]
+            ]
+        }
     
     # Skip location share
     if callback_data == 'reg_skip_location':
         if user_id not in conversation_states:
             return {'message': "❌ Session expired. Please /register again."}
         
-        # Complete registration without shared location
-        return await complete_farmer_registration(user_id, skip_location=True)
+        # Route farmers to phone/PIN collection (existing logic in telegram_api.py)
+        session = conversation_states[user_id]
+        session['state'] = STATE_PHONE
+        set_session(user_id, session)
+        
+        return {
+            'message': (
+                "📱 *Share your phone number*\n\n"
+                "Tap the button below to share your number automatically, "
+                "or type it manually (e.g., +251912345678):"
+            ),
+            'parse_mode': 'Markdown',
+            'reply_keyboard': [
+                [{'text': '📱 Share My Phone Number', 'request_contact': True}]
+            ]
+        }
     
     # Retry photo upload
     if callback_data == 'reg_retry_photo':
@@ -651,7 +679,11 @@ async def _handle_registration_text_impl(user_id: int, text: str) -> Dict[str, A
         # Route to role-specific questions
         role = data.get('role')
         
-        if role == 'EXPORTER':
+        if role == 'FARMER':
+            # Farmers: Complete registration after PIN setup
+            return await complete_farmer_registration(user_id, skip_photo=True, skip_location=True)
+        
+        elif role == 'EXPORTER':
             session['state'] = STATE_EXPORT_LICENSE
             set_session(user_id, session)  # Persist to Redis
             return {
