@@ -388,21 +388,13 @@ async def handle_registration_callback(user_id: int, callback_data: str) -> Dict
         if user_id not in conversation_states:
             return {'message': "❌ Session expired. Please /register again."}
         
-        # Route farmers to phone/PIN collection (existing logic in telegram_api.py)
+        # Route farmers to full name collection (existing logic in register_handler.py)
         session = conversation_states[user_id]
-        session['state'] = STATE_PHONE
+        session['state'] = STATE_FULL_NAME
         set_session(user_id, session)
         
         return {
-            'message': (
-                "📱 *Share your phone number*\n\n"
-                "Tap the button below to share your number automatically, "
-                "or type it manually (e.g., +251912345678):"
-            ),
-            'parse_mode': 'Markdown',
-            'reply_keyboard': [
-                [{'text': '📱 Share My Phone Number', 'request_contact': True}]
-            ]
+            'message': "The bot asks for full name. Type your name."
         }
     
     # Skip location share
