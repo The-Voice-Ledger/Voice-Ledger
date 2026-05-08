@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from database.connection import get_db
-from database.models import UserIdentity
+from database.models import UserIdentity, PendingRegistration
 from voice.web.auth import get_current_user, get_current_user_flexible
 import logging
 
@@ -61,6 +61,25 @@ def get_my_profile(user: UserIdentity = Depends(get_current_user_flexible)):
     Supports both JWT (web) and Telegram ID (mini apps) authentication.
     Used by voice UI to know which provider to use (AddisAI vs OpenAI).
     """
+    # Get organization from UserIdentity.organization first, then fallback to PendingRegistration
+    organization_name = None
+    if user.organization:
+        organization_name = user.organization.name
+    else:
+        # Try to get organization from PendingRegistration (for farmers who haven't been linked to Organization yet)
+        with get_db() as db:
+            try:
+                # Handle both numeric and string telegram_user_id
+                telegram_id_int = int(user.telegram_user_id)
+                pending_reg = db.query(PendingRegistration).filter(
+                    PendingRegistration.telegram_user_id == telegram_id_int
+                ).first()
+                if pending_reg and pending_reg.organization_name:
+                    organization_name = pending_reg.organization_name
+            except (ValueError, TypeError):
+                # If not numeric, skip PendingRegistration lookup
+                pass
+    
     return UserProfileResponse(
         id=user.id,
         name=f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
@@ -68,7 +87,7 @@ def get_my_profile(user: UserIdentity = Depends(get_current_user_flexible)):
         role=user.role,
         preferred_language=user.preferred_language,
         is_approved=user.is_approved,
-        organization=user.organization.name if user.organization else None,
+        organization=organization_name,
         telegram_user_id=str(user.telegram_user_id) if user.telegram_user_id else None
     )
 
@@ -137,6 +156,24 @@ def get_user_profile(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
+        # Get organization from UserIdentity.organization first, then fallback to PendingRegistration
+        organization_name = None
+        if user.organization:
+            organization_name = user.organization.name
+        else:
+            # Try to get organization from PendingRegistration (for farmers who haven't been linked to Organization yet)
+            try:
+                # Handle both numeric and string telegram_user_id
+                telegram_id_int = int(user.telegram_user_id)
+                pending_reg = db.query(PendingRegistration).filter(
+                    PendingRegistration.telegram_user_id == telegram_id_int
+                ).first()
+                if pending_reg and pending_reg.organization_name:
+                    organization_name = pending_reg.organization_name
+            except (ValueError, TypeError):
+                # If not numeric, skip PendingRegistration lookup
+                pass
+        
         return UserProfileResponse(
             id=user.id,
             name=f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
@@ -144,6 +181,6 @@ def get_user_profile(
             role=user.role,
             preferred_language=user.preferred_language,
             is_approved=user.is_approved,
-            organization=user.organization.name if user.organization else None,
+            organization=organization_name,
             telegram_user_id=str(user.telegram_user_id) if user.telegram_user_id else None
         )
