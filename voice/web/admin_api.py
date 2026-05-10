@@ -141,44 +141,125 @@ def get_registrations(
     - offset: Pagination offset
     """
     with get_db() as db:
-        query = db.query(UserIdentity)
-        
-        # Filter by approval status
+        # Check if we're looking for pending registrations
         if status == 'PENDING':
-            query = query.filter_by(is_approved=False)
-        elif status == 'APPROVED':
-            query = query.filter_by(is_approved=True)
-        
-        # Filter by role
-        if role:
-            query = query.filter_by(role=role)
-        
-        # Get total count
-        total = query.count()
-        
-        # Apply pagination
-        users = query.order_by(UserIdentity.id.desc()).limit(limit).offset(offset).all()
-        
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "registrations": [
-                {
-                    "id": user.id,
-                    "name": f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
-                    "phone_number": user.phone_number,
-                    "role": user.role,
-                    "organization": user.organization.name if user.organization else None,
-                    "organization_id": user.organization_id,
-                    "preferred_language": user.preferred_language,
-                    "is_approved": user.is_approved,
-                    "telegram_user_id": user.telegram_user_id,
-                    "created_at": user.id  # Using ID as proxy for creation order
+            # Query PendingRegistration table for pending registrations
+            query = db.query(PendingRegistration)
+            
+            # Filter by role if specified
+            if role:
+                query = query.filter_by(requested_role=role)
+            
+            # Get total count
+            total = query.count()
+            
+            # Apply pagination
+            pending_regs = query.order_by(PendingRegistration.id.desc()).limit(limit).offset(offset).all()
+            
+            return {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "registrations": [
+                    {
+                        "id": reg.id,
+                        "name": reg.full_name,
+                        "phone_number": reg.phone_number,
+                        "role": reg.requested_role,
+                        "organization": reg.organization_name,
+                        "organization_id": None,
+                        "status": reg.status,
+                        "created_at": reg.created_at.isoformat() if reg.created_at else None,
+                        "telegram_username": reg.telegram_username,
+                        "telegram_first_name": reg.telegram_first_name,
+                        "telegram_last_name": reg.telegram_last_name,
+                        "location": reg.location,
+                        "registration_number": reg.registration_number,
+                        "reason": reg.reason,
+                        "export_license": reg.export_license,
+                        "port_access": reg.port_access,
+                        "shipping_capacity_tons": reg.shipping_capacity_tons,
+                        "business_type": reg.business_type,
+                        "country": reg.country,
+                        "target_volume_tons_annual": reg.target_volume_tons_annual,
+                        "quality_preferences": reg.quality_preferences,
+                    }
+                    for reg in pending_regs
+                ]
+            }
+        else:
+            # For APPROVED/REJECTED, query UserIdentity table
+            query = db.query(UserIdentity)
+            
+            # Filter by approval status
+            if status == 'APPROVED':
+                query = query.filter_by(is_approved=True)
+            elif status == 'REJECTED':
+                # Rejected users might not exist in UserIdentity, check PendingRegistration
+                rejected_query = db.query(PendingRegistration).filter_by(status='REJECTED')
+                if role:
+                    rejected_query = rejected_query.filter_by(requested_role=role)
+                
+                total = rejected_query.count()
+                rejected_regs = rejected_query.order_by(PendingRegistration.id.desc()).limit(limit).offset(offset).all()
+                
+                return {
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "registrations": [
+                        {
+                            "id": reg.id,
+                            "name": reg.full_name,
+                            "phone_number": reg.phone_number,
+                            "role": reg.requested_role,
+                            "organization": reg.organization_name,
+                            "organization_id": None,
+                            "status": reg.status,
+                            "created_at": reg.created_at.isoformat() if reg.created_at else None,
+                            "telegram_username": reg.telegram_username,
+                            "telegram_first_name": reg.telegram_first_name,
+                            "telegram_last_name": reg.telegram_last_name,
+                            "location": reg.location,
+                            "registration_number": reg.registration_number,
+                            "reason": reg.reason,
+                            "rejection_reason": reg.rejection_reason,
+                            "reviewed_at": reg.reviewed_at.isoformat() if reg.reviewed_at else None,
+                        }
+                        for reg in rejected_regs
+                    ]
                 }
-                for user in users
-            ]
-        }
+            
+            # Filter by role
+            if role:
+                query = query.filter_by(role=role)
+            
+            # Get total count
+            total = query.count()
+            
+            # Apply pagination
+            users = query.order_by(UserIdentity.id.desc()).limit(limit).offset(offset).all()
+            
+            return {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "registrations": [
+                    {
+                        "id": user.id,
+                        "name": f"{user.telegram_first_name} {user.telegram_last_name or ''}".strip(),
+                        "phone_number": user.phone_number,
+                        "role": user.role,
+                        "organization": user.organization.name if user.organization else None,
+                        "organization_id": user.organization_id,
+                        "preferred_language": user.preferred_language,
+                        "is_approved": user.is_approved,
+                        "telegram_user_id": user.telegram_user_id,
+                        "created_at": user.created_at.isoformat() if user.created_at else None,
+                    }
+                    for user in users
+                ]
+            }
 
 
 @router.post("/admin/registrations/{user_id}/approve")
