@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from database.connection import get_db
 from database.models import (
-    UserIdentity, Organization, CoffeeBatch,
+    SessionLocal, UserIdentity, Organization, CoffeeBatch,
     RFQ, RFQOffer, RFQAcceptance, PendingRegistration, UATIssue
 )
 from voice.web.auth import require_admin, require_admin_flexible, create_jwt_token
@@ -144,7 +144,7 @@ def get_registrations(
         # Check if we're looking for pending registrations
         if status == 'PENDING':
             # Query PendingRegistration table for pending registrations
-            query = db.query(PendingRegistration)
+            query = db.query(PendingRegistration).filter_by(status='PENDING')
             
             # Filter by role if specified
             if role:
@@ -262,70 +262,189 @@ def get_registrations(
             }
 
 
-@router.post("/admin/registrations/{user_id}/approve")
-def approve_registration(
-    user_id: int,
+@router.post("/admin/registrations/{registration_id}/approve")
+async def approve_registration(
+    registration_id: int,
     request: ApprovalRequest,
     admin: UserIdentity = Depends(require_admin_flexible)
 ):
     """
-    Approve a pending registration.
-    
-    Optionally assign organization.
-    Transfers PIN hash from PendingRegistration to UserIdentity for web login.
+    Approve a pending registration:
+    1. Create or find organization
+    2. Update user identity with role and organization
+    3. Update registration status
+    4. Send Telegram notification to user
     """
     with get_db() as db:
-        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        try:
+            # Get the pending registration
+            registration = db.query(PendingRegistration).filter_by(
+                id=registration_id,
+                status='PENDING'
+            ).first()
+            
+            if not registration:
+                raise HTTPException(status_code=404, detail="Registration not found or already processed")
         
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        if user.is_approved:
-            raise HTTPException(status_code=400, detail="User already approved")
-        
-        # Transfer PIN hash from PendingRegistration to UserIdentity
-        pending = db.query(PendingRegistration).filter_by(
-            telegram_user_id=int(user.telegram_user_id)
-        ).first()
-        
-        if pending and pending.pin_hash:
-            user.pin_hash = pending.pin_hash
-            user.pin_set_at = datetime.utcnow()
-            logger.info(f"Transferred PIN hash from pending registration to user {user_id}")
-        else:
-            logger.warning(f"No PIN hash found in pending registration for user {user_id}")
-        
-        # Update user approval status
-        user.is_approved = True
-        user.approved_at = datetime.utcnow()
-        user.approved_by_admin_id = admin.id
-        
-        if request.organization_id:
-            # Verify organization exists
-            org = db.query(Organization).filter_by(id=request.organization_id).first()
-            if not org:
-                raise HTTPException(status_code=404, detail="Organization not found")
-            user.organization_id = request.organization_id
-        
-        db.commit()
-        
-        logger.info(
-            f"Admin {admin.id} approved user {user_id} "
-            f"(org: {request.organization_id}, comments: {request.comments})"
-        )
-        
-        return {
-            "success": True,
-            "message": f"User {user.telegram_first_name} approved successfully",
-            "user_id": user_id,
-            "organization_id": user.organization_id,
-            "pin_transferred": bool(pending and pending.pin_hash)
-        }
+            # TODO: Implement organization DID generation in next step
+            # For now, we'll create organization without DID
+            
+            # Check if organization already exists
+            existing_org = db.query(Organization).filter(
+                Organization.name.ilike(f"%{registration.organization_name}%")
+            ).first()
+            
+            if existing_org:
+                organization_id = existing_org.id
+                logger.info(f"Using existing organization: {existing_org.name} (ID: {existing_org.id})")
+            else:
+                # Create new organization with real DID
+                org_type = {
+                    'COOPERATIVE_MANAGER': 'COOPERATIVE',
+                    'EXPORTER': 'EXPORTER',
+                    'BUYER': 'BUYER'
+                }.get(registration.requested_role, 'COOPERATIVE')
+                
+                # Generate DID for organization
+                logger.info(f"Generating DID for organization: {registration.organization_name}")
+                from ssi.did.did_key import generate_did_key
+                org_identity = generate_did_key()
+                
+                new_org = Organization(
+                    name=registration.organization_name,
+                    type=org_type,
+                    location=registration.location,
+                    phone_number=registration.phone_number,
+                    registration_number=registration.registration_number,
+                    did=org_identity['did'],
+                    public_key=org_identity['public_key'],
+                    encrypted_private_key=org_identity['encrypted_private_key']
+                )
+                db.add(new_org)
+                db.flush()
+                organization_id = new_org.id
+                logger.info(f"Created organization: {new_org.name} (ID: {new_org.id}, DID: {new_org.did[:30]}...)")
+            
+            # Create role-specific records
+            if registration.requested_role == 'EXPORTER':
+                exporter = Exporter(
+                    organization_id=organization_id,
+                    export_license=registration.export_license,
+                    port_access=registration.port_access,
+                    shipping_capacity_tons=registration.shipping_capacity_tons,
+                    active_shipping_lines=[],
+                    customs_clearance_capability=False
+                )
+                db.add(exporter)
+                logger.info(f"Created exporter record for org {organization_id}")
+                
+            elif registration.requested_role == 'BUYER':
+                buyer = Buyer(
+                    organization_id=organization_id,
+                    business_type=registration.business_type,
+                    country=registration.country,
+                    target_volume_tons_annual=registration.target_volume_tons_annual,
+                    quality_preferences=registration.quality_preferences,
+                    import_licenses=[],
+                    certifications_required=[]
+                )
+                db.add(buyer)
+                logger.info(f"Created buyer record for org {organization_id}")
+            
+            # Get or create user identity with DID
+            # This ensures every user has a DID (personal identity) AND links to organization DID (for verification authority)
+            from ssi.user_identity import get_or_create_user_identity
+            user_identity = get_or_create_user_identity(
+                telegram_user_id=str(registration.telegram_user_id),
+                telegram_first_name=registration.full_name.split()[0] if registration.full_name else "User",
+                telegram_last_name=" ".join(registration.full_name.split()[1:]) if len(registration.full_name.split()) > 1 else None,
+                db_session=db
+            )
+            
+            logger.info(f"User identity: {'created' if user_identity['created'] else 'found'} (DID: {user_identity['did'][:30]}...)")
+            
+            # Update user with role and organization
+            user = db.query(UserIdentity).filter_by(
+                telegram_user_id=str(registration.telegram_user_id)
+            ).first()
+            
+            # Extract language preference from reason field
+            preferred_language = 'en'  # Default
+            if registration.reason and registration.reason.startswith('[LANG:'):
+                try:
+                    lang_marker = registration.reason.split(']')[0]
+                    preferred_language = lang_marker.replace('[LANG:', '')
+                except:
+                    pass
+            
+            user.role = registration.requested_role
+            user.organization_id = organization_id
+            user.is_approved = True
+            user.approved_at = datetime.utcnow()
+            user.approved_by_admin_id = admin.id
+            user.preferred_language = preferred_language
+            user.language_set_at = datetime.utcnow()
+            if registration.phone_number:
+                user.phone_number = registration.phone_number
+                logger.info(f"📞 Transferred phone number for user {user.id}")
+            if registration.pin_hash:
+                user.pin_hash = registration.pin_hash
+                user.pin_set_at = datetime.utcnow()
+                logger.info(f"🔐 Transferred PIN hash for user {user.id}")
+            logger.info(f"Updated user: {user.telegram_first_name} - Role: {user.role}, Org: {organization_id}, Lang: {preferred_language}")
+            
+            # Initialize reputation record for user
+            from database.models import UserReputation
+            existing_reputation = db.query(UserReputation).filter_by(user_id=user.id).first()
+            if not existing_reputation:
+                reputation = UserReputation(
+                    user_id=user.id,
+                    completed_transactions=0,
+                    total_volume_kg=0,
+                    on_time_deliveries=0,
+                    quality_disputes=0,
+                    average_rating=None,
+                    reputation_level='BRONZE'
+                )
+                db.add(reputation)
+                logger.info(f"Initialized reputation record for user {user.id}")
+            
+            # Update registration status
+            registration.status = 'APPROVED'
+            registration.reviewed_at = datetime.utcnow()
+            registration.reviewed_by_admin_id = admin.id
+            
+            db.commit()
+            
+            # Send Telegram notification to user
+            from voice.admin.registration_approval import send_approval_notification
+            await send_approval_notification(
+                telegram_user_id=registration.telegram_user_id,
+                registration_id=registration_id,
+                role=registration.requested_role,
+                organization_name=registration.organization_name
+            )
+            
+            logger.info(f"Approved registration REG-{registration_id:04d}")
+            
+            return {
+                "success": True,
+                "message": f"User {user.telegram_first_name} approved successfully",
+                "user_id": user.id,
+                "organization_id": organization_id,
+                "pin_transferred": bool(registration.pin_hash)
+            }
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error approving registration: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
+    
 
 
-@router.post("/admin/registrations/{user_id}/reject")
-def reject_registration(
-    user_id: int,
+@router.post("/admin/registrations/{registration_id}/reject")
+async def reject_registration(
+    registration_id: int,
     request: ApprovalRequest,
     admin: UserIdentity = Depends(require_admin_flexible)
 ):
@@ -336,24 +455,42 @@ def reject_registration(
     Could delete user or add rejection_reason field.
     """
     with get_db() as db:
-        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        # Find the pending registration
+        pending = db.query(PendingRegistration).filter_by(id=registration_id).first()
         
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        if not pending:
+            raise HTTPException(status_code=404, detail="Pending registration not found")
+        
+        if pending.status != 'PENDING':
+            raise HTTPException(status_code=400, detail=f"Registration already {pending.status}")
+        
+        # Update pending registration status
+        pending.status = 'REJECTED'
+        pending.reviewed_by_admin_id = admin.id
+        pending.reviewed_at = datetime.utcnow()
+        pending.rejection_reason = request.comments
+        
+        db.commit()
+        
+        # Send Telegram notification to user
+        from voice.admin.registration_approval import send_rejection_notification
+        await send_rejection_notification(
+            telegram_user_id=pending.telegram_user_id,
+            registration_id=registration_id,
+            reason=request.comments
+        )
         
         logger.warning(
-            f"Admin {admin.id} rejected user {user_id} "
+            f"Admin {admin.id} rejected registration {registration_id} "
             f"(reason: {request.comments})"
         )
         
-        # For now, we'll just keep them unapproved
-        # Could add rejection_reason field or delete user
-        
         return {
             "success": True,
-            "message": f"User {user.telegram_first_name} rejected",
-            "user_id": user_id,
-            "comments": request.comments
+            "message": f"Registration {pending.full_name} rejected",
+            "registration_id": registration_id,
+            "comments": request.comments,
+            "rejection_reason": request.comments
         }
 
 
