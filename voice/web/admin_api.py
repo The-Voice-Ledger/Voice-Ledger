@@ -17,7 +17,8 @@ from sqlalchemy import func, and_
 from database.connection import get_db
 from database.models import (
     SessionLocal, UserIdentity, Organization, CoffeeBatch,
-    RFQ, RFQOffer, RFQAcceptance, PendingRegistration, UATIssue
+    RFQ, RFQOffer, RFQAcceptance, PendingRegistration, UATIssue,
+    Exporter, Buyer, UserReputation
 )
 from voice.web.auth import require_admin, require_admin_flexible, create_jwt_token
 from pydantic import BaseModel
