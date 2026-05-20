@@ -196,23 +196,28 @@ def generate_batch_id_from_entities(entities: dict) -> str:
     Generate a unique batch_id from voice command entities.
     
     Format: FARMER_PRODUCT_TIMESTAMP (max 50 chars for DB)
-    Example: ABEBE_ARABICA_20251214_143025
+    Example: GEDEO_YIRGACHEFFE_20251214_143025
+    
+    Handles non-ASCII characters (Arabic, Amharic) by transliterating to ASCII.
     
     Args:
         entities: Extracted entities from NLU
         
     Returns:
-        Generated batch_id (unique per second, max 50 characters)
+        Generated batch_id (URL-safe, unique per second, max 50 characters)
     """
+    from gs1.identifiers_utils import make_batch_id_safe
+    
     origin = entities.get("origin")
     if not origin or origin.upper() == "UNKNOWN":
         origin = entities.get("farmer_origin", "UNKNOWN")
     
-    origin = origin.upper().replace(" ", "_")[:16]
-    product = entities.get("product", "COFFEE").upper().replace(" ", "_")[:17]
+    product = entities.get("product", "COFFEE")
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     
-    return f"{origin}_{product}_{timestamp}"
+    # Create batch ID and make it URL-safe
+    batch_id = f"{origin}_{product}_{timestamp}"
+    return make_batch_id_safe(batch_id)
 
 
 def handle_record_commission(db: Session, entities: dict, user_id: int = None, user_did: str = None) -> Tuple[str, Dict[str, Any]]:

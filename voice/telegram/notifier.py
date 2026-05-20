@@ -444,8 +444,9 @@ async def send_dpp_package(
         f"<i>Voice Ledger - Ethiopian Coffee Traceability</i>"
     )
 
+    from urllib.parse import quote
     base_url = _get_public_base_url()
-    bid_enc = _html.escape(batch_id)
+    bid_enc = quote(str(batch_id))
 
     # ── inline keyboard buttons ────────────────────────────────────
     keyboard = {
