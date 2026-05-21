@@ -18,7 +18,7 @@ from database.connection import get_db
 from database.models import (
     SessionLocal, UserIdentity, Organization, CoffeeBatch,
     RFQ, RFQOffer, RFQAcceptance, PendingRegistration, UATIssue,
-    Exporter, Buyer, UserReputation
+    Exporter, Buyer
 )
 from voice.web.auth import require_admin, require_admin_flexible, create_jwt_token
 from pydantic import BaseModel
@@ -308,8 +308,8 @@ async def approve_registration(
                 
                 # Generate DID for organization
                 logger.info(f"Generating DID for organization: {registration.organization_name}")
-                from ssi.did.did_key import generate_did_key
-                org_identity = generate_did_key()
+                from ssi.org_identity import generate_organization_did
+                org_identity = generate_organization_did()
                 
                 new_org = Organization(
                     name=registration.organization_name,
