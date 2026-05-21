@@ -454,7 +454,30 @@ def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> 
             "Please specify where you're shipping to. "
             "Example: 'Ship to Addis warehouse'"
         )
-    
+
+    # ──── ROLE-BASED ACCESS CONTROL ────
+    if user_id:
+        from database.models import UserIdentity
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        
+        if not user:
+            raise VoiceCommandError(
+                "User not found. Please register first."
+            )
+        
+        if not user.is_approved:
+            raise VoiceCommandError(
+                "Your account is pending approval. "
+                "Contact an administrator to enable shipment recording."
+            )
+        
+        # Only COOPERATIVE_MANAGER and EXPORTER can record shipments
+        if user.role not in ["COOPERATIVE_MANAGER", "EXPORTER"]:
+            raise VoiceCommandError(
+                f"Only cooperative managers and exporters can record shipments. "
+                f"Your role: {user.role.replace('_', ' ').title()}. "
+                f"Contact your cooperative manager for assistance."
+            )
     # Try to find the batch
     batch = None
     batch_id = entities.get("batch_id")
@@ -488,6 +511,15 @@ def handle_record_shipment(db: Session, entities: dict, user_id: int = None) -> 
                 "No recent batch found to ship. Please create a batch first with: "
                 "'Record 50 bags from my farm', then ship it."
             )
+        # ──── 3. VERIFY BATCH STATUS IS VERIFIED ────
+    if batch.status != "VERIFIED":
+        status_display = batch.status.replace("_", " ").title()
+        raise VoiceCommandError(
+            f"Batch '{batch.batch_id}' is in {status_display} status. "
+            f"Only VERIFIED batches can be shipped. "
+            f"Current status: {batch.status}\n"
+            f"Request verification from your cooperative manager."
+        )
     
     # Get quantity from entities or use batch quantity
     quantity_kg = entities.get("quantity")
