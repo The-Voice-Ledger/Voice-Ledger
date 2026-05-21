@@ -240,6 +240,17 @@ def handle_record_commission(db: Session, entities: dict, user_id: int = None, u
     """
     # 1. Resolve Farmer Identity first for smart defaults
     from database.models import FarmerIdentity, UserIdentity
+    if user_id:
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            raise VoiceCommandError("User not found. Please register first.")
+        
+        # Only farmers can record commissions
+        if user.role != "FARMER":
+            raise VoiceCommandError(
+                f"Only farmers can create coffee batches. "
+                f"Your role: {user.role.replace('_', ' ').title()}. "
+            )
     farmer = None
     if user_did:
         farmer = db.query(FarmerIdentity).filter_by(did=user_did).first()
