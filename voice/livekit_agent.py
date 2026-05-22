@@ -503,14 +503,22 @@ async def query_batches(
 ) -> str:
     """Query batches and push a visual card with results."""
     from services.batch_service import query_batches as svc_query_batches
+    from database.models import UserIdentity
 
     with _get_db() as db:
+        # Get the actual user ID from UserIdentity (same as Telegram does)
+        user_identity = None
+        uid = _uid(ctx)
+        if uid:
+            user_identity = db.query(UserIdentity).filter(
+                UserIdentity.telegram_user_id == str(uid)
+            ).first()
         # For general batch queries (no specific batch_id), show all batches
         # For specific batch lookups, apply user filter
         show_all = batch_id is None
         result = svc_query_batches(
             db, batch_id=batch_id, status=status,
-            origin=origin, user_id=_uid(ctx), limit=limit, show_all=show_all,
+            origin=origin, user_id=user_identity.id if user_identity else None, limit=limit, show_all=show_all,
         )
 
     if result["single"] and result["found"]:
