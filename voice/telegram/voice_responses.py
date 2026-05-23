@@ -28,6 +28,9 @@ def escape_markdown(text):
     - Square brackets ([)
     - Backticks (`)
     
+    This function also handles mixed languages (Urdu/Arabic + English) that
+    can cause parsing errors when combined with Markdown formatting.
+    
     Args:
         text: Input string to escape
         
@@ -37,14 +40,22 @@ def escape_markdown(text):
     if not text:
         return text
     
-    # We only escape these for the standard 'Markdown' mode
-    # For MarkdownV2, a much larger set of characters must be escaped.
-    # Note: Underscores are the main culprit for "Can't parse entities"
-    special_chars = ['_', '*', '[', '`']
-    
     text = str(text)
-    for char in special_chars:
-        text = text.replace(char, f'\\{char}')
+    
+    # Escape characters that break Telegram's Markdown parser
+    # Order matters: escape backslashes first
+    replacements = [
+        ('\\', '\\\\'),  # Backslashes must be escaped first
+        ('_', '\\_'),    # Underscores (main culprit)
+        ('*', '\\*'),    # Asterisks
+        ('[', '\\['),    # Opening square bracket
+        ('`', '\\`'),    # Backticks
+        (']', '\\]'),    # Closing square bracket
+    ]
+    
+    for old, new in replacements:
+        text = text.replace(old, new)
+    
     return text
 
 
@@ -515,9 +526,14 @@ async def send_voice_reply(
             telegram_reply_markup = reply_markup
     
     # 1. Send text immediately (low latency)
+    # Apply Markdown escaping if using Markdown parse_mode to prevent parse errors
+    message_to_send = message
+    if parse_mode == 'Markdown':
+        message_to_send = escape_markdown(message)
+    
     text_message = await bot.send_message(
         chat_id=chat_id,
-        text=message,
+        text=message_to_send,
         reply_markup=telegram_reply_markup,
         parse_mode=parse_mode,
         reply_to_message_id=reply_to_message_id
