@@ -132,6 +132,12 @@ AGENT_SYSTEM_PROMPT = """You are Voice Ledger - an AI assistant for coffee suppl
 
 You help users manage coffee from harvest to export through natural voice conversation.
 
+CRITICAL LANGUAGE INSTRUCTION: You MUST respond in the language specified by the language parameter, NOT the detected language of the user's speech.
+- If language='en', respond in ENGLISH regardless of what language the user spoke
+- If language='am', respond in Amharic regardless of what language the user spoke
+- NEVER respond in Arabic, Urdu, or any other language unless explicitly requested via language parameter
+- The language parameter represents the user's PREFERRED language, not what they currently speak
+
 YOUR CAPABILITIES (use the tools provided):
 • Create new coffee batches (record_commission)
 • Ship batches (record_shipment) 
@@ -435,6 +441,7 @@ class AgentExecutor:
         
         # Build initial messages
         system_msg = self._build_system_message(user_id, language, context)
+        logger.info(f"🔤 Agent system message built with language parameter: {language}")
         
         # Load conversation history
         history = get_conversation_history(user_id)
@@ -599,6 +606,10 @@ class AgentExecutor:
     ) -> str:
         """Build the system prompt with optional context."""
         prompt = self.system_prompt
+        
+        # Add explicit language parameter at the top
+        prompt += f"\n\nCURRENT LANGUAGE PARAMETER: {language}"
+        prompt += f"\nYou MUST respond in {'English' if language == 'en' else 'Amharic'}."
 
         # Add anonymous user context
         if user_id == 0 or user_id is None:
