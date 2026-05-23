@@ -47,7 +47,6 @@ def escape_markdown(text):
     replacements = [
         ('\\', '\\\\'),  # Backslashes must be escaped first
         ('_', '\\_'),    # Underscores (main culprit)
-        ('*', '\\*'),    # Asterisks
         ('[', '\\['),    # Opening square bracket
         ('`', '\\`'),    # Backticks
         (']', '\\]'),    # Closing square bracket
