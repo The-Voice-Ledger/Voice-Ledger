@@ -97,9 +97,30 @@ export default function LiveVoicePanel({ isOpen, onClose }) {
    ================================================================ */
 
 function VoicePanelOverlay({ session, onClose, userName }) {
-  const { state: agentState, audioTrack, agentTranscriptions } = useVoiceAssistant()
+  const { state: agentState, audioTrack } = useVoiceAssistant()
   useAgent() // keep the agent connection alive
-  const transcriptions = agentTranscriptions || []
+  
+  // Get all transcriptions (both user and agent) from the lk.transcription stream
+  const { textStreams: transcriptionStreams } = useTextStream('lk.transcription')
+  
+  // Process transcription streams to extract user vs agent transcriptions
+  const transcriptions = useMemo(() => {
+    if (!transcriptionStreams || transcriptionStreams.length === 0) return []
+    
+    // Map each transcription stream to a transcript object with isUser flag
+    return transcriptionStreams.map((stream, idx) => {
+      // Extract participant identity to determine if it's a user
+      const participantIdentity = stream?.participantInfo?.identity || 'unknown'
+      const isUser = participantIdentity.includes('user') || !participantIdentity.includes('agent')
+      
+      return {
+        id: stream?.streamInfo?.id || `seg-${idx}`,
+        text: stream?.text || '',
+        isUser: isUser,
+        participantIdentity: participantIdentity,
+      }
+    })
+  }, [transcriptionStreams])
 
   const { textStreams: actionStreams } = useTextStream('vl.action')
 
@@ -462,8 +483,14 @@ function VoicePanelOverlay({ session, onClose, userName }) {
                   }}
                 >
                   {transcriptions.map((seg, i) => (
-                    <p key={seg.id || i} className="text-xs leading-relaxed text-emerald-300/60">
-                      <span className="font-mono text-[9px] text-white/15 mr-1.5">AI</span>
+                    <p key={seg.id || i} className={`text-xs leading-relaxed ${
+                      seg.isUser ? 'text-cyan-300/60' : 'text-emerald-300/60'
+                    }`}>
+                      <span className={`font-mono text-[9px] mr-1.5 ${
+                        seg.isUser ? 'text-cyan-400/50' : 'text-white/15'
+                      }`}>
+                        {seg.isUser ? 'YOU' : 'AI'}
+                      </span>
                       {seg.text}
                     </p>
                   ))}
