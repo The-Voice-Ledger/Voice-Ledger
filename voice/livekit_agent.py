@@ -1156,6 +1156,14 @@ QUERIES & KNOWLEDGE
 • Look up batches by ID, status, or origin (query_batches)
 • Search docs, guides, EUDR/EPCIS standards (search_knowledge)
 
+IMPORTANT: When users provide batch IDs via voice, automatically normalize them:
+- Convert all letters to uppercase (format: ORIGIN_PRODUCT_TIMESTAMP)
+- Remove all spaces (batch IDs are continuous with only underscores)
+- Fix common speech-to-text errors (extra underscores between letters, missing underscores)
+- Handle spoken number formats (e.g., "twenty twenty six zero five nineteen" → "20260519")
+- Handle timestamp patterns (e.g., "fifteen twenty one fifty eight" → "152158")
+- Expected format examples: JIMMA_GEDEO_20260521_210212, SIDAMA_YIRGACHA_FIT_20260519_153712
+
 MARKETPLACE
 • Create a Request for Quote / RFQ (create_rfq) — buyers only
 • Browse active RFQs (browse_rfqs)
