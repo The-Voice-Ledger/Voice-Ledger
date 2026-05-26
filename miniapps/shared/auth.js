@@ -18,7 +18,7 @@ async function checkUserRole(accessType) {
         alert('Your account is pending approval. Please wait for admin approval before accessing marketplace.');
         return false;
       }
-      if (!['BUYER', 'COOPERATIVE_MANAGER'].includes(profile.role)) {
+      if (profile.role !== 'BUYER' && profile.role !== 'COOPERATIVE_MANAGER') {
         alert('Marketplace access requires BUYER or COOPERATIVE_MANAGER role. Your current role: ' + (profile.role || 'Unknown'));
         return false;
       }
