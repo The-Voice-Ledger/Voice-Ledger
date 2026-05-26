@@ -6,6 +6,7 @@
   <title>Voice Ledger &ndash; Marketplace</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="/miniapps/shared/theme.css">
+  <script src="/miniapps/shared/auth.js"></script>
   <style>
     body{padding:0 0 80px;background:var(--bg)}
     .page-header{
@@ -149,6 +150,15 @@
     const user = tg.initDataUnsafe.user;
     if (user && user.language_code === 'am' && !localStorage.getItem('vl_lang')) vlI18n.setLang('am');
 
+    // Role-based access check
+    (async () => {
+      const hasAccess = await checkUserRole('marketplace');
+      if (!hasAccess) {
+        window.location.href = '/miniapps/index.html';
+        return;
+      }
+    })();
+
     const headers = { 'X-Telegram-User-Id': String(user?.id || 0) };
     let allRfqs = [], myContainers = [], myOffers = [];
     let activeTab = 'rfqs';
@@ -231,10 +241,10 @@
           '<div class="container-detail">' + vlI18n.t('market_sold') + ': <strong>' + fmt(c.sold_quantity_kg||0) + ' kg</strong></div>' +
           '<div class="container-detail">' + vlI18n.t('market_available_qty') + ': <strong>' + fmt(c.available_quantity_kg) + ' kg</strong></div>' +
           '</div>' +
-          '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + pct + '%</span></div>' +
+          '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + Math.round(pct) + '%</span></div>' +
           '<div class="fill-bar"><div class="fill-bar-inner ' + barCls + '" style="width:' + Math.min(pct,100) + '%"></div></div></div>' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">' +
-          '<span class="buyers-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> ' +
+          '<span class="buyers-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
           (c.buyer_count||0) + ' ' + vlI18n.t('market_buyers') + '</span>' +
           (c.pool_count ? '<span class="buyers-badge">' + c.pool_count + ' ' + vlI18n.t('market_pools') + '</span>' : '') +
           '</div>' +
@@ -305,7 +315,7 @@
 
       /* Fill progress section */
       html += '<div class="detail-section"><h3>' + vlI18n.t('market_fill_progress') + '</h3>';
-      html += '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + pct + '%</span></div>';
+      html += '<div class="fill-bar-wrap"><div class="fill-bar-header"><span>' + fmt(c.total_quantity_kg - c.available_quantity_kg) + ' / ' + fmt(c.total_quantity_kg) + ' kg</span><span class="pct">' + Math.round(pct) + '%</span></div>';
       html += '<div class="fill-bar"><div class="fill-bar-inner ' + barCls + '" style="width:' + Math.min(pct,100) + '%"></div></div></div>';
       html += '<div style="margin-top:12px">';
       html += infoRow(vlI18n.t('market_buyers'), (c.buyer_count||0) + '');
