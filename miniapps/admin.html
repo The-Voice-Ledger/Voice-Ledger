@@ -6,6 +6,7 @@
   <title>Voice Ledger &ndash; Admin</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="/miniapps/shared/theme.css">
+  <script src="/miniapps/shared/auth.js"></script>
   <style>
     body{padding:0 0 80px;background:var(--bg)}
     .page-header{padding:20px 16px 14px;background:white;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
@@ -19,7 +20,7 @@
     .seg-tab.active{background:var(--stone-800);color:white;border-color:var(--stone-800)}
     .admin-table{padding:0 16px}
     .table-row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:white;border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:8px}
-    .table-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--stone-200);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--stone-600)}
+    .table-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;background:var(--stone-200);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--stone-700)}
     .table-info{flex:1;min-width:0}
     .table-name{font-size:13px;font-weight:600;color:var(--stone-800);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .table-sub{font-size:11px;color:var(--stone-400)}
@@ -63,6 +64,15 @@
     tg.BackButton.onClick(() => { window.location.href = '/miniapps/index.html'; });
     const user = tg.initDataUnsafe.user;
     if (user && user.language_code === 'am' && !localStorage.getItem('vl_lang')) vlI18n.setLang('am');
+
+    // Role-based access check
+    (async () => {
+      const hasAccess = await checkUserRole('admin');
+      if (!hasAccess) {
+        window.location.href = '/miniapps/index.html';
+        return;
+      }
+    })();
 
     let allUsers = [];
     let allBatches = [];
