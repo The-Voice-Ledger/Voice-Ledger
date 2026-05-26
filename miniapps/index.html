@@ -75,12 +75,12 @@
   </div>
 
   <div class="menu-grid">
-    <div class="menu-card" onclick="navigateTo('/miniapps/batch_browser.html')">
+    <div class="menu-card" onclick="checkFarmerAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
       <div class="menu-title" data-i18n="menu_batches">My Batches</div>
       <div class="menu-desc" data-i18n="menu_batches_desc">View and manage coffee batches</div>
     </div>
-    <div class="menu-card" onclick="navigateTo('/miniapps/marketplace.html')">
+    <div class="menu-card" onclick="checkMarketplaceAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
       <div class="menu-title" data-i18n="menu_market">Marketplace</div>
       <div class="menu-desc" data-i18n="menu_market_desc">Browse and respond to RFQs</div>
@@ -100,7 +100,7 @@
       <div class="menu-title" data-i18n="menu_profile">Profile</div>
       <div class="menu-desc" data-i18n="menu_profile_desc">Your account and credentials</div>
     </div>
-    <div class="menu-card" onclick="navigateTo('/miniapps/admin.html')">
+    <div class="menu-card" onclick="checkAdminAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3M4.22 19.78l2.12-2.12m11.32-11.32l2.12-2.12"/></svg></div>
       <div class="menu-title" data-i18n="menu_admin">Admin</div>
       <div class="menu-desc" data-i18n="menu_admin_desc">System administration</div>
@@ -136,6 +136,21 @@
     } else {
       document.getElementById('userName').textContent = 'Voice Ledger User';
       document.getElementById('userAvatar').textContent = 'V';
+    }
+
+    async function checkFarmerAccess() {
+      const hasAccess = await checkUserRole('farmer');
+      if (hasAccess) navigateTo('/miniapps/batch_browser.html');
+    }
+    
+    async function checkMarketplaceAccess() {
+      const hasAccess = await checkUserRole('marketplace');
+      if (hasAccess) navigateTo('/miniapps/marketplace.html');
+    }
+    
+    async function checkAdminAccess() {
+      const hasAccess = await checkUserRole('admin');
+      if (hasAccess) navigateTo('/miniapps/admin.html');
     }
 
     function navigateTo(path) { window.location.href = path; }
