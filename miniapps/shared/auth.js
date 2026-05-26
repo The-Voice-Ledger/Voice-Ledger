@@ -26,10 +26,6 @@ async function checkUserRole(accessType) {
     }
     
     if (accessType === 'farmer') {
-      if (!profile.is_approved) {
-        alert('Your account is pending approval. Please wait for admin approval before accessing batch management.');
-        return false;
-      }
       if (profile.role !== 'FARMER') {
         alert('Batch Browser access requires FARMER role. Your current role: ' + (profile.role || 'Unknown'));
         return false;
