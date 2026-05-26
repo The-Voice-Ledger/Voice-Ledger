@@ -77,7 +77,7 @@
       try {
         let profile;
         const res = await fetch('/api/users/me/profile', {
-          headers: { 'X-Telegram-User-Id': user?.id || 0, 'Content-Type': 'application/json' }
+          headers: { 'X-Telegram-User-Id': String(user?.id || 0) }
         });
         if (res.ok) {
           profile = await res.json();
@@ -87,8 +87,7 @@
         }
         renderProfile(profile);
       } catch (e) {
-        console.error('Profile load error:', e);
-        renderProfile(buildFallback());
+                renderProfile(buildFallback());
       }
     }
 
