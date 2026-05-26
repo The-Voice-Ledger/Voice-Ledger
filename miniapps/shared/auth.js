@@ -7,7 +7,11 @@ async function checkUserRole(accessType) {
     const res = await fetch('/api/users/me/profile', {
       headers: { 'X-Telegram-User-Id': String(user.id) }
     });
-    const profile = res.ok ? await res.json() : { role: 'FARMER', is_approved: false };
+    if (!res.ok) {
+    console.error('Profile API failed:', res.status);
+    return false;
+  }
+  const profile = await res.json();
     
     if (accessType === 'marketplace') {
       if (!profile.is_approved) {
