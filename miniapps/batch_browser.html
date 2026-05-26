@@ -88,8 +88,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2=[...]
       <input type="text" id="searchInput" placeholder="Search batches...">
     </div>
-    <button class="filter-btn" id="filterToggle">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2=[...]
+    <button class="filter-btn" id="filterToggle" aria-label="Filter batches">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2=[...]
       <span data-i18n="batch_all">Filter</span>
     </button>
   </div>
@@ -104,7 +104,7 @@
   <div class="batch-list" id="batchList"><div class="loading-state" data-i18n="loading">Loading...</div></div>
   <div class="detail-overlay" id="detailOverlay">
     <div class="detail-header">
-      <div class="back-btn" id="detailBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12[...]
+      <button class="back-btn" id="detailBack" aria-label="Go back to batch list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12[...]</svg></button>
       <h2 id="detailTitle">Batch Details</h2>
     </div>
     <div class="detail-body" id="detailBody"></div>
@@ -203,7 +203,7 @@
         if (b.events && b.events.length) {
           html += '<div class="detail-section"><h3>' + vlI18n.t('batch_timeline') + '</h3>';
           b.events.forEach(ev => {
-            html += '<div style="padding:8px 0;border-bottom:1px solid var(--stone-100)"><div style="font-weight:600;font-size:13px;color:var(--stone-800)">' + (ev.event_type||ev.type||'') + '</d[...]
+            html += '<div style="padding:8px 0;border-bottom:1px solid var(--stone-100)"><div style="font-weight:600;font-size:13px;color:var(--stone-800)">' + (ev.event_type||ev.type||'') + '</div></div>';
           });
           html += '</div>';
         }
