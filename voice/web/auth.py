@@ -166,8 +166,9 @@ def get_user_from_telegram(
         ).first()
         
         if user:
-            # Expunge user + loaded relationships so they're accessible outside session
-            db.expunge(user)
+            # Expunge ALL objects from session so relationships are accessible outside session
+            db.expunge_all()
+            return user
         return user
 
 
