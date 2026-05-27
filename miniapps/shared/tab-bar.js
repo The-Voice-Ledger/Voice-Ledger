@@ -18,8 +18,13 @@ window.vlTabBar = async function (activePage) {
 
   const profile = typeof getProfile === 'function' ? await getProfile() : null;
   const role = profile ? profile.role : null;
+  console.log('TabBar: Profile loaded:', profile, 'Role:', role);
 
-  const visibleTabs = tabs.filter(tab => !tab.roles || (role && tab.roles.includes(role)));
+  const visibleTabs = tabs.filter(tab => {
+    const isVisible = !tab.roles || (role && tab.roles.includes(role));
+    console.log(`TabBar: ${tab.key} - roles: ${tab.roles}, visible: ${isVisible}`);
+    return isVisible;
+  });
 
   const nav = document.createElement('nav');
   nav.className = 'vl-tab-bar';
