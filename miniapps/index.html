@@ -75,12 +75,12 @@
   </div>
 
   <div class="menu-grid">
-    <div class="menu-card" onclick="checkFarmerAccess()">
+    <div class="menu-card" id="card-batches" onclick="checkFarmerAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
       <div class="menu-title" data-i18n="menu_batches">My Batches</div>
       <div class="menu-desc" data-i18n="menu_batches_desc">View and manage coffee batches</div>
     </div>
-    <div class="menu-card" onclick="checkMarketplaceAccess()">
+    <div class="menu-card" id="card-market" onclick="checkMarketplaceAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
       <div class="menu-title" data-i18n="menu_market">Marketplace</div>
       <div class="menu-desc" data-i18n="menu_market_desc">Browse and respond to RFQs</div>
@@ -100,7 +100,7 @@
       <div class="menu-title" data-i18n="menu_profile">Profile</div>
       <div class="menu-desc" data-i18n="menu_profile_desc">Your account and credentials</div>
     </div>
-    <div class="menu-card" onclick="checkAdminAccess()">
+    <div class="menu-card" id="card-admin" onclick="checkAdminAccess()">
       <div class="menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3m0 16v3M4.22 4.22l2.12 2.12m11.32 11.32l2.12 2.12M1 12h3m16 0h3M4.22 19.78l2.12-2.12m11.32-11.32l2.12-2.12"/></svg></div>
       <div class="menu-title" data-i18n="menu_admin">Admin</div>
       <div class="menu-desc" data-i18n="menu_admin_desc">System administration</div>
@@ -155,6 +155,16 @@
     }
 
     function navigateTo(path) { window.location.href = path; }
+    async function initCards() {
+      const profile = await getProfile();
+      const role = profile ? profile.role : null;
+      if (profile) document.getElementById('userRole').textContent = role || 'Unknown Role';
+      if (role !== 'FARMER' && role !== 'ADMIN') document.getElementById('card-batches').style.display = 'none';
+      if (role !== 'BUYER' && role !== 'COOPERATIVE_MANAGER' && role !== 'ADMIN') document.getElementById('card-market').style.display = 'none';
+      if (role !== 'ADMIN') document.getElementById('card-admin').style.display = 'none';
+    }
+
+    initCards();
     vlTabBar('home');
   </script>
 </body>

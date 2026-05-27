@@ -1,18 +1,27 @@
 // Simple role-based access check for mini apps
-async function checkUserRole(accessType) {
+
+async function getProfile() {
+  if (window._vlProfile) return window._vlProfile;
   const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
-  if (!user) return false;
-  
+  if (!user) return null;
   try {
     const res = await fetch('/api/users/me/profile', {
       headers: { 'X-Telegram-User-Id': String(user.id) }
     });
-    if (!res.ok) {
-    console.error('Profile API failed:', res.status);
-    return false;
+    if (!res.ok) { console.error('Profile API failed:', res.status); return null; }
+    window._vlProfile = await res.json();
+    return window._vlProfile;
+  } catch (e) {
+    console.error('Profile fetch error:', e);
+    return null;
   }
-  const profile = await res.json();
-    
+}
+
+async function checkUserRole(accessType) {
+  const profile = await getProfile();
+  if (!profile) return false;
+  
+  try {
     if (accessType === 'marketplace') {
       if (!profile.is_approved) {
         alert('Your account is pending approval. Please wait for admin approval before accessing marketplace.');
