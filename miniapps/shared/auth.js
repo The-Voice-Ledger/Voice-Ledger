@@ -7,46 +7,23 @@ async function getProfile() {
   // Check in-memory cache first
   if (window._vlProfile) return window._vlProfile;
 
-  // Check Telegram Storage or localStorage cache
-  let cached = null;
-  if (window.Telegram?.WebApp?.DeviceStorage) {
-    // Use Telegram native DeviceStorage if available
-    try {
-      cached = await window.Telegram.WebApp.DeviceStorage.getItem(PROFILE_CACHE_KEY);
-      console.log('Using Telegram DeviceStorage');
-    } catch (e) {
-      console.error('Telegram DeviceStorage error, falling back to localStorage:', e);
-      cached = localStorage.getItem(PROFILE_CACHE_KEY);
-    }
-  } else {
-    // Fallback to localStorage
-    cached = localStorage.getItem(PROFILE_CACHE_KEY);
-    console.log('Using localStorage');
-  }
-
+  // Check localStorage cache
+  const cached = localStorage.getItem(PROFILE_CACHE_KEY);
   if (cached) {
     try {
       const { profile, timestamp } = JSON.parse(cached);
       const now = Date.now();
       if (now - timestamp < PROFILE_CACHE_TTL) {
-        console.log('Using cached profile');
+        console.log('Using cached profile from localStorage');
         window._vlProfile = profile;
         return profile;
       } else {
         console.log('Profile cache expired, fetching fresh');
-        if (window.Telegram?.WebApp?.DeviceStorage) {
-          await window.Telegram.WebApp.DeviceStorage.removeItem(PROFILE_CACHE_KEY);
-        } else {
-          localStorage.removeItem(PROFILE_CACHE_KEY);
-        }
+        localStorage.removeItem(PROFILE_CACHE_KEY);
       }
     } catch (e) {
       console.error('Error parsing cached profile:', e);
-      if (window.Telegram?.WebApp?.DeviceStorage) {
-        await window.Telegram.WebApp.DeviceStorage.removeItem(PROFILE_CACHE_KEY);
-      } else {
-        localStorage.removeItem(PROFILE_CACHE_KEY);
-      }
+      localStorage.removeItem(PROFILE_CACHE_KEY);
     }
   }
 
@@ -61,17 +38,11 @@ async function getProfile() {
     const profile = await res.json();
     window._vlProfile = profile;
 
-    // Cache in Telegram Storage or localStorage
-    const cacheData = JSON.stringify({
+    // Cache in localStorage
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({
       profile,
       timestamp: Date.now()
-    });
-
-    if (window.Telegram?.WebApp?.DeviceStorage) {
-      await window.Telegram.WebApp.DeviceStorage.setItem(PROFILE_CACHE_KEY, cacheData);
-    } else {
-      localStorage.setItem(PROFILE_CACHE_KEY, cacheData);
-    }
+    }));
 
     return profile;
   } catch (e) {
@@ -80,13 +51,9 @@ async function getProfile() {
   }
 }
 
-async function clearProfileCache() {
+function clearProfileCache() {
   window._vlProfile = null;
-  if (window.Telegram?.WebApp?.DeviceStorage) {
-    await window.Telegram.WebApp.DeviceStorage.removeItem(PROFILE_CACHE_KEY);
-  } else {
-    localStorage.removeItem(PROFILE_CACHE_KEY);
-  }
+  localStorage.removeItem(PROFILE_CACHE_KEY);
 }
 
 async function checkUserRole(accessType) {
