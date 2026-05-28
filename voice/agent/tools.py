@@ -991,6 +991,66 @@ BROWSE_CONTAINERS = {
 
 
 # ---------------------------------------------------------------------------
+# Tool: create_container_offering  (WRITE - cooperative lists a container)
+# ---------------------------------------------------------------------------
+CREATE_CONTAINER_OFFERING = {
+    "type": "function",
+    "function": {
+        "name": "create_container_offering",
+        "description": (
+            "Create a container offering for fractional sale on the marketplace. "
+            "Only COOPERATIVE_MANAGER or ADMIN role users can list containers. "
+            "Use when cooperative manager says 'list container', 'create offering', "
+            "'sell container', 'put container for sale'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_sscc": {
+                    "type": "string",
+                    "description": "18-digit SSCC (Serial Shipping Container Code)",
+                },
+                "total_quantity_kg": {
+                    "type": "number",
+                    "description": "Total container quantity in kilograms",
+                },
+                "price_per_kg": {
+                    "type": "number",
+                    "description": "Price per kilogram in USD",
+                },
+                "variety": {
+                    "type": "string",
+                    "description": "Coffee variety (e.g., Arabica, Robusta)",
+                },
+                "processing_method": {
+                    "type": "string",
+                    "description": "Processing method (e.g., Washed, Natural)",
+                },
+                "grade": {
+                    "type": "string",
+                    "description": "Quality grade",
+                },
+                "delivery_location": {
+                    "type": "string",
+                    "description": "Delivery location",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Description of the container offering",
+                },
+                "expires_days": {
+                    "type": "integer",
+                    "description": "Days until offer expires (default 90)",
+                    "default": 90,
+                },
+            },
+            "required": ["container_sscc", "total_quantity_kg", "price_per_kg"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Tool: purchase_container  (WRITE - buyer buys a portion of a container)
 # ---------------------------------------------------------------------------
 PURCHASE_CONTAINER = {
@@ -1515,6 +1575,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     LIST_MY_OFFERS,
     # Container marketplace (Agent #3b)
     BROWSE_CONTAINERS,
+    CREATE_CONTAINER_OFFERING,
     PURCHASE_CONTAINER,
     # Container pools - shared buying (Agent #3c)
     BROWSE_POOLS,

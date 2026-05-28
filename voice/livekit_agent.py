@@ -659,6 +659,35 @@ async def browse_containers(
 
 
 @function_tool(description=(
+    "Create a container offering for fractional sale on the marketplace. "
+    "Cooperative managers can list full shipping containers for buyers to purchase portions of."
+))
+async def create_container_offering(
+    ctx: RunContext,
+    container_sscc: Annotated[str, "18-digit SSCC (Serial Shipping Container Code)"],
+    total_quantity_kg: Annotated[float, "Total container quantity in kilograms"],
+    price_per_kg: Annotated[float, "Price per kilogram in USD"],
+    variety: Annotated[str | None, "Coffee variety (e.g., Arabica, Robusta)"] = None,
+    processing_method: Annotated[str | None, "Processing method (e.g., Washed, Natural)"] = None,
+    grade: Annotated[str | None, "Quality grade"] = None,
+    delivery_location: Annotated[str | None, "Delivery location"] = None,
+    description: Annotated[str | None, "Description of the container offering"] = None,
+    expires_days: Annotated[int, "Days until offer expires (default 90)"] = 90,
+) -> str:
+    return await _exec(ctx, "create_container_offering", {
+        "container_sscc": container_sscc,
+        "total_quantity_kg": total_quantity_kg,
+        "price_per_kg": price_per_kg,
+        "variety": variety,
+        "processing_method": processing_method,
+        "grade": grade,
+        "delivery_location": delivery_location,
+        "description": description,
+        "expires_days": expires_days,
+    })
+
+
+@function_tool(description=(
     "Purchase a partial quantity from a container offering. Buyers only."
 ))
 async def purchase_container(
@@ -1173,6 +1202,7 @@ MARKETPLACE
 
 CONTAINER MARKETPLACE & POOLS
 • Browse container offerings (browse_containers)
+• Create a container offering (create_container_offering) — cooperative managers only
 • Purchase from a container (purchase_container)
 • Browse shared-buying pools (browse_pools)
 • Commit to a pool (commit_to_pool)
@@ -1257,7 +1287,7 @@ ALL_TOOLS = [
     # Marketplace (mixed)
     create_rfq, browse_rfqs, submit_offer, accept_offer, list_my_offers,
     # Containers & pools (mixed)
-    browse_containers, purchase_container,
+    browse_containers, create_container_offering, purchase_container,
     browse_pools, commit_to_pool, list_my_commitments,
     # Compliance (read)
     check_eudr_compliance, check_mass_balance,

@@ -52,6 +52,7 @@ class ToolRegistry:
 
         # Container marketplace tools (Agent #3b)
         self._tools["browse_containers"] = self._browse_containers
+        self._tools["create_container_offering"] = self._create_container_offering
         self._tools["purchase_container"] = self._purchase_container
 
         # Container pool tools - shared buying (Agent #3c)
@@ -172,6 +173,167 @@ class ToolRegistry:
 
         msg = f"Found {len(container_list)} available container(s)."
         return (msg, {"containers": container_list, "count": len(container_list)})
+
+    def _create_container_offering(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Create a container offering for fractional sale."""
+        from database.models import (
+            ContainerOffering, UserIdentity, Organization
+        )
+        from datetime import datetime, timedelta
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found. Please register first.", {"error": "user_not_found"})
+        if user.role not in ("COOPERATIVE_MANAGER", "ADMIN"):
+            return (
+                f"Only cooperative managers can list containers. Your role is {user.role}.",
+                {"error": "role_not_authorized"},
+            )
+
+        if not user.organization_id:
+            return ("User not associated with an organization.", {"error": "no_organization"})
+
+        # Required fields
+        container_sscc = args.get("container_sscc")
+        total_quantity_kg = args.get("total_quantity_kg")
+        price_per_kg = args.get("price_per_kg")
+
+        if not container_sscc or not total_quantity_kg or not price_per_kg:
+            return (
+                "Please provide container_sscc (18 digits), total_quantity_kg, and price_per_kg.",
+                {"error": "missing_fields"},
+            )
+
+        # Validate SSCC length
+        if len(str(container_sscc)) != 18:
+            return (
+                "Container SSCC must be exactly 18 digits.",
+                {"error": "invalid_sscc"},
+            )
+
+        # Check if container already listed
+        existing = db.query(ContainerOffering).filter_by(
+            container_sscc=str(container_sscc),
+            status='AVAILABLE'
+        ).first()
+
+        if existing:
+            return (
+                f"Container {container_sscc} is already listed.",
+                {"error": "already_listed"},
+            )
+
+        # Set expiration date (default 90 days)
+        expires_days = args.get("expires_days", 90)
+        expires_at = datetime.utcnow() + timedelta(days=expires_days)
+
+        # Fetch batch details from aggregation if variety/processing/grade not provided
+        variety = args.get("variety")
+        processing_method = args.get("processing_method")
+        grade = args.get("grade")
+
+        if not variety or not processing_method or not grade:
+            from database.models import AggregationRelationship, CoffeeBatch
+            agg_rels = db.query(AggregationRelationship).filter_by(
+                parent_sscc=str(container_sscc)
+            ).all()
+
+            if agg_rels:
+                batch = db.query(CoffeeBatch).filter_by(
+                    batch_id=agg_rels[0].child_identifier
+                ).first()
+                if batch:
+                    if not variety:
+                        variety = batch.variety
+                    if not processing_method:
+                        processing_method = batch.processing_method
+                    if not grade:
+                        grade = batch.quality_grade
+
+        # Validate required fields - ask user if missing
+        missing_fields = []
+        if not variety:
+            missing_fields.append("coffee variety")
+        if not processing_method:
+            missing_fields.append("processing method")
+        if not grade:
+            missing_fields.append("quality grade")
+        if not args.get("delivery_location"):
+            missing_fields.append("delivery location")
+        if not args.get("description"):
+            missing_fields.append("description")
+
+        if missing_fields:
+            return (
+                f"To create the container offering, please provide: {', '.join(missing_fields)}.",
+                None
+            )
+
+        # Build offering params
+        offering_params = {
+            "container_sscc": str(container_sscc),
+            "aggregation_id": args.get("aggregation_id"),
+            "cooperative_id": user.organization_id,
+            "total_quantity_kg": float(total_quantity_kg),
+            "available_quantity_kg": float(total_quantity_kg),
+            "reserved_quantity_kg": 0,
+            "price_per_kg": float(price_per_kg),
+            "currency": 'USD',
+            "status": 'AVAILABLE',
+            "variety": variety,
+            "processing_method": processing_method,
+            "grade": grade,
+            "delivery_location": args.get("delivery_location"),
+            "earliest_delivery_date": args.get("earliest_delivery_date"),
+            "latest_delivery_date": args.get("latest_delivery_date"),
+            "description": args.get("description"),
+            "dpp_url": args.get("dpp_url"),
+            "expires_at": expires_at
+        }
+
+        # Only add certifications/sample_photos if they have actual values
+        if args.get("certifications") not in [None, "null", ""]:
+            offering_params["certifications"] = args.get("certifications")
+        if args.get("sample_photos") not in [None, "null", ""]:
+            offering_params["sample_photos"] = args.get("sample_photos")
+
+        # Create offering
+        container_offering = ContainerOffering(**offering_params)
+
+        db.add(container_offering)
+        db.commit()
+        db.refresh(container_offering)
+
+        # Get cooperative name for response
+        cooperative = db.query(Organization).filter_by(id=user.organization_id).first()
+
+        return (
+            f"Container offering created successfully! SSCC: {container_offering.container_sscc}, "
+            f"Quantity: {container_offering.total_quantity_kg}kg, "
+            f"Price: ${container_offering.price_per_kg}/kg, "
+            f"Total Value: ${container_offering.total_value_usd:,.2f}. "
+            f"Expires in {expires_days} days.",
+            {
+                "id": container_offering.id,
+                "container_sscc": container_offering.container_sscc,
+                "cooperative_id": container_offering.cooperative_id,
+                "cooperative_name": cooperative.name if cooperative else "Unknown",
+                "total_quantity_kg": container_offering.total_quantity_kg,
+                "available_quantity_kg": container_offering.available_quantity_kg,
+                "price_per_kg": container_offering.price_per_kg,
+                "currency": container_offering.currency,
+                "status": container_offering.status,
+                "variety": container_offering.variety,
+                "processing_method": container_offering.processing_method,
+                "grade": container_offering.grade,
+                "delivery_location": container_offering.delivery_location,
+                "expires_at": container_offering.expires_at.isoformat() if container_offering.expires_at else None,
+                "total_value_usd": container_offering.total_value_usd,
+            }
+        )
 
     def _purchase_container(
         self, db: Session, args: Dict[str, Any],
