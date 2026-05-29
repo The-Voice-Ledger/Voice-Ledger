@@ -168,7 +168,27 @@ async def handle_register_command(user_id: int, username: str, first_name: str, 
                 ),
                 'parse_mode': 'Markdown'
             }
-        
+
+        # Check if registration was REJECTED
+        rejected = db.query(PendingRegistration).filter_by(
+            telegram_user_id=user_id,
+            status='REJECTED'
+        ).order_by(PendingRegistration.created_at.desc()).first()
+
+        if rejected:
+            # Clear stale session
+            delete_session(user_id)
+            return {
+                'message': (
+                    f"❌ *Registration Rejected*\n\n"
+                    f"Application ID: `REG-{rejected.id:04d}`\n"
+                    f"Reason: {rejected.rejection_reason or 'No reason provided'}\n\n"
+                    f"You can submit a new registration if you'd like to try again.\n"
+                    f"Use /register to start over."
+                ),
+                'parse_mode': 'Markdown'
+            }
+
         # Check if user already has language preference from existing UserIdentity
         existing_lang = existing_user.preferred_language if existing_user else 'en'
         

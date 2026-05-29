@@ -2480,7 +2480,38 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             
             return {"ok": True, "message": "PIN response processed"}
-        
+
+        # Check if user has an APPROVED registration or completed UserIdentity
+        from voice.telegram.register_handler import delete_session
+        from database.models import UserIdentity, PendingRegistration
+        from database.connection import SessionLocal
+
+        db = SessionLocal()
+        try:
+            approved_user = db.query(UserIdentity).filter_by(
+                telegram_user_id=str(user_id),
+                is_approved=True
+            ).first()
+            if approved_user:
+                # User is already approved - clear any stale session
+                logger.info(f"User {user_id} is approved, clearing any stale registration session")
+                delete_session(int(user_id))
+                # Route to normal handlers, not registration
+
+            # Also check for rejected registrations
+            rejected_reg = db.query(PendingRegistration).filter_by(
+                telegram_user_id=int(user_id),
+                status='REJECTED'
+            ).order_by(PendingRegistration.created_at.desc()).first()
+
+            if rejected_reg:
+                logger.info(f"User {user_id} has rejected registration, clearing stale session")
+                delete_session(int(user_id))
+        except Exception as e:
+            logger.warning(f"Error checking registration status: {e}")
+        finally:
+            db.close()
+
         # Check if user is in registration conversation
         from voice.telegram.register_handler import conversation_states, handle_registration_text
         
