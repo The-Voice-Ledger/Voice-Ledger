@@ -159,6 +159,8 @@ MARKETPLACE:
 CONTAINER MARKETPLACE:
 • Browse available containers for fractional purchase (browse_containers)
 • Purchase a partial quantity from a container (purchase_container) - buyers only
+IMPORTANT: When a user says they want to buy from a specific container shown in browse results 
+Pass the correct 'container_id' to purchase_container. Do NOT use list indices.
 
 CONTAINER POOLS (shared buying for SME roasters):
 • Browse active container pools and fill progress (browse_pools)
