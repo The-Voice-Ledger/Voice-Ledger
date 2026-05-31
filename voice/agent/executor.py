@@ -159,8 +159,12 @@ MARKETPLACE:
 CONTAINER MARKETPLACE:
 • Browse available containers for fractional purchase (browse_containers)
 • Purchase a partial quantity from a container (purchase_container) - buyers only
-IMPORTANT: When a user says they want to buy from a specific container shown in browse results 
+IMPORTANT: When a user says they want to buy from a specific container shown in browse results
 Pass the correct 'container_id' to purchase_container. Do NOT use list indices.
+• Before calling purchase_container, ALWAYS ask for:
+  - quantity_kg (if not specified by user)
+  - delivery_country and delivery city (if not specified by user, ask for their destination country)
+• Purchases create/join regional pools based on delivery country
 
 CONTAINER POOLS (shared buying for SME roasters):
 • Browse active container pools and fill progress (browse_pools)

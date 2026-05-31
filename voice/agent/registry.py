@@ -341,9 +341,12 @@ class ToolRegistry:
     ) -> Tuple[str, Dict[str, Any]]:
         """Purchase a partial quantity from a container offering."""
         from database.models import (
-            ContainerOffering, RFQAcceptance, UserIdentity, Organization
+            ContainerOffering, ContainerPool, BuyerCommitment, RFQAcceptance,
+            UserIdentity, Organization, Buyer, REGION_PORT_MAP, POOL_AUTO_CONFIRM_PCT,
         )
-        from datetime import datetime
+        from datetime import datetime, timedelta
+
+        print(f"[DEBUG] _purchase_container called: user_id={user_id}, args={args}")
 
         user = db.query(UserIdentity).filter_by(id=user_id).first()
         if not user:
@@ -356,6 +359,8 @@ class ToolRegistry:
 
         container_id = args.get("container_id")
         quantity_kg = args.get("quantity_kg", 0)
+        print(f"[DEBUG] container_id={container_id}, quantity_kg={quantity_kg}")
+
         if not container_id or quantity_kg <= 0:
             return ("Please specify a container_id and quantity_kg.", {"error": "missing_fields"})
 
@@ -371,12 +376,57 @@ class ToolRegistry:
             )
 
         total_amount = quantity_kg * offering.price_per_kg
+        print(f"[DEBUG] Offering found: SSCC={offering.container_sscc}, available={offering.available_quantity_kg}kg, total_amount=${total_amount}")
+
+        # Resolve destination region
+        country = args.get("delivery_country")
+        print(f"[DEBUG] delivery_country from args: {country}")
+        if not country:
+            buyer_profile = db.query(Buyer).filter_by(organization_id=user.organization_id).first()
+            print(f"[DEBUG] Buyer profile found: {buyer_profile is not None}")
+            if buyer_profile and buyer_profile.country:
+                country = buyer_profile.country[:2].upper()
+                print(f"[DEBUG] Country from buyer profile: {country}")
+
+        if country and country.upper() in REGION_PORT_MAP:
+            port, region = REGION_PORT_MAP[country.upper()]
+        else:
+            port, region = "Djibouti", "International"
+        print(f"[DEBUG] Resolved region: {region}, port: {port}")
+
+        # Get or create pool
+        pool = (
+            db.query(ContainerPool)
+            .filter(
+                ContainerPool.container_offering_id == offering.id,
+                ContainerPool.destination_region == region,
+                ContainerPool.status == "FILLING",
+            )
+            .first()
+        )
+        if not pool:
+            print(f"[DEBUG] Creating new pool for offering {offering.id}, region {region}")
+            pool = ContainerPool(
+                container_offering_id=offering.id,
+                destination_region=region,
+                destination_port=port,
+                fill_target_kg=offering.available_quantity_kg,
+                filled_kg=0,
+                status="FILLING",
+                deadline=datetime.utcnow() + timedelta(days=30),
+            )
+            db.add(pool)
+            db.flush()
+        else:
+            print(f"[DEBUG] Found existing pool: id={pool.id}, filled_kg={pool.filled_kg}, fill_target={pool.fill_target_kg}")
 
         # Generate acceptance number
         last = db.query(RFQAcceptance).order_by(RFQAcceptance.id.desc()).first()
         next_num = (last.id + 1) if last else 1
         acceptance_number = f"ACC-{next_num:06d}"
+        print(f"[DEBUG] Generated acceptance number: {acceptance_number}")
 
+        # Create RFQAcceptance
         acceptance = RFQAcceptance(
             rfq_id=None,
             offer_id=None,
@@ -388,7 +438,30 @@ class ToolRegistry:
             delivery_status="PENDING",
         )
         db.add(acceptance)
+        print(f"[DEBUG] Created RFQAcceptance: id={acceptance.id}, number={acceptance_number}")
 
+        # Create BuyerCommitment linked to the pool
+        commitment = BuyerCommitment(
+            pool_id=pool.id,
+            buyer_id=user.id,
+            organization_id=user.organization_id,
+            quantity_kg=quantity_kg,
+            unit_price=offering.price_per_kg,
+            total_amount=total_amount,
+            currency=offering.currency or "USD",
+            delivery_country=country,
+            delivery_city=args.get("delivery_city"),
+            status="COMMITTED",
+        )
+        db.add(commitment)
+        print(f"[DEBUG] Created BuyerCommitment: pool_id={pool.id}, quantity_kg={quantity_kg}")
+
+        # Update pool fill
+        pool.filled_kg += quantity_kg
+        pool.updated_at = datetime.utcnow()
+        print(f"[DEBUG] Pool updated: filled_kg={pool.filled_kg}, fill_pct={pool.fill_pct}%")
+
+        # Update offering quantities
         offering.available_quantity_kg -= quantity_kg
         offering.reserved_quantity_kg += quantity_kg
         if offering.available_quantity_kg == 0:
@@ -396,25 +469,55 @@ class ToolRegistry:
         else:
             offering.status = 'PARTIALLY_SOLD'
         offering.updated_at = datetime.utcnow()
+        print(f"[DEBUG] Offering updated: available={offering.available_quantity_kg}kg, reserved={offering.reserved_quantity_kg}kg, status={offering.status}")
+
+        # Auto-confirm check (same as _commit_to_pool)
+        if pool.fill_pct >= POOL_AUTO_CONFIRM_PCT:
+            print(f"[DEBUG] Pool auto-confirm triggered: {pool.fill_pct}% >= {POOL_AUTO_CONFIRM_PCT}%")
+            pool.status = "CONFIRMED"
+            pool.confirmed_at = datetime.utcnow()
+            for c in pool.commitments:
+                if c.status == "COMMITTED":
+                    c.status = "PAYMENT_PENDING"
+                    c.updated_at = datetime.utcnow()
+        else:
+            print(f"[DEBUG] Pool not confirmed yet: {pool.fill_pct}% < {POOL_AUTO_CONFIRM_PCT}%")
 
         db.commit()
         db.refresh(acceptance)
+        db.refresh(commitment)
+        db.refresh(pool)
+        print(f"[DEBUG] Committed to database")
 
         coop = db.query(Organization).filter_by(id=offering.cooperative_id).first()
 
-        return (
+        status_msg = (
             f"Purchase confirmed! {quantity_kg}kg from container {offering.container_sscc} "
             f"at ${offering.price_per_kg}/kg (total ${total_amount:,.2f}). "
-            f"Acceptance #{acceptance_number}. Payment instructions will follow.",
+            f"Acceptance #{acceptance_number}. "
+            f"Added to {region} pool (shipping via {port}). "
+            f"Pool is now {pool.fill_pct}% full."
+        )
+        if pool.status == "CONFIRMED":
+            status_msg += " Pool confirmed for shipment! Payment instructions will follow."
+
+        return (
+            status_msg,
             {
                 "acceptance_id": acceptance.id,
                 "acceptance_number": acceptance_number,
+                "commitment_id": commitment.id,
+                "pool_id": pool.id,
                 "container_sscc": offering.container_sscc,
                 "cooperative": coop.name if coop else "Unknown",
                 "quantity_kg": quantity_kg,
                 "price_per_kg": offering.price_per_kg,
                 "total_amount_usd": total_amount,
                 "payment_status": "PENDING",
+                "destination_region": region,
+                "destination_port": port,
+                "pool_fill_pct": pool.fill_pct,
+                "pool_status": pool.status,
             },
         )
 

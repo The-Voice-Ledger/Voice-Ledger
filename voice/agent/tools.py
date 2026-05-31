@@ -1079,6 +1079,14 @@ PURCHASE_CONTAINER = {
                     "description": "Payment terms: NET_7, NET_30, CASH_ON_DELIVERY",
                     "default": "Net 7 days",
                 },
+                "delivery_country": {
+                    "type": "string",
+                    "description": "ISO 3166-1 alpha-2 country code (e.g., US, DE, ET). If not provided, will use buyer's profile country or default to International.",
+                },
+                "delivery_city": {
+                    "type": "string",
+                    "description": "Delivery city",
+                },
             },
             "required": ["container_id", "quantity_kg"],
         },
