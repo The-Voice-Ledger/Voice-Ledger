@@ -656,7 +656,7 @@ async def handle_voice_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
             message=(
                 "🎙️ *Voice received!*\n\n"
                 "Processing your message...\n"
-                "I'll notify you when the batch is created."
+                "I'll get back to you shortly."
             ),
             send_voice=False  # System notification - no need for voice
         )
