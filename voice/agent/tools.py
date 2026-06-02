@@ -508,6 +508,37 @@ ACCEPT_OFFER = {
 
 
 # ---------------------------------------------------------------------------
+# Tool: list_rfq_offers  (READ - buyer views offers on their RFQ)
+# ---------------------------------------------------------------------------
+LIST_RFQ_OFFERS = {
+    "type": "function",
+    "function": {
+        "name": "list_rfq_offers",
+        "description": (
+            "View all offers submitted by cooperatives on one of your RFQs. "
+            "Only the BUYER who created the RFQ can view offers. "
+            "Use when buyer says 'show me offers for RFQ', 'what offers did I get', "
+            "'list offers on my RFQ', 'view offers for RFQ-000014', 'offer details'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "rfq_id": {
+                    "type": "integer",
+                    "description": "RFQ ID to view offers for (numeric ID)",
+                },
+                "rfq_number": {
+                    "type": "string",
+                    "description": "RFQ number to view offers for (e.g. RFQ-000014) - alternative to rfq_id",
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Tool: list_my_offers  (READ - cooperative views their offers)
 # ---------------------------------------------------------------------------
 LIST_MY_OFFERS = {
@@ -1580,6 +1611,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     BROWSE_RFQS,
     SUBMIT_OFFER,
     ACCEPT_OFFER,
+    LIST_RFQ_OFFERS,
     LIST_MY_OFFERS,
     # Container marketplace (Agent #3b)
     BROWSE_CONTAINERS,

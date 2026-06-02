@@ -154,6 +154,7 @@ MARKETPLACE:
 • Browse open marketplace requests (browse_rfqs)
 • Submit an offer on an RFQ (submit_offer) - cooperative managers only
 • Accept a cooperative's offer (accept_offer) - buyers only
+• View offers on your RFQ (list_rfq_offers) - buyers only
 • View your submitted offers (list_my_offers) - cooperative managers only
 
 CONTAINER MARKETPLACE:
