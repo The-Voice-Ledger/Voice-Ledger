@@ -48,6 +48,7 @@ class ToolRegistry:
         self._tools["browse_rfqs"] = self._browse_rfqs
         self._tools["submit_offer"] = self._submit_offer
         self._tools["accept_offer"] = self._accept_offer
+        self._tools["list_rfq_offers"] = self._list_rfq_offers
         self._tools["list_my_offers"] = self._list_my_offers
 
         # Container marketplace tools (Agent #3b)
@@ -2123,6 +2124,99 @@ class ToolRegistry:
                 "quantity_offered_kg": quantity,
                 "price_per_kg": price,
                 "cooperative": coop_org.name if coop_org else "Unknown",
+            },
+        )
+
+    def _list_rfq_offers(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """List offers for a buyer's RFQ (buyers only)."""
+        from database.models import RFQ, RFQOffer, UserIdentity, Organization
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found. Please register first.", {"error": "user_not_found"})
+        
+        # 2. CHECK ROLE - only buyers can view offers on their RFQs
+        if user.role not in ("BUYER", "ADMIN"):
+            return (
+                f"Only buyers can view RFQ offers. Your role is {user.role}.",
+                {"error": "role_not_buyer"},
+            )
+        # Resolve RFQ by id or number
+        rfq_id = args.get("rfq_id")
+        rfq_number = args.get("rfq_number")
+        rfq = None
+
+        if rfq_id:
+            rfq = db.query(RFQ).filter_by(id=rfq_id).first()
+        elif rfq_number:
+            rfq = db.query(RFQ).filter_by(rfq_number=rfq_number).first()
+
+        if not rfq:
+            return ("RFQ not found.", {"error": "rfq_not_found"})
+          
+        # Verify user owns this RFQ
+        if rfq.buyer_id != user.id and user.role != "ADMIN":
+            return ("You can only view offers on your own RFQs.", {"error": "not_owner"})
+
+        # Get offers
+        offers = db.query(RFQOffer).filter_by(rfq_id=rfq.id).order_by(
+            RFQOffer.created_at.desc()
+        ).all()
+
+        if not offers:
+            return (
+                f"No offers yet for RFQ {rfq.rfq_number}. "
+                f"Cooperatives have not submitted any offers.",
+                {"rfq_id": rfq.id, "rfq_number": rfq.rfq_number, "offers": [], "count": 0}
+            )
+
+        offer_list = []
+        for offer in offers:
+            coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
+            offer_list.append({
+                "id": offer.id,
+                "offer_number": offer.offer_number,
+                "rfq_id": offer.rfq_id,
+                "rfq_number": rfq.rfq_number,
+                "cooperative_id": offer.cooperative_id,
+                "cooperative_name": coop_org.name if coop_org else "Unknown",
+                "quantity_offered_kg": offer.quantity_offered_kg,
+                "price_per_kg": offer.price_per_kg,
+                "total_value_usd": offer.quantity_offered_kg * offer.price_per_kg if offer.price_per_kg else 0,
+                "delivery_timeline": offer.delivery_timeline,
+                "status": offer.status,
+                "created_at": offer.created_at.isoformat() if offer.created_at else None,
+            })
+
+        msg = (
+            f"📋 **Offers for RFQ {rfq.rfq_number}** ({len(offer_list)} total)\n\n"
+            f"Quantity requested: {rfq.quantity_kg} kg\n"
+            f"Variety: {rfq.variety or 'Any'}\n\n"
+        )
+
+        for i, offer in enumerate(offer_list, 1):
+            msg += (
+                f"**Offer {i}: {offer['offer_number']}**\n"
+                f"  Cooperative: {offer['cooperative_name']}\n"
+                f"  Quantity: {offer['quantity_offered_kg']} kg\n"
+                f"  Price: ${offer['price_per_kg']}/kg\n"
+                f"  Total Value: ${offer['total_value_usd']:,.2f}\n"
+                f"  Delivery: {offer['delivery_timeline'] or 'TBD'}\n"
+                f"  Status: {offer['status']}\n\n"
+            )
+
+        return (
+            msg,
+            {
+                "rfq_id": rfq.id,
+                "rfq_number": rfq.rfq_number,
+                "quantity_requested_kg": rfq.quantity_kg,
+                "variety": rfq.variety,
+                "offers": offer_list,
+                "count": len(offer_list),
             },
         )
 

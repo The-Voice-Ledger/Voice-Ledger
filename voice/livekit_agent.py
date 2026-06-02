@@ -639,6 +639,20 @@ async def list_my_offers(
     return await _exec(ctx, "list_my_offers", {"status": status})
 
 
+@function_tool(description=(
+    "View all offers submitted on one of your RFQs. "
+    "Use when buyer asks 'show me offers for RFQ', 'what offers did I get'."
+))
+async def list_rfq_offers(
+    ctx: RunContext,
+    rfq_id: Annotated[int | None, "RFQ ID to view offers for"] = None,
+    rfq_number: Annotated[str | None, "RFQ number e.g. RFQ-000014"] = None,
+) -> str:
+    return await _exec(ctx, "list_rfq_offers", {
+        "rfq_id": rfq_id, "rfq_number": rfq_number,
+    })
+
+
 # =====================================================================
 # 3. CONTAINER MARKETPLACE & POOLS
 # =====================================================================
@@ -1198,6 +1212,7 @@ MARKETPLACE
 • Browse active RFQs (browse_rfqs)
 • Submit an offer on an RFQ (submit_offer) — cooperatives only
 • Accept an offer (accept_offer) — buyer who created the RFQ
+• View offers on your RFQ (list_rfq_offers) — buyers only
 • List your submitted offers (list_my_offers)
 
 CONTAINER MARKETPLACE & POOLS
@@ -1285,7 +1300,7 @@ ALL_TOOLS = [
     # Queries / knowledge (read)
     query_batches, search_knowledge,
     # Marketplace (mixed)
-    create_rfq, browse_rfqs, submit_offer, accept_offer, list_my_offers,
+    create_rfq, browse_rfqs, submit_offer, accept_offer, list_rfq_offers, list_my_offers,
     # Containers & pools (mixed)
     browse_containers, create_container_offering, purchase_container,
     browse_pools, commit_to_pool, list_my_commitments,
