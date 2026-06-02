@@ -2086,31 +2086,52 @@ class ToolRegistry:
         if quantity <= 0 or price <= 0:
             return ("Quantity and price must be greater than zero.", {"error": "invalid_values"})
 
-        # Generate unique offer number using MAX instead of COUNT
+        # Generate unique offer number with retry loop to handle race conditions
         from sqlalchemy import func
-        max_result = db.query(func.max(RFQOffer.offer_number)).filter(RFQOffer.offer_number.like('OFF-%')).scalar()
-        
-        if max_result:
-            try:
-                current_num = int(max_result.split('-')[1])
-                next_num = current_num + 1
-            except (ValueError, IndexError):
-                next_num = 1
-        else:
-            next_num = 1
-        
-        offer_number = f"OFF-{next_num:06d}"
+        from sqlalchemy.exc import IntegrityError
 
-        offer = RFQOffer(
-            rfq_id=rfq.id,
-            cooperative_id=user.organization_id,
-            offer_number=offer_number,
-            quantity_offered_kg=quantity,
-            price_per_kg=price,
-            delivery_timeline=args.get("delivery_timeline"),
-            status="PENDING",
-        )
-        db.add(offer)
+        offer_number = None
+        for attempt in range(5):
+            try:
+                # Disable autoflush during query to avoid race conditions
+                with db.no_autoflush:
+                    max_result = db.query(func.max(RFQOffer.offer_number)).filter(
+                        RFQOffer.offer_number.like('OFF-%')
+                    ).scalar()
+
+                if max_result:
+                    try:
+                        current_num = int(max_result.split('-')[1])
+                        next_num = current_num + 1 + attempt
+                    except (ValueError, IndexError):
+                        next_num = 1 + attempt
+                else:
+                    next_num = 1 + attempt
+
+                offer_number = f"OFF-{next_num:06d}"
+
+                offer = RFQOffer(
+                    rfq_id=rfq.id,
+                    cooperative_id=user.organization_id,
+                    offer_number=offer_number,
+                    quantity_offered_kg=quantity,
+                    price_per_kg=price,
+                    delivery_timeline=args.get("delivery_timeline"),
+                    status="PENDING",
+                )
+                db.add(offer)
+                db.flush()  # This will raise IntegrityError if duplicate
+                break  # Success!
+
+            except IntegrityError:
+                db.rollback()
+                if attempt < 4:
+                    continue  # Retry with next number
+                else:
+                    return (
+                        "Failed to generate unique offer number after multiple attempts.",
+                        {"error": "offer_number_conflict"},
+                    )
 
         # Update broadcast record
         broadcast = db.query(RFQBroadcast).filter_by(
