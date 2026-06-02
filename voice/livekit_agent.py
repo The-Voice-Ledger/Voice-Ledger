@@ -578,15 +578,19 @@ async def create_rfq(
 
 @function_tool(description=(
     "Browse open RFQs on the marketplace. Use when cooperative managers ask "
-    "'what do buyers need', 'show me requests', 'available RFQs', 'marketplace'."
+    "'what do buyers need', 'show me requests', 'available RFQs', 'marketplace', "
+    "'find a specific RFQ'."
 ))
 async def browse_rfqs(
     ctx: RunContext,
+    rfq_id: Annotated[int | None, "Filter by RFQ numeric ID (e.g., 42)"] = None,
+    rfq_number: Annotated[str | None, "Filter by RFQ number (e.g., RFQ-000014)"] = None,
     variety: Annotated[str | None, "Filter by coffee variety"] = None,
     status: Annotated[str | None, "Filter: OPEN, PARTIALLY_FILLED, FULFILLED"] = "OPEN",
     limit: Annotated[int, "Max results (default 10)"] = 10,
 ) -> str:
     return await _exec(ctx, "browse_rfqs", {
+        "rfq_id": rfq_id, "rfq_number": rfq_number,
         "variety": variety, "status": status, "limit": limit,
     })
 

@@ -2000,6 +2000,14 @@ class ToolRegistry:
 
         query = db.query(RFQ)
 
+        # Support filtering by RFQ ID or RFQ number
+        rfq_id = args.get("rfq_id")
+        rfq_number = args.get("rfq_number")
+        if rfq_id:
+            query = query.filter(RFQ.id == int(rfq_id))
+        elif rfq_number:
+            query = query.filter(RFQ.rfq_number == rfq_number.upper())
+
         status = args.get("status", "OPEN")
         if status:
             query = query.filter(RFQ.status == status.upper())

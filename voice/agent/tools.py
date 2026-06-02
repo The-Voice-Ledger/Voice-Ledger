@@ -403,6 +403,14 @@ BROWSE_RFQS = {
         "parameters": {
             "type": "object",
             "properties": {
+                "rfq_id": {
+                    "type": "integer",
+                    "description": "Filter by RFQ numeric ID (e.g., 42)",
+                },
+                "rfq_number": {
+                    "type": "string",
+                    "description": "Filter by RFQ number (e.g., RFQ-000014)",
+                },
                 "variety": {
                     "type": "string",
                     "description": "Filter by coffee variety",
