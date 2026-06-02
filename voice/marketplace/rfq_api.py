@@ -515,52 +515,67 @@ def get_rfq_offers(
 ):
     """
     View offers for an RFQ
-    
+
     **Access:** Buyer who created the RFQ
     Auth: JWT Authorization header (preferred) or user_id query param.
     """
-    # Resolve user from JWT or query param
-    resolved_id = user_id
-    if authorization and authorization.startswith("Bearer "):
+    from sqlalchemy.exc import OperationalError
+    import time
+
+    # Retry logic for transient database errors
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
-            from voice.web.auth import verify_jwt_token
-            payload = verify_jwt_token(authorization.replace("Bearer ", ""))
-            resolved_id = payload.get("user_id", resolved_id)
-        except Exception:
-            pass
-    if not resolved_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    user = get_current_user(resolved_id, db)
-    
-    # Get RFQ
-    rfq = db.query(RFQ).filter_by(id=rfq_id).first()
-    if not rfq:
-        raise HTTPException(status_code=404, detail="RFQ not found")
-    
-    # Verify user owns this RFQ
-    if rfq.buyer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to view these offers")
-    
-    # Get offers
-    offers = db.query(RFQOffer).filter_by(rfq_id=rfq_id).order_by(RFQOffer.created_at.desc()).all()
-    
-    results = []
-    for offer in offers:
-        coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
-        results.append(OfferResponse(
-            id=offer.id,
-            offer_number=offer.offer_number,
-            rfq_id=offer.rfq_id,
-            cooperative_id=offer.cooperative_id,
-            cooperative_name=coop_org.name if coop_org else "Unknown",
-            quantity_offered_kg=offer.quantity_offered_kg,
-            price_per_kg=offer.price_per_kg,
-            delivery_timeline=offer.delivery_timeline,
-            status=offer.status,
-            created_at=offer.created_at
-        ))
-    
-    return results
+            # Resolve user from JWT or query param
+            resolved_id = user_id
+            if authorization and authorization.startswith("Bearer "):
+                try:
+                    from voice.web.auth import verify_jwt_token
+                    payload = verify_jwt_token(authorization.replace("Bearer ", ""))
+                    resolved_id = payload.get("user_id", resolved_id)
+                except Exception:
+                    pass
+            if not resolved_id:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            user = get_current_user(resolved_id, db)
+
+            # Get RFQ
+            rfq = db.query(RFQ).filter_by(id=rfq_id).first()
+            if not rfq:
+                raise HTTPException(status_code=404, detail="RFQ not found")
+
+            # Verify user owns this RFQ
+            if rfq.buyer_id != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to view these offers")
+
+            # Get offers
+            offers = db.query(RFQOffer).filter_by(rfq_id=rfq_id).order_by(RFQOffer.created_at.desc()).all()
+
+            results = []
+            for offer in offers:
+                coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
+                results.append(OfferResponse(
+                    id=offer.id,
+                    offer_number=offer.offer_number,
+                    rfq_id=offer.rfq_id,
+                    cooperative_id=offer.cooperative_id,
+                    cooperative_name=coop_org.name if coop_org else "Unknown",
+                    quantity_offered_kg=offer.quantity_offered_kg,
+                    price_per_kg=offer.price_per_kg,
+                    delivery_timeline=offer.delivery_timeline,
+                    status=offer.status,
+                    created_at=offer.created_at
+                ))
+
+            return results
+
+        except OperationalError as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                db.rollback()  # Rollback and retry
+                continue
+            else:
+                raise HTTPException(status_code=503, detail="Database connection error. Please try again.")
 
 @router.post("/rfq/{rfq_id}/accept", response_model=AcceptanceResponse, status_code=201)
 async def accept_offer(
