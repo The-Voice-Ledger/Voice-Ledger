@@ -70,6 +70,8 @@ export default function ActionCards({ textStreams }) {
             return <OfferCard key={card._key} data={card} verb="Accepted" accent="#10B981" />
           case 'list_my_offers':
             return <OfferListCard key={card._key} data={card} />
+          case 'list_rfq_offers':
+            return <RfqOffersCard key={card._key} data={card} />
 
           /* ── Containers & pools ── */
           case 'browse_containers':
@@ -638,6 +640,58 @@ function OfferListCard({ data }) {
       {offers.length > 4 && (
         <button onClick={() => setExpanded(v => !v)}
                 className="w-full mt-2 text-[10px] text-indigo-400/60 hover:text-indigo-400 transition-colors">
+          {expanded ? 'Show less' : `Show all ${offers.length}`}
+        </button>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   RfqOffersCard — list offers for a specific RFQ (buyer view)
+   ================================================================ */
+
+function RfqOffersCard({ data }) {
+  const offers = data.offers || []
+  const [expanded, setExpanded] = useState(false)
+  const visible = expanded ? offers : offers.slice(0, 4)
+
+  return (
+    <CardShell icon={<OfferIcon />} title={`Offers for ${data.rfq_number} (${data.count || offers.length})`} accent="#10B981">
+      <div className="space-y-2">
+        {data.quantity_requested_kg && (
+          <Field label="Requested" value={`${data.quantity_requested_kg} kg`} />
+        )}
+        {data.variety && <Field label="Variety" value={data.variety} />}
+        {visible.length > 0 && (
+          <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+            <span className="text-[10px] text-white/20 uppercase tracking-wider">Offers</span>
+          </div>
+        )}
+        <div className="space-y-2">
+          {visible.map((o, i) => (
+            <div key={i} className="px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-white/70 font-mono">{o.offer_number}</span>
+                <StatusPill status={o.status} />
+              </div>
+              <div className="text-[10px] text-white/30 mt-0.5">
+                {o.cooperative_name} • {o.quantity_offered_kg} kg • ${o.price_per_kg}/kg
+                {o.total_value_usd && ` • $${o.total_value_usd.toLocaleString()} total`}
+              </div>
+              {o.delivery_timeline && (
+                <div className="text-[9px] text-white/20 mt-0.5">
+                  Delivery: {o.delivery_timeline}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      {offers.length > 4 && (
+        <button onClick={() => setExpanded(v => !v)}
+                className="w-full mt-2 text-[10px] text-emerald-400/60 hover:text-emerald-400 transition-colors">
           {expanded ? 'Show less' : `Show all ${offers.length}`}
         </button>
       )}
