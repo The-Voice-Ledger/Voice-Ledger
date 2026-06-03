@@ -2052,15 +2052,15 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         
                         # Base info
                         batch_info = (
-                            f"📦 *{b.batch_id}*\n"
+                            f"📦 {b.batch_id}\n"
                             f"   {b.quantity_kg} kg {b.variety}\n"
                             f"   from {b.origin}\n"
-                            f"   GTIN: `{b.gtin}`\n"
+                            f"   GTIN: {b.gtin}\n"
                         )
                         
                         # Add GLN if available
                         if b.gln:
-                            batch_info += f"   GLN: `{b.gln}`\n"
+                            batch_info += f"   GLN: {b.gln}\n"
                         
                         # Add verification status
                         batch_info += f"   Status: {status_emoji} {b.status.replace('_', ' ').title()}\n"
@@ -2079,9 +2079,10 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
                         channel_name='telegram',
                         user_id=user_id,
                         message=(
-                            f"📦 *Your Batches* (showing last {len(batches)})\n\n"
+                            f"📦 Your Batches (showing last {len(batches)})\n\n"
                             f"{chr(10).join(batch_lines)}"
-                        )
+                        ),
+                        parse_mode=None
                     )
             finally:
                 db.close()
