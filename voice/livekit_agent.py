@@ -579,18 +579,17 @@ async def create_rfq(
 @function_tool(description=(
     "Browse open RFQs on the marketplace. Use when cooperative managers ask "
     "'what do buyers need', 'show me requests', 'available RFQs', 'marketplace', "
-    "'find a specific RFQ'."
+    "'find a specific RFQ'.'show me RFQ X'"
 ))
 async def browse_rfqs(
     ctx: RunContext,
-    rfq_id: Annotated[int | None, "Filter by RFQ numeric ID (e.g., 42)"] = None,
     rfq_number: Annotated[str | None, "Filter by RFQ number (e.g., RFQ-000014)"] = None,
     variety: Annotated[str | None, "Filter by coffee variety"] = None,
     status: Annotated[str | None, "Filter: OPEN, PARTIALLY_FILLED, FULFILLED"] = "OPEN",
     limit: Annotated[int, "Max results (default 10)"] = 10,
 ) -> str:
     return await _exec(ctx, "browse_rfqs", {
-        "rfq_id": rfq_id, "rfq_number": rfq_number,
+        "rfq_number": rfq_number,
         "variety": variety, "status": status, "limit": limit,
     })
 
@@ -603,12 +602,11 @@ async def submit_offer(
     ctx: RunContext,
     quantity_offered_kg: Annotated[float, "Quantity offered in kg"],
     price_per_kg: Annotated[float, "Price per kg in USD"],
-    rfq_id: Annotated[int | None, "RFQ ID to make an offer on"] = None,
     rfq_number: Annotated[str | None, "RFQ number e.g. RFQ-000001"] = None,
     delivery_timeline: Annotated[str | None, "Timeline e.g. '2 weeks', '30 days'"] = None,
 ) -> str:
     return await _exec(ctx, "submit_offer", {
-        "rfq_id": rfq_id, "rfq_number": rfq_number,
+        "rfq_number": rfq_number,
         "quantity_offered_kg": quantity_offered_kg,
         "price_per_kg": price_per_kg, "delivery_timeline": delivery_timeline,
     })
@@ -649,11 +647,10 @@ async def list_my_offers(
 ))
 async def list_rfq_offers(
     ctx: RunContext,
-    rfq_id: Annotated[int | None, "RFQ ID to view offers for"] = None,
     rfq_number: Annotated[str | None, "RFQ number e.g. RFQ-000014"] = None,
 ) -> str:
     return await _exec(ctx, "list_rfq_offers", {
-        "rfq_id": rfq_id, "rfq_number": rfq_number,
+        "rfq_number": rfq_number,
     })
 
 
