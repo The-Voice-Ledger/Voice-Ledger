@@ -100,6 +100,8 @@ class ActionCards {
         return this.createOfferCard(card, 'Accepted', '#10B981');
       case 'list_my_offers':
         return this.createOfferListCard(card);
+      case 'list_rfq_offers':
+        return this.createRfqOffersCard(card);
 
       // Containers & pools
       case 'browse_containers':
@@ -754,6 +756,117 @@ class ActionCards {
       }
     }
     
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create RFQ offers card (buyer view)
+   */
+  createRfqOffersCard(card) {
+    const offers = card.data?.offers || [];
+    const baseCard = this.createBaseCard(`Offers for ${card.data?.rfq_number || 'RFQ'} (${card.data?.count || offers.length})`, '#10B981');
+    const content = document.createElement('div');
+    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5; max-height: 300px; overflow-y: auto;';
+
+    // RFQ details
+    if (card.data) {
+      const data = card.data;
+      if (data.quantity_requested_kg) {
+        const field = document.createElement('div');
+        field.style.cssText = 'margin-bottom: 8px;';
+        field.innerHTML = `<strong>Requested:</strong> ${data.quantity_requested_kg} kg`;
+        content.appendChild(field);
+      }
+      if (data.variety) {
+        const field = document.createElement('div');
+        field.style.cssText = 'margin-bottom: 8px;';
+        field.innerHTML = `<strong>Variety:</strong> ${data.variety}`;
+        content.appendChild(field);
+      }
+    }
+
+    if (card.data && Array.isArray(card.data.offers) && card.data.offers.length > 0) {
+      const divider = document.createElement('div');
+      divider.style.cssText = 'margin: 12px 0; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.06);';
+      divider.innerHTML = '<div style="font-size: 10px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px;">Offers</div>';
+      content.appendChild(divider);
+    }
+
+    if (card.data && Array.isArray(card.data.offers)) {
+      const allOffers = card.data.offers;
+      const visibleOffers = allOffers.slice(0, 4);
+
+      const offerListContent = document.createElement('div');
+      offerListContent.className = 'rfq-offers-content';
+      offerListContent.innerHTML = visibleOffers.map(offer => `
+        <div style="padding: 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.8); font-weight: 600;">${offer.offer_number || 'N/A'}</div>
+            <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 500;">${offer.status || 'UNKNOWN'}</div>
+          </div>
+          <div style="font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 4px;">${offer.cooperative_name || 'Unknown'}</div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            ${offer.quantity_offered_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">${offer.quantity_offered_kg} kg</span>` : ''}
+            ${offer.price_per_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(34, 197, 94, 0.15); color: #22c55e;">$${offer.price_per_kg}/kg</span>` : ''}
+            ${offer.total_value_usd ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(168, 162, 158, 0.15); color: rgba(168, 162, 158, 0.8);">Total: $${offer.total_value_usd.toLocaleString()}</span>` : ''}
+          </div>
+          ${offer.delivery_timeline ? `<div style="font-size: 9px; color: rgba(255, 255, 255, 0.3); margin-top: 4px;">Delivery: ${offer.delivery_timeline}</div>` : ''}
+        </div>
+      `).join('');
+
+      content.appendChild(offerListContent);
+
+      if (allOffers.length > 4) {
+        const showButton = document.createElement('button');
+        showButton.style.cssText = 'width: 100%; margin-top: 8px; font-size: 10px; color: rgba(16, 185, 129, 0.6); cursor: pointer; background: none; border: none; padding: 4px;';
+        showButton.textContent = `Show all ${allOffers.length} offers...`;
+
+        let isExpanded = false;
+        showButton.addEventListener('click', () => {
+          if (!isExpanded) {
+            offerListContent.innerHTML = allOffers.map(offer => `
+              <div style="padding: 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.8); font-weight: 600;">${offer.offer_number || 'N/A'}</div>
+                  <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 500;">${offer.status || 'UNKNOWN'}</div>
+                </div>
+                <div style="font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 4px;">${offer.cooperative_name || 'Unknown'}</div>
+                <div style="display: flex; gap: 8px; margin-top: 6px;">
+                  ${offer.quantity_offered_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">${offer.quantity_offered_kg} kg</span>` : ''}
+                  ${offer.price_per_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(34, 197, 94, 0.15); color: #22c55e;">$${offer.price_per_kg}/kg</span>` : ''}
+                  ${offer.total_value_usd ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(168, 162, 158, 0.15); color: rgba(168, 162, 158, 0.8);">Total: $${offer.total_value_usd.toLocaleString()}</span>` : ''}
+                </div>
+                ${offer.delivery_timeline ? `<div style="font-size: 9px; color: rgba(255, 255, 255, 0.3); margin-top: 4px;">Delivery: ${offer.delivery_timeline}</div>` : ''}
+              </div>
+            `).join('');
+            showButton.textContent = 'Show less';
+            isExpanded = true;
+          } else {
+            offerListContent.innerHTML = visibleOffers.map(offer => `
+              <div style="padding: 8px; margin-bottom: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <div style="font-size: 12px; font-family: monospace; color: rgba(255, 255, 255, 0.8); font-weight: 600;">${offer.offer_number || 'N/A'}</div>
+                  <div style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 500;">${offer.status || 'UNKNOWN'}</div>
+                </div>
+                <div style="font-size: 12px; color: rgba(255, 255, 255, 0.5); margin-bottom: 4px;">${offer.cooperative_name || 'Unknown'}</div>
+                <div style="display: flex; gap: 8px; margin-top: 6px;">
+                  ${offer.quantity_offered_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">${offer.quantity_offered_kg} kg</span>` : ''}
+                  ${offer.price_per_kg ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(34, 197, 94, 0.15); color: #22c55e;">$${offer.price_per_kg}/kg</span>` : ''}
+                  ${offer.total_value_usd ? `<span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: rgba(168, 162, 158, 0.15); color: rgba(168, 162, 158, 0.8);">Total: $${offer.total_value_usd.toLocaleString()}</span>` : ''}
+                </div>
+                ${offer.delivery_timeline ? `<div style="font-size: 9px; color: rgba(255, 255, 255, 0.3); margin-top: 4px;">Delivery: ${offer.delivery_timeline}</div>` : ''}
+              </div>
+            `).join('');
+            showButton.textContent = `Show all ${allOffers.length} offers...`;
+            isExpanded = false;
+          }
+        });
+
+        content.appendChild(showButton);
+      }
+    }
+
     baseCard.appendChild(content);
     return baseCard;
   }
