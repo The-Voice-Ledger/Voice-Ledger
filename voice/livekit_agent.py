@@ -618,13 +618,12 @@ async def submit_offer(
 ))
 async def accept_offer(
     ctx: RunContext,
-    offer_id: Annotated[int, "The offer ID to accept"],
-    rfq_id: Annotated[int, "RFQ ID the offer belongs to"],
+    offer_number: Annotated[str, "The offer number e.g. OFF-000001"],
     quantity_accepted_kg: Annotated[float | None, "Quantity to accept (full offer if omitted)"] = None,
     payment_terms: Annotated[str | None, "Payment terms e.g. 'Net 30 days'"] = None,
 ) -> str:
     return await _exec(ctx, "accept_offer", {
-        "offer_id": offer_id, "rfq_id": rfq_id,
+        "offer_number": offer_number,
         "quantity_accepted_kg": quantity_accepted_kg,
         "payment_terms": payment_terms,
     })

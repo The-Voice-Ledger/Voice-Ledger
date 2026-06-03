@@ -2263,18 +2263,18 @@ class ToolRegistry:
         if not user:
             return ("User not found.", {"error": "user_not_found"})
 
-        rfq_id = args.get("rfq_id")
-        offer_id = args.get("offer_id")
+        offer_number = args.get("offer_number")
 
-        rfq = db.query(RFQ).filter_by(id=rfq_id).first()
+        offer = db.query(RFQOffer).filter_by(offer_number=offer_number).first()
+        if not offer:
+            return ("Offer not found.", {"error": "offer_not_found"})
+
+        # Get RFQ from the offer
+        rfq = db.query(RFQ).filter_by(id=offer.rfq_id).first()
         if not rfq:
             return ("RFQ not found.", {"error": "rfq_not_found"})
         if rfq.buyer_id != user.id and user.role != "ADMIN":
             return ("You can only accept offers on your own RFQs.", {"error": "not_owner"})
-
-        offer = db.query(RFQOffer).filter_by(id=offer_id, rfq_id=rfq_id).first()
-        if not offer:
-            return ("Offer not found.", {"error": "offer_not_found"})
         if offer.status != "PENDING":
             return (f"Offer is {offer.status}, cannot accept.", {"error": "offer_not_pending"})
 
@@ -2285,20 +2285,54 @@ class ToolRegistry:
                 {"error": "exceeds_offered"},
             )
 
-        count = db.query(RFQAcceptance).count() + 1
-        acceptance_number = f"ACC-{count:06d}"
+        # Generate unique acceptance number with retry loop to handle race conditions
+        from sqlalchemy import func
+        from sqlalchemy.exc import IntegrityError
 
-        acceptance = RFQAcceptance(
-            rfq_id=rfq.id,
-            offer_id=offer.id,
-            acceptance_number=acceptance_number,
-            quantity_accepted_kg=quantity_accepted,
-            payment_terms=args.get("payment_terms"),
-            payment_status="PENDING",
-            delivery_status="PENDING",
-            accepted_at=datetime.utcnow(),
-        )
-        db.add(acceptance)
+        acceptance_number = None
+        for attempt in range(5):
+            try:
+                # Disable autoflush during query to avoid race conditions
+                with db.no_autoflush:
+                    max_result = db.query(func.max(RFQAcceptance.acceptance_number)).filter(
+                        RFQAcceptance.acceptance_number.like('ACC-%')
+                    ).scalar()
+
+                if max_result:
+                    try:
+                        current_num = int(max_result.split('-')[1])
+                        next_num = current_num + 1 + attempt
+                    except (ValueError, IndexError):
+                        next_num = 1 + attempt
+                else:
+                    next_num = 1 + attempt
+
+                acceptance_number = f"ACC-{next_num:06d}"
+
+                acceptance = RFQAcceptance(
+                    rfq_id=rfq.id,
+                    offer_id=offer.id,
+                    acceptance_number=acceptance_number,
+                    quantity_accepted_kg=quantity_accepted,
+                    payment_terms=args.get("payment_terms"),
+                    payment_status="PENDING",
+                    delivery_status="PENDING",
+                    accepted_at=datetime.utcnow(),
+                )
+                db.add(acceptance)
+                db.flush()  # This will raise IntegrityError if duplicate
+                break  # Success!
+
+            except IntegrityError:
+                db.rollback()
+                if attempt < 4:
+                    continue  # Retry with next number
+                else:
+                    return (
+                        "Failed to generate unique acceptance number after multiple attempts.",
+                        {"error": "acceptance_number_conflict"},
+                    )
+
         offer.status = "ACCEPTED"
 
         # Update RFQ status
