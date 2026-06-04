@@ -177,14 +177,15 @@
     async function loadData() {
       try {
         const [rfqRes, contRes, offRes] = await Promise.all([
-          fetch('/api/marketplace/rfqs', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/rfqs', { headers }).catch(() => ({ ok: false })),
           fetch('/api/marketplace/my-containers', { headers }).catch(() => ({ ok: false })),
           fetch('/api/marketplace/my-offers', { headers }).catch(() => ({ ok: false })),
         ]);
-        if (rfqRes.ok) { const d = await rfqRes.json(); allRfqs = d.rfqs || []; }
+        if (rfqRes.ok) { const d = await rfqRes.json(); allRfqs = Array.isArray(d) ? d : []; }
         if (contRes.ok) { const d = await contRes.json(); myContainers = d.containers || []; }
         if (offRes.ok) { const d = await offRes.json(); myOffers = d.offers || []; }
-        document.getElementById('rfqCount').textContent = allRfqs.length;
+        const openRfqsCount = allRfqs.filter(r => r.status === 'OPEN' || r.status === 'PARTIALLY_FILLED').length;
+        document.getElementById('rfqCount').textContent = openRfqsCount;
         document.getElementById('containerCount').textContent = myContainers.length;
         document.getElementById('offerCount').textContent = myOffers.length;
         renderList();
@@ -204,17 +205,22 @@
 
     /* ---------- RFQs ---------- */
     function renderRfqs(el) {
-      if (!allRfqs.length) { el.innerHTML = '<div class="empty-state">' + vlI18n.t('market_empty') + '</div>'; return; }
-      el.innerHTML = allRfqs.map(r => {
+      // Filter to show only RFQs that are still accepting offers
+      const openRfqs = allRfqs.filter(r => 
+        r.status === 'OPEN' || r.status === 'PARTIALLY_FILLED'
+      );
+      
+      if (!openRfqs.length) { el.innerHTML = '<div class="empty-state">' + vlI18n.t('market_empty') + '</div>'; return; }
+      el.innerHTML = openRfqs.map(r => {
         const st = (r.status||'open').toLowerCase();
         return '<div class="rfq-card" onclick="showRfqDetail(' + (r.id||0) + ')">' +
-          '<div class="rfq-top"><div><div class="rfq-title">' + esc(r.title||r.coffee_type||'RFQ #'+r.id) + '</div>' +
-          '<div class="rfq-buyer">' + esc(r.buyer_name||r.buyer||'') + '</div></div>' +
+          '<div class="rfq-top"><div><div class="rfq-title">' + esc(r.rfq_number||'RFQ #'+r.id) + '</div>' +
+          '<div class="rfq-buyer">' + esc(r.buyer_organization||'') + '</div></div>' +
           '<span class="rfq-tag status-' + st + '">' + st + '</span></div>' +
           '<div class="rfq-meta">' +
-          (r.quantity ? '<span class="rfq-tag qty">' + r.quantity + ' kg</span>' : '') +
-          (r.target_price ? '<span class="rfq-tag price">$' + r.target_price + '/kg</span>' : '') +
-          (r.deadline ? '<span class="rfq-tag deadline">' + fmtDate(r.deadline) + '</span>' : '') +
+          (r.quantity_kg ? '<span class="rfq-tag qty">' + r.quantity_kg + ' kg</span>' : '') +
+          (r.variety ? '<span class="rfq-tag">' + esc(r.variety) + '</span>' : '') +
+          (r.delivery_deadline ? '<span class="rfq-tag deadline">' + fmtDate(r.delivery_deadline) + '</span>' : '') +
           '</div></div>';
       }).join('');
     }
@@ -272,15 +278,16 @@
       document.getElementById('detailBody').innerHTML = '<div class="loading-state">Loading...</div>';
       const r = allRfqs.find(x => x.id === id);
       if (!r) { overlay.classList.remove('show'); return; }
-      document.getElementById('detailTitle').textContent = r.title || 'RFQ #' + r.id;
+      document.getElementById('detailTitle').textContent = r.rfq_number || 'RFQ #' + r.id;
       let html = '<div class="detail-section"><h3>' + vlI18n.t('market_rfq_details') + '</h3>';
-      html += infoRow(vlI18n.t('market_buyer'), r.buyer_name||r.buyer||'');
-      html += infoRow(vlI18n.t('market_coffee_type'), r.coffee_type||'');
-      html += infoRow(vlI18n.t('market_quantity'), r.quantity ? r.quantity+' kg' : '');
-      html += infoRow(vlI18n.t('market_target_price'), r.target_price ? '$'+r.target_price+'/kg' : '');
-      html += infoRow(vlI18n.t('market_deadline'), r.deadline ? fmtDate(r.deadline) : '');
+      html += infoRow(vlI18n.t('market_buyer'), r.buyer_organization||'');
+      html += infoRow(vlI18n.t('market_coffee_type'), r.variety||'');
+      html += infoRow(vlI18n.t('market_quantity'), r.quantity_kg ? r.quantity_kg+' kg' : '');
+      html += infoRow(vlI18n.t('market_deadline'), r.delivery_deadline ? fmtDate(r.delivery_deadline) : '');
       html += infoRow(vlI18n.t('market_status'), r.status||'');
-      if (r.notes||r.description) html += '<div style="margin-top:12px;font-size:13px;color:var(--stone-600);line-height:1.5">' + esc(r.notes||r.description) + '</div>';
+      if (r.processing_method) html += infoRow('Processing', r.processing_method);
+      if (r.grade) html += infoRow('Grade', r.grade);
+      if (r.delivery_location) html += infoRow('Delivery Location', r.delivery_location);
       html += '</div>';
       html += '<div class="offer-form"><h3>' + vlI18n.t('market_submit_offer') + '</h3>' +
         '<div class="form-group"><label>' + vlI18n.t('market_price') + '</label><input type="number" id="offerPrice" step="0.01" placeholder="e.g. 4.50"></div>' +
@@ -288,6 +295,9 @@
         '<div class="form-group"><label>' + vlI18n.t('market_notes') + '</label><textarea id="offerNotes" placeholder="' + vlI18n.t('market_notes_placeholder') + '"></textarea></div>' +
         '<button class="vl-btn-primary" style="width:100%" onclick="submitOffer(' + id + ')">' + vlI18n.t('market_submit') + '</button></div>';
       document.getElementById('detailBody').innerHTML = html;
+
+      // Load offers for this RFQ
+      loadRfqOffers(id, html);
     }
 
     /* ── Container Detail overlay ─────────────────────────── */
