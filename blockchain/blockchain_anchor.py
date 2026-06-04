@@ -174,21 +174,66 @@ class BlockchainAnchor:
             Dict with batch info or None if not found
         """
         try:
-            result = self.contract.functions.getBatch(batch_id).call()
+            from database import get_db
+            from database.models import EPCISEvent, CoffeeBatch
             
-            # Unpack result
-            event_hash, metadata, timestamp = result
-            event_type, location, ipfs_cid, submitter = metadata
-            
-            return {
-                'batch_id': batch_id,
-                'event_hash': event_hash.hex(),
-                'event_type': event_type,
-                'location': location,
-                'ipfs_cid': ipfs_cid,
-                'submitter': submitter,
-                'timestamp': timestamp
-            }
+            # Step 1: Query database to get event_hash for this batch
+            with get_db() as db:
+                # Find the batch first
+                batch = db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
+                if not batch:
+                    logger.warning("Batch %s not found in database", batch_id)
+                    return None
+                
+                # Find the most recent EPCIS event for this batch
+                event = db.query(EPCISEvent).filter(
+                    EPCISEvent.batch_id == batch.id
+                ).order_by(EPCISEvent.created_at.desc()).first()
+                
+                if not event or not event.event_hash:
+                    logger.warning("No event hash found for batch %s", batch_id)
+                    return None
+                
+                # Step 2: Query blockchain using event_hash
+                event_hash_bytes = bytes.fromhex(event.event_hash)
+                try:
+                    result = self.contract.functions.getEventMetadata(event_hash_bytes).call()
+                except Exception as contract_error:
+                    # Handle contract revert (event not found on blockchain)
+                    error_msg = str(contract_error)
+                    if 'EventNotFound' in error_msg or 'revert' in error_msg.lower():
+                        logger.info("Event hash %s not found on blockchain (batch not anchored yet)", event.event_hash)
+                        return {
+                            'batch_id': batch_id,
+                            'event_hash': event.event_hash,
+                            'event_type': event.event_type,
+                            'blockchain_verified': False,
+                            'status': 'NOT_ANCHORED'
+                        }
+                    raise
+                
+                # Unpack result: (batchId, eventType, timestamp, submitter, exists)
+                batch_id_onchain, event_type, timestamp, submitter, exists = result
+                
+                if not exists:
+                    logger.info("Event hash %s not found on blockchain (exists=false)", event.event_hash)
+                    return {
+                        'batch_id': batch_id,
+                        'event_hash': event.event_hash,
+                        'event_type': event_type,
+                        'blockchain_verified': False,
+                        'status': 'NOT_ANCHORED'
+                    }
+                
+                return {
+                    'batch_id': batch_id,
+                    'event_hash': event.event_hash,
+                    'event_type': event_type,
+                    'timestamp': timestamp,
+                    'submitter': submitter,
+                    'ipfs_cid': event.ipfs_cid or None,
+                    'blockchain_verified': True
+                }
             
         except Exception as e:
             logger.exception("Failed to query batch %s", batch_id)
