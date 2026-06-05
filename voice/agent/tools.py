@@ -950,12 +950,12 @@ GET_TOKEN_INFO = {
         "parameters": {
             "type": "object",
             "properties": {
-                "token_id": {
-                    "type": "integer",
-                    "description": "On-chain token ID (number)",
+                "batch_id": {
+                    "type": "string",
+                    "description": "Batch identifier (e.g., JIMMA_GEDEO_20260521_210140)",
                 },
             },
-            "required": ["token_id"],
+            "required": ["batch_id"],
         },
     },
 }

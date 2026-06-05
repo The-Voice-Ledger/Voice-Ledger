@@ -2934,9 +2934,25 @@ class ToolRegistry:
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
         """Look up ERC-1155 batch token metadata."""
-        token_id = args.get("token_id")
-        if token_id is None:
-            return ("Please specify a token ID.", {"error": "no_token_id"})
+        batch_id = args.get("batch_id")
+        if not batch_id:
+            return ("Please specify a batch ID.", {"error": "no_batch_id"})
+        
+        # Look up token_id from database
+        from database.models import CoffeeBatch
+        batch = db.query(CoffeeBatch).filter(CoffeeBatch.batch_id == batch_id).first()
+        if not batch:
+            return (
+                f"Batch {batch_id} not found in database.",
+                {"error": "batch_not_found", "batch_id": batch_id},
+            )
+        
+        token_id = batch.token_id
+        if not token_id:
+            return (
+                f"Batch {batch_id} exists but has not been tokenised yet.",
+                {"error": "not_tokenised", "batch_id": batch_id},
+            )
 
         try:
             from blockchain.token_manager import get_token_manager
@@ -2954,6 +2970,13 @@ class ToolRegistry:
             return (
                 f"Token {token_id} not found on-chain.",
                 {"token_id": token_id, "found": False},
+            )
+        
+        # Handle token not found case
+        if metadata.get('status') == 'TOKEN_NOT_FOUND':
+            return (
+                f"Token ID {token_id} does not exist on the blockchain contract.",
+                {"token_id": token_id, "found": False, "status": "TOKEN_NOT_FOUND"},
             )
 
         quantity_kg = metadata.get("quantity", 0) / 1000  # grams → kg
