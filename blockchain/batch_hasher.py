@@ -82,11 +82,16 @@ def hash_batch_from_db_model(batch) -> bytes:
         >>> batch = db.query(CoffeeBatch).filter_by(batch_id="FARM-001").first()
         >>> batch_hash = hash_batch_from_db_model(batch)
     """
+    # Handle None values - use empty string for missing fields
+    # Try both process_method and processing_method (alias)
+    process_method = batch.process_method or batch.processing_method or ""
+    variety = batch.variety or ""
+    
     return hash_batch_data(
         batch_id=batch.batch_id,
         quantity_kg=batch.quantity_kg,
-        variety=batch.variety,
-        process_method=batch.process_method,
+        variety=variety,
+        process_method=process_method,
         farmer_id=batch.farmer_id,
         created_at=batch.created_at
     )

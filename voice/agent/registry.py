@@ -3008,21 +3008,40 @@ class ToolRegistry:
         self, db: Session, args: Dict[str, Any],
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
-        """Verify batch data integrity by comparing hash against blockchain."""
+        """Verify batch data integrity by comparing EPCIS event hash against blockchain."""
         batch_id = args.get("batch_id")
         if not batch_id:
             return ("Please specify a batch ID.", {"error": "no_batch_id"})
 
         try:
-            from blockchain.batch_hasher import hash_batch_from_db_model
+            import hashlib
+            import json
             from database.crud import get_batch_by_id_or_gtin
+            from database.models import EPCISEvent
 
             batch = get_batch_by_id_or_gtin(db, batch_id)
             if not batch:
                 return (f"Batch '{batch_id}' not found.", {"error": "batch_not_found"})
 
-            # Compute current hash from DB data
-            current_hash = hash_batch_from_db_model(batch)
+            # Get the EPCIS event for this batch
+            event = db.query(EPCISEvent).filter(
+                EPCISEvent.batch_id == batch.id
+            ).order_by(EPCISEvent.created_at.desc()).first()
+            
+            if not event:
+                return (
+                    f"Batch {batch.batch_id} has no EPCIS events - cannot verify hash.",
+                    {"batch_id": batch.batch_id, "has_events": False, "verified": None},
+                )
+            
+            # Re-compute hash from the stored event JSON using same method as creation
+            # Canonicalize: sort keys, no spaces
+            if event.event_json:
+                canonical = json.dumps(event.event_json, sort_keys=True, separators=(',', ':'))
+                current_hash = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+            else:
+                # Fallback to canonical_nquads if event_json is missing
+                current_hash = hashlib.sha256(event.canonical_nquads.encode('utf-8')).hexdigest()
 
             # Get on-chain hash
             anchor = _get_blockchain_anchor()
@@ -3043,10 +3062,9 @@ class ToolRegistry:
             )
 
         on_chain_hash = on_chain.get("event_hash", "")
-        current_hex = current_hash.hex() if isinstance(current_hash, bytes) else str(current_hash)
 
         # Normalize for comparison
-        a = current_hex.lower().replace("0x", "")
+        a = current_hash.lower().replace("0x", "")
         b = on_chain_hash.lower().replace("0x", "")
         match = a == b
 
@@ -3058,7 +3076,7 @@ class ToolRegistry:
                     "batch_id": batch.batch_id,
                     "anchored": True,
                     "verified": True,
-                    "hash": current_hex,
+                    "hash": current_hash,
                 },
             )
         else:
@@ -3069,7 +3087,7 @@ class ToolRegistry:
                     "batch_id": batch.batch_id,
                     "anchored": True,
                     "verified": False,
-                    "current_hash": current_hex,
+                    "current_hash": current_hash,
                     "on_chain_hash": on_chain_hash,
                 },
             )
