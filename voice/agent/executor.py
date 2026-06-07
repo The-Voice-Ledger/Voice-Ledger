@@ -178,7 +178,7 @@ COMPLIANCE:
 
 DIGITAL PRODUCT PASSPORT (DPP):
 • Get the Digital Product Passport for a batch (get_dpp)
-• Get aggregated container passport (get_container_dpp)
+• Get container DPP with all child batch passports and EUDR compliance (get_container_dpp)
 • Trace full supply chain lineage (trace_lineage)
 • Validate DPP completeness (validate_dpp)
 

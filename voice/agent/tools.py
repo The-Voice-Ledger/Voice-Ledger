@@ -822,17 +822,24 @@ GET_CONTAINER_DPP = {
         "name": "get_container_dpp",
         "description": (
             "Get the aggregated Digital Product Passport for a shipping "
-            "container (SSCC). Shows all contributing farmers, their "
-            "percentages, and combined traceability. Use when user asks "
-            "'container passport', 'who contributed to this container', "
-            "'show container DPP', 'aggregated passport'."
+            "container identified by its SSCC. Looks up the container offering, "
+            "finds all child batches via aggregation relationships, builds a "
+            "full DPP per child batch (including EUDR compliance and deforestation "
+            "risk derived from each farmer's record), and returns combined "
+            "container metadata plus all child DPPs. "
+            "Use when user asks 'container passport', 'DPP for container X', "
+            "'show container DPP', 'what batches are in container X', "
+            "'EUDR status for my container', 'aggregated passport'."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "container_id": {
                     "type": "string",
-                    "description": "Container SSCC or container ID",
+                    "description": (
+                        "18-digit SSCC of the shipping container "
+                        "(e.g. '376123450000000001')"
+                    ),
                 },
             },
             "required": ["container_id"],

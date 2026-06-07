@@ -2595,51 +2595,111 @@ class ToolRegistry:
         self, db: Session, args: Dict[str, Any],
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
-        """Get aggregated DPP for a shipping container."""
-        container_id = args.get("container_id")
-        if not container_id:
-            return ("Please specify a container ID.", {"error": "no_container_id"})
+        """
+        Get the aggregated Digital Product Passport for a shipping container.
+        """
+        from datetime import datetime, timezone
+        from database.models import ContainerOffering, AggregationRelationship
+        from dpp.dpp_builder import build_dpp, load_batch_data
 
-        try:
-            from dpp.dpp_builder import build_aggregated_dpp
-            dpp = build_aggregated_dpp(container_id=container_id)
-        except ValueError as e:
-            return (f"Container not found: {e}", {"error": str(e)})
-        except Exception as e:
-            logger.warning(f"Container DPP failed for {container_id}: {e}")
+        container_sscc = args.get("container_id") or args.get("container_sscc")
+        if not container_sscc:
+            return ("Please specify a container ID or SSCC.", {"error": "no_container_id"})
+
+        # 1. Look up the container offering
+        offering = (
+            db.query(ContainerOffering)
+            .filter(ContainerOffering.container_sscc == container_sscc)
+            .first()
+        )
+        if not offering:
             return (
-                f"Could not generate container DPP for '{container_id}'.",
-                {"error": str(e)},
+                f"Container '{container_sscc}' not found.",
+                {"error": "container_not_found"},
             )
 
-        product = dpp.get("productInformation", {})
-        contributors = dpp.get("traceability", {}).get("contributors", [])
-        num_farmers = product.get("numberOfContributors", len(contributors))
-        total_qty_str = product.get("totalQuantity", "0 kg")  # e.g. "1500 kg"
-
-        # Build top-contributor summary (max 5)
-        top = contributors[:5]
-        contrib_lines = []
-        for c in top:
-            pct = c.get("contributionPercent", "?")  # Already formatted, e.g. "33.3%"
-            name = c.get("farmer", "Unknown")
-            contrib_lines.append(f"  • {name}: {pct}")
-        if len(contributors) > 5:
-            contrib_lines.append(f"  … and {len(contributors) - 5} more")
-
-        summary = (
-            f"📦 Container {container_id}:\n"
-            f"• {num_farmers} contributing farmers, {total_qty_str} total\n"
-            + "\n".join(contrib_lines)
+        # 2. Gather child batch IDs from active aggregation relationships
+        agg_rows = (
+            db.query(AggregationRelationship)
+            .filter(
+                AggregationRelationship.parent_sscc == container_sscc,
+                AggregationRelationship.is_active == True,
+            )
+            .all()
         )
+        child_batch_ids = [row.child_identifier for row in agg_rows]
+
+        # 3. Build a DPP per child batch (derive real compliance values)
+        child_dpps = []
+        skipped = 0
+        for bid in child_batch_ids:
+            try:
+                child_batch = load_batch_data(bid)
+                d_risk = "none"
+                d_compliant = True
+                if child_batch and child_batch.farmer:
+                    f = child_batch.farmer
+                    risk = (f.deforestation_risk or "UNKNOWN").lower()
+                    d_risk = risk if risk in ("low", "medium", "high", "unknown") else "none"
+                    d_compliant = (
+                        f.deforestation_compliant is True
+                        and f.latitude is not None
+                        and f.longitude is not None
+                    )
+                dpp = build_dpp(
+                    batch_id=bid,
+                    deforestation_risk=d_risk,
+                    eudr_compliant=d_compliant,
+                )
+                child_dpps.append(dpp)
+            except Exception:
+                logger.warning("Could not build DPP for child batch %s", bid)
+                skipped += 1
+
+        # 4. Build a voice-friendly summary
+        child_count = len(child_dpps)
+        compliance_flags = [
+            d.get("eudrCompliance", {}).get("complianceStatus", "UNKNOWN")
+            for d in child_dpps
+        ]
+        non_compliant = sum(1 for s in compliance_flags if "NON" in s or "RISK" in s)
+
+        summary_lines = [
+            f"📦 Container {container_sscc}:",
+            f"• Variety: {offering.variety or 'N/A'}, "
+            f"{offering.processing_method or 'N/A'}, Grade {offering.grade or 'N/A'}",
+            f"• Total quantity: {offering.total_quantity_kg or 0:,.0f} kg",
+            f"• Status: {offering.status or 'N/A'}",
+            f"• Child batches: {child_count} DPPs built"
+            + (f" ({skipped} skipped)" if skipped else ""),
+        ]
+        if offering.certifications:
+            summary_lines.append(f"• Certifications: {offering.certifications}")
+        if offering.delivery_location:
+            summary_lines.append(f"• Delivery: {offering.delivery_location}")
+        if child_count:
+            if non_compliant == 0:
+                summary_lines.append("• EUDR: ✅ All child batches compliant")
+            else:
+                summary_lines.append(
+                    f"• EUDR: ⚠️ {non_compliant}/{child_count} batch(es) have compliance issues"
+                )
 
         return (
-            summary,
+            "\n".join(summary_lines),
             {
-                "container_id": container_id,
-                "num_farmers": num_farmers,
-                "total_quantity": total_qty_str,
-                "contributors_count": len(contributors),
+                "containerSSCC": container_sscc,
+                "totalQuantityKg": offering.total_quantity_kg,
+                "variety": offering.variety,
+                "processingMethod": offering.processing_method,
+                "grade": offering.grade,
+                "certifications": offering.certifications,
+                "status": offering.status,
+                "dppUrl": offering.dpp_url,
+                "deliveryLocation": offering.delivery_location,
+                "childBatchCount": child_count,
+                "childBatches": child_dpps,
+                "generatedAt": datetime.now(timezone.utc).isoformat(),
             },
         )
 
