@@ -489,9 +489,9 @@ ACCEPT_OFFER = {
         "parameters": {
             "type": "object",
             "properties": {
-                "offer_id": {
-                    "type": "integer",
-                    "description": "The offer ID to accept",
+                "offer_number": {
+                    "type": "string",
+                    "description": "The offer number to accept",
                 },
                 "rfq_id": {
                     "type": "integer",

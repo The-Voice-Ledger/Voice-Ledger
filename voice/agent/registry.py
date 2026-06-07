@@ -2344,6 +2344,22 @@ class ToolRegistry:
         db.flush()  # Ensure acceptance gets an ID (get_db context auto-commits)
 
         coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
+
+        # Send payment instructions to buyer and cooperative
+        try:
+            import asyncio
+            from voice.marketplace.payment_messaging import send_payment_instructions
+            asyncio.run(send_payment_instructions(
+                acceptance=acceptance,
+                offer=offer,
+                rfq=rfq,
+                buyer=user,
+                cooperative_org=coop_org,
+                db=db,
+            ))
+        except Exception as e:
+            print(f"Warning: Failed to send payment instructions: {e}")
+
         return (
             f"Offer accepted! Acceptance {acceptance_number}: "
             f"{quantity_accepted} kg from {coop_org.name if coop_org else 'cooperative'}.",
