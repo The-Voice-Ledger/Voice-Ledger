@@ -1082,6 +1082,53 @@ async def confirm_payment_received(
     })
 
 
+@function_tool(description=(
+    "Raise a payment dispute for an RFQ acceptance. "
+    "Use when payment was not received, wrong amount was sent, or there is "
+    "any other issue with a bank transfer. Sets payment status to DISPUTED "
+    "and notifies both parties. Buyer or cooperative role."
+))
+async def dispute_payment(
+    ctx: RunContext,
+    acceptance_number: Annotated[str, "Acceptance number e.g. ACC-000001"],
+    reason: Annotated[str, "Clear description of the dispute reason"],
+) -> str:
+    return await _exec(ctx, "dispute_payment", {
+        "acceptance_number": acceptance_number,
+        "reason": reason,
+    })
+
+
+@function_tool(description=(
+    "Cooperative confirms the coffee has been shipped to the buyer. "
+    "Transitions delivery status from PREPARING_SHIPMENT to SHIPPED, "
+    "notifies the buyer, and dispatches a SHIPPED webhook to LSPs and "
+    "customs brokers. Cooperative manager role required."
+))
+async def confirm_shipment(
+    ctx: RunContext,
+    acceptance_number: Annotated[str, "Acceptance number e.g. ACC-000001"],
+) -> str:
+    return await _exec(ctx, "confirm_shipment", {
+        "acceptance_number": acceptance_number,
+    })
+
+
+@function_tool(description=(
+    "Buyer confirms the coffee has been received and delivered. "
+    "Transitions delivery status from SHIPPED to DELIVERED, "
+    "notifies the cooperative, and dispatches a DELIVERED webhook. "
+    "Only the buyer who created the RFQ can confirm delivery."
+))
+async def confirm_delivery(
+    ctx: RunContext,
+    acceptance_number: Annotated[str, "Acceptance number e.g. ACC-000001"],
+) -> str:
+    return await _exec(ctx, "confirm_delivery", {
+        "acceptance_number": acceptance_number,
+    })
+
+
 # =====================================================================
 # 10. DeFi FINANCING POOL TOOLS
 # =====================================================================
@@ -1252,6 +1299,9 @@ SETTLEMENT & PAYMENTS
 • Check payment status (check_payment_status)
 • Record cooperative payout (record_cooperative_payout) — admin
 • Confirm payment received (confirm_payment_received) — cooperative
+• Raise a payment dispute (dispute_payment)
+• Confirm coffee has been shipped (confirm_shipment) — cooperative
+• Confirm coffee has been delivered (confirm_delivery) — buyer
 
 DeFi FINANCING
 • Check financing pool stats (check_financing_pool)
@@ -1317,6 +1367,7 @@ ALL_TOOLS = [
     # Settlement (mixed)
     confirm_payment, check_payment_status,
     record_cooperative_payout, confirm_payment_received,
+    dispute_payment, confirm_shipment, confirm_delivery,
     # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
     confirm_trade_delivery, cancel_trade, mark_default,
