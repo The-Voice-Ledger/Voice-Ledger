@@ -1647,6 +1647,64 @@ DISPUTE_PAYMENT = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Tool: confirm_shipment  (WRITE - cooperative confirms coffee has been shipped)
+# ---------------------------------------------------------------------------
+CONFIRM_SHIPMENT = {
+    "type": "function",
+    "function": {
+        "name": "confirm_shipment",
+        "description": (
+            "Cooperative confirms the coffee has been shipped to the buyer. "
+            "Transitions delivery_status from PREPARING_SHIPMENT to SHIPPED, "
+            "notifies the buyer, and dispatches a SHIPPED webhook to LSPs and "
+            "customs brokers. Only cooperative managers can use this. "
+            "Use when user says 'I shipped the coffee', 'coffee is on the way', "
+            "'confirm shipment for ACC-XXXXXX', 'mark as shipped'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to confirm shipment for (e.g. ACC-000001)",
+                },
+            },
+            "required": ["acceptance_number"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: confirm_delivery  (WRITE - buyer confirms coffee has been delivered)
+# ---------------------------------------------------------------------------
+CONFIRM_DELIVERY = {
+    "type": "function",
+    "function": {
+        "name": "confirm_delivery",
+        "description": (
+            "Buyer confirms the coffee has been received and delivered. "
+            "Transitions delivery_status from SHIPPED to DELIVERED, "
+            "notifies the cooperative, and dispatches a DELIVERED webhook. "
+            "Only the buyer who created the RFQ can confirm delivery. "
+            "Use when user says 'coffee arrived', 'I received the shipment', "
+            "'confirm delivery for ACC-XXXXXX', 'mark as delivered'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to confirm delivery for (e.g. ACC-000001)",
+                },
+            },
+            "required": ["acceptance_number"],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -1698,6 +1756,8 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     RECORD_COOPERATIVE_PAYOUT,
     CONFIRM_PAYMENT_RECEIVED,
     DISPUTE_PAYMENT,
+    CONFIRM_SHIPMENT,
+    CONFIRM_DELIVERY,
     # DeFi Financing Pool (Agent #10)
     CHECK_FINANCING_POOL,
     REQUEST_FINANCING_ADVANCE,

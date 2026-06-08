@@ -202,6 +202,8 @@ SETTLEMENT / PAYMENTS:
 • Record that the cooperative has received and forwarded payment to farmers (record_cooperative_payout) - cooperative managers only
 • Confirm receipt of a cooperative payout (confirm_payment_received) - cooperative managers only
 • Raise a payment dispute for an acceptance (dispute_payment) - buyers or cooperatives
+• Confirm coffee has been shipped (confirm_shipment) - cooperative managers only
+• Confirm coffee has been delivered (confirm_delivery) - buyers only
 DeFi FINANCING (USDC advances against confirmed orders):
 • Check financing pool status and available liquidity (check_financing_pool)
 • Request a USDC advance against a shipped container (request_financing_advance) - cooperatives only
