@@ -129,16 +129,18 @@ async def handle_confirm_payment(
                 'parse_mode': 'Markdown'
             }
         
-        # Require receipt photo
+        # Require receipt photo — create a session so the next photo they send is used
         if not photo_url:
+            from voice.telegram.payment_photo_sessions import create_payment_photo_session
+            create_payment_photo_session(user_id, acceptance_number)
             return {
                 'message': (
-                    f"📸 *Receipt Photo Required*\n\n"
-                    f"Please attach a photo of your bank transfer receipt when sending:\n"
-                    f"`/confirm_payment {acceptance_number}`\n\n"
-                    f"This creates a verifiable record for both parties."
+                    f"📸 <b>Receipt Photo Required</b>\n\n"
+                    f"Please send a photo of your bank transfer receipt now.\n"
+                    f"Acceptance: <code>{acceptance_number}</code>\n\n"
+                    f"You have 10 minutes to upload the photo."
                 ),
-                'parse_mode': 'Markdown'
+                'parse_mode': 'HTML'
             }
         
         # Get offer details for amount calculation
@@ -150,12 +152,12 @@ async def handle_confirm_payment(
         
         # Record settlement on blockchain
         settlement_result = None
-        if cooperative_org.wallet_address:
+        if getattr(cooperative_org, 'wallet_address', None):
             try:
                 settlement_manager = SettlementManager()
                 settlement_result = settlement_manager.record_settlement(
                     acceptance_id=acceptance.id,
-                    recipient_address=cooperative_org.wallet_address,
+                    recipient_address=getattr(cooperative_org, 'wallet_address', None),
                     amount_usd=total_amount,
                     payment_method='BANK_TRANSFER'
                 )
@@ -208,9 +210,26 @@ async def handle_confirm_payment(
             f"Check status: `/payment_status {acceptance_number}`"
         )
         
-        # TODO: Send notification to cooperative
-        # notify_cooperative_of_payment_confirmation(acceptance, cooperative_org, total_amount)
-        
+        # Notify cooperative of buyer's payment confirmation
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            coop_managers = db.query(UserIdentity).filter_by(
+                organization_id=cooperative_org.id, role='COOPERATIVE_MANAGER'
+            ).all()
+            notify_msg = (
+                f"💳 <b>Buyer Confirmed Payment</b>\n\n"
+                f"Acceptance: <code>{acceptance_number}</code>\n"
+                f"Amount: ${total_amount:,.2f} USD\n"
+                f"Receipt photo: Uploaded\n\n"
+                f"Please check your bank account and confirm receipt:\n"
+                f"<code>/confirm_receipt {acceptance_number}</code>"
+            )
+            for mgr in coop_managers:
+                if mgr.telegram_user_id:
+                    send_telegram_message(mgr.telegram_user_id, notify_msg, parse_mode='HTML')
+        except Exception as e:
+            logger.warning("Failed to notify cooperative of payment confirmation: %s", e)
+
         return {
             'message': response_message,
             'parse_mode': 'Markdown'
@@ -375,9 +394,22 @@ async def handle_confirm_receipt(
             f"💡 Payment transaction complete!"
         )
         
-        # TODO: Send notification to buyer
-        # notify_buyer_of_receipt_confirmation(acceptance, buyer, total_amount)
-        
+        # Notify buyer that receipt was confirmed and shipment is starting
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            if buyer and buyer.telegram_user_id:
+                notify_msg = (
+                    f"✅ <b>Payment Received — Shipment Starting!</b>\n\n"
+                    f"Acceptance: <code>{acceptance_number}</code>\n"
+                    f"Amount: ${total_amount:,.2f} USD\n\n"
+                    f"The cooperative has confirmed receipt of your payment.\n"
+                    f"Your coffee shipment is now being prepared.\n\n"
+                    f"Track status: <code>/payment_status {acceptance_number}</code>"
+                )
+                send_telegram_message(buyer.telegram_user_id, notify_msg, parse_mode='HTML')
+        except Exception as e:
+            logger.warning("Failed to notify buyer of receipt confirmation: %s", e)
+
         return {
             'message': response_message,
             'parse_mode': 'Markdown'
@@ -625,13 +657,12 @@ async def handle_confirm_pool_payment(
 
         # Record settlement on blockchain
         settlement_result = None
-        if coop and coop.wallet_address:
+        if coop and getattr(coop, 'wallet_address', None):
             try:
                 sm = SettlementManager()
                 settlement_result = sm.record_commitment_settlement(
                     commitment_id=commitment.id,
-                    recipient_address=coop.wallet_address,
-                    amount_usd=commitment.total_amount,
+                    recipient_address=getattr(coop, 'wallet_address', None),
                     payment_method="BANK_TRANSFER",
                 )
                 commitment.settlement_tx_hash = settlement_result["tx_hash"]
@@ -791,7 +822,7 @@ async def handle_record_cooperative_payout(
         if not coop:
             return {"message": "❌ Could not resolve cooperative."}
 
-        if not coop.wallet_address:
+        if not getattr(coop, 'wallet_address', None):
             return {
                 "message": (
                     f"❌ Cooperative *{coop.name}* has no wallet address. "
@@ -815,13 +846,13 @@ async def handle_record_cooperative_payout(
         if record_type == "acceptance":
             result = sm.record_cooperative_payout_for_acceptance(
                 acceptance_id=record_id,
-                recipient_address=coop.wallet_address,
+                recipient_address=getattr(coop, 'wallet_address', None),
                 amount_usd=amount,
             )
         else:
             result = sm.record_cooperative_payout_for_commitment(
                 commitment_id=record_id,
-                recipient_address=coop.wallet_address,
+                recipient_address=getattr(coop, 'wallet_address', None),
                 amount_usd=amount,
             )
 

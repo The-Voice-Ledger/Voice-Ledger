@@ -900,6 +900,25 @@ class ToolRegistry:
             if settlement_result:
                 msg += f" Blockchain TX: {settlement_result['tx_hash'][:16]}..."
 
+            # Notify cooperative managers
+            try:
+                from voice.marketplace.payment_messaging import send_telegram_message
+                coop_managers = db.query(UserIdentity).filter_by(
+                    organization_id=coop.id, role="COOPERATIVE_MANAGER"
+                ).all() if coop else []
+                notify_msg = (
+                    f"💳 <b>Buyer Confirmed Payment</b>\n\n"
+                    f"Acceptance: <code>{a.acceptance_number}</code>\n"
+                    f"Amount: ${total_amount:,.2f} USD\n"
+                    f"Please check your bank account and confirm receipt:\n"
+                    f"<code>/confirm_receipt {a.acceptance_number}</code>"
+                )
+                for mgr in coop_managers:
+                    if mgr.telegram_user_id:
+                        send_telegram_message(mgr.telegram_user_id, notify_msg, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("Failed to notify cooperative of payment: %s", e)
+
             return (msg, {
                 "acceptance_number": a.acceptance_number,
                 "amount": total_amount,
@@ -1174,6 +1193,15 @@ class ToolRegistry:
             if a.payment_status == "RECEIVED":
                 return ("Receipt already confirmed.", {"error": "already_confirmed"})
 
+            # Guard: buyer must confirm payment first (mirrors payment_handler.py)
+            if a.payment_status != "CONFIRMED_BY_BUYER":
+                return (
+                    f"Cannot confirm receipt yet — buyer has not confirmed payment. "
+                    f"Current status: {a.payment_status}. "
+                    f"Ask the buyer to confirm with: /confirm_payment {a.acceptance_number}",
+                    {"error": "buyer_not_confirmed", "payment_status": a.payment_status},
+                )
+
             a.payment_status = "RECEIVED"
             a.payment_received_by_coop_at = datetime.utcnow()
             a.payment_released_at = datetime.utcnow()
@@ -1195,6 +1223,25 @@ class ToolRegistry:
                 })
             except Exception:
                 pass  # webhook delivery is best-effort
+
+            # Notify buyer that receipt was confirmed and shipment is being prepared
+            try:
+                from database.models import RFQ
+                from voice.marketplace.payment_messaging import send_telegram_message
+                rfq = db.query(RFQ).filter_by(id=a.rfq_id).first()
+                buyer = db.query(UserIdentity).filter_by(id=rfq.buyer_id).first() if rfq else None
+                if buyer and buyer.telegram_user_id:
+                    notify_msg = (
+                        f"✅ <b>Payment Received — Shipment Starting!</b>\n\n"
+                        f"Acceptance: <code>{a.acceptance_number}</code>\n"
+                        f"Amount: ${total:,.2f} USD\n\n"
+                        f"The cooperative has confirmed receipt of your payment.\n"
+                        f"Your coffee shipment is now being prepared.\n\n"
+                        f"Track status: <code>/payment_status {a.acceptance_number}</code>"
+                    )
+                    send_telegram_message(buyer.telegram_user_id, notify_msg, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("Failed to notify buyer of receipt confirmation: %s", e)
 
             return (
                 f"Receipt confirmed for acceptance {a.acceptance_number} "

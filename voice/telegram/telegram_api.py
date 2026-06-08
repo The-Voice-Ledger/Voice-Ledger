@@ -328,7 +328,62 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         photo_file_id = photo.get('file_id')
         
         logger.info(f"User {user_id} sent photo: {photo_file_id}")
-        
+
+        # Check caption for /confirm_payment command — must be Priority 0
+        caption = message.get('caption', '') or ''
+
+        # Helper: download photo URL from Telegram
+        async def _get_photo_url(file_id: str) -> str:
+            import requests as _req
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            info = _req.get(
+                f"https://api.telegram.org/bot{bot_token}/getFile",
+                params={'file_id': file_id},
+                timeout=10,
+            ).json()
+            file_path = info['result']['file_path']
+            return f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+
+        # Priority 0: Payment receipt photo (caption = /confirm_payment ACC-XXXXXX)
+        if caption.strip().lower().startswith('/confirm_payment'):
+            from voice.telegram.payment_handler import handle_confirm_payment
+            photo_url = await _get_photo_url(photo_file_id)
+            response = await handle_confirm_payment(
+                user_id=int(user_id),
+                message_text=caption.strip(),
+                photo_url=photo_url,
+            )
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "Payment receipt processed"}
+
+        # Priority 1: Pending payment photo session (/confirm_payment sent without photo)
+        from voice.telegram.payment_photo_sessions import get_payment_photo_session, clear_payment_photo_session
+        payment_session = get_payment_photo_session(user_id)
+        if payment_session:
+            from voice.telegram.payment_handler import handle_confirm_payment
+            photo_url = await _get_photo_url(photo_file_id)
+            acceptance_number = payment_session["acceptance_number"]
+            clear_payment_photo_session(user_id)
+            response = await handle_confirm_payment(
+                user_id=int(user_id),
+                message_text=f"/confirm_payment {acceptance_number}",
+                photo_url=photo_url,
+            )
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "Payment receipt (session) processed"}
+
         # Check if user is in registration flow expecting a photo
         from voice.telegram.register_handler import (
             conversation_states, 
@@ -542,7 +597,34 @@ async def handle_document_message(update_data: Dict[str, Any]) -> Dict[str, Any]
         file_name = document.get('file_name', 'unknown')
         
         logger.info(f"User {user_id} sent document: {file_name} ({mime_type})")
-        
+
+        # Check caption for /confirm_payment — Priority 0
+        doc_caption = message.get('caption', '') or ''
+        if doc_caption.strip().lower().startswith('/confirm_payment'):
+            from voice.telegram.payment_handler import handle_confirm_payment
+            import requests as _req
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            info = _req.get(
+                f"https://api.telegram.org/bot{bot_token}/getFile",
+                params={'file_id': document_file_id},
+                timeout=10,
+            ).json()
+            file_path = info['result']['file_path']
+            photo_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+            response = await handle_confirm_payment(
+                user_id=int(user_id),
+                message_text=doc_caption.strip(),
+                photo_url=photo_url,
+            )
+            processor = get_processor()
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "Payment receipt (document) processed"}
+
         # Check if user is in registration flow expecting a photo
         from voice.telegram.register_handler import (
             conversation_states, 
@@ -2581,6 +2663,64 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             
             return {"ok": True, "message": "Registration response sent"}
         
+        # Payment coordination commands
+        if text.startswith('/confirm_payment'):
+            from voice.telegram.payment_handler import handle_confirm_payment
+            response = await handle_confirm_payment(
+                user_id=int(user_id),
+                message_text=text,
+                photo_url=None,  # photo handled separately via handle_photo_message
+            )
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "confirm_payment processed"}
+
+        if text.startswith('/confirm_receipt'):
+            from voice.telegram.payment_handler import handle_confirm_receipt
+            response = await handle_confirm_receipt(
+                user_id=int(user_id),
+                message_text=text,
+            )
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "confirm_receipt processed"}
+
+        if text.startswith('/payment_status'):
+            from voice.telegram.payment_handler import handle_payment_status
+            response = await handle_payment_status(
+                user_id=int(user_id),
+                message_text=text,
+            )
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "payment_status processed"}
+
+        if text.startswith('/dispute_payment'):
+            from voice.telegram.payment_handler import handle_dispute_payment
+            response = await handle_dispute_payment(
+                user_id=int(user_id),
+                message_text=text,
+            )
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "dispute_payment processed"}
+
         # Natural text query processing (non-slash commands)
         # Process like voice input: through conversational AI with NLU
         if not text.startswith('/'):
