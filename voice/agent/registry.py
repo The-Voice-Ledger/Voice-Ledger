@@ -2672,18 +2672,83 @@ class ToolRegistry:
 
         coop_org = db.query(Organization).filter_by(id=offer.cooperative_id).first()
 
-        # Send payment instructions to buyer and cooperative
+        # Send payment instructions to buyer and cooperative.
+        # Calls the synchronous Telegram helper directly — no async needed
+        # since send_telegram_message uses requests (blocking HTTP).
         try:
-            import asyncio
-            from voice.marketplace.payment_messaging import send_payment_instructions
-            asyncio.run(send_payment_instructions(
-                acceptance=acceptance,
-                offer=offer,
-                rfq=rfq,
-                buyer=user,
-                cooperative_org=coop_org,
-                db=db,
-            ))
+            from voice.marketplace.payment_messaging import send_telegram_message
+            total_amount = quantity_accepted * offer.price_per_kg
+
+            # Build buyer org for message context
+            buyer_org = db.query(Organization).filter_by(
+                id=user.organization_id
+            ).first() if user.organization_id else None
+
+            bank_name = getattr(coop_org, 'bank_name', None) if coop_org else None
+            if bank_name:
+                bank_details = (
+                    f"<b>Bank Details:</b>\n"
+                    f"Bank: {bank_name}\n"
+                    f"Account #: <code>{getattr(coop_org, 'bank_account_number', 'N/A')}</code>\n"
+                    f"Account Name: {getattr(coop_org, 'bank_account_name', coop_org.name if coop_org else 'N/A')}\n"
+                    f"Reference: <b>{acceptance_number}</b>\n"
+                )
+            else:
+                bank_details = (
+                    f"⚠️ <b>Bank details not on file</b>\n"
+                    f"Contact cooperative directly:\n"
+                    f"Phone: {getattr(coop_org, 'phone_number', 'N/A') if coop_org else 'N/A'}\n"
+                )
+
+            buyer_msg = (
+                f"✅ <b>Offer Accepted Successfully!</b>\n\n"
+                f"📋 <b>Transaction Details</b>\n"
+                f"Acceptance #: <code>{acceptance_number}</code>\n"
+                f"Cooperative: <b>{coop_org.name if coop_org else 'N/A'}</b>\n\n"
+                f"📦 <b>Order Details</b>\n"
+                f"Quantity: {quantity_accepted:,.0f} kg\n"
+                f"Price per kg: ${offer.price_per_kg:.2f}\n"
+                f"<b>Total Amount: ${total_amount:,.2f} USD</b>\n"
+                f"Payment Terms: {acceptance.payment_terms or 'Standard'}\n\n"
+                f"💰 <b>PAYMENT INSTRUCTIONS</b>\n\n"
+                f"{bank_details}\n"
+                f"⚠️ <b>IMPORTANT:</b>\n"
+                f"• Include reference number: <code>{acceptance_number}</code>\n"
+                f"• Payment expected within 5 business days\n\n"
+                f"1️⃣ Transfer ${total_amount:,.2f} to cooperative's bank account\n"
+                f"2️⃣ After payment, send: <code>/confirm_payment {acceptance_number}</code> with receipt photo\n"
+                f"3️⃣ Cooperative will verify and confirm receipt\n"
+                f"4️⃣ Coffee shipment begins to {rfq.delivery_location}\n\n"
+                f"💡 Track: <code>/payment_status {acceptance_number}</code>"
+            )
+            if user.telegram_user_id:
+                send_telegram_message(user.telegram_user_id, buyer_msg, parse_mode='HTML')
+
+            # Notify cooperative managers
+            coop_managers = db.query(UserIdentity).filter_by(
+                organization_id=offer.cooperative_id, role='COOPERATIVE_MANAGER'
+            ).all() if offer.cooperative_id else []
+            buyer_name = buyer_org.name if buyer_org else (
+                f"{user.telegram_first_name or ''} {user.telegram_last_name or ''}".strip()
+            )
+            coop_msg = (
+                f"🎉 <b>Your Offer Has Been Accepted!</b>\n\n"
+                f"📋 <b>Transaction Details</b>\n"
+                f"Acceptance #: <code>{acceptance_number}</code>\n"
+                f"Buyer: <b>{buyer_name}</b>\n\n"
+                f"📦 <b>Order Details</b>\n"
+                f"Quantity: {quantity_accepted:,.0f} kg\n"
+                f"Price per kg: ${offer.price_per_kg:.2f}\n"
+                f"<b>Total Amount: ${total_amount:,.2f} USD</b>\n"
+                f"Delivery to: {rfq.delivery_location}\n\n"
+                f"⏳ Awaiting buyer bank transfer.\n"
+                f"5️⃣ Confirm receipt: <code>/confirm_receipt {acceptance_number}</code>\n\n"
+                f"💡 Track: <code>/payment_status {acceptance_number}</code>"
+            )
+            for mgr in coop_managers:
+                if mgr.telegram_user_id:
+                    send_telegram_message(mgr.telegram_user_id, coop_msg, parse_mode='HTML')
+
         except Exception as e:
             print(f"Warning: Failed to send payment instructions: {e}")
 
