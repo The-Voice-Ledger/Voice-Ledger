@@ -813,7 +813,7 @@ class ToolRegistry:
                     sm = SettlementManager()
                     settlement_result = sm.record_commitment_settlement(
                         commitment_id=c.id,
-                        recipient_address=coop.wallet_address,
+                        recipient_address=getattr(coop, "wallet_address", None),
                         amount_usd=c.total_amount,
                     )
                     c.settlement_tx_hash = settlement_result["tx_hash"]
@@ -838,6 +838,25 @@ class ToolRegistry:
             )
             if settlement_result:
                 msg += f" Blockchain TX: {settlement_result['tx_hash'][:16]}..."
+
+            # Notify cooperative managers
+            try:
+                from voice.marketplace.payment_messaging import send_telegram_message
+                coop_managers = db.query(UserIdentity).filter_by(
+                    organization_id=coop.id, role="COOPERATIVE_MANAGER"
+                ).all() if coop else []
+                notify_msg = (
+                    f"💳 <b>Buyer Confirmed Payment</b>\n\n"
+                    f"Commitment: <code>#{c.id}</code>\n"
+                    f"Amount: ${c.total_amount:,.2f} USD\n"
+                    f"Reference: {payment_reference or 'Via voice agent'}\n"
+                    f"Please check your bank account and confirm receipt."
+                )
+                for mgr in coop_managers:
+                    if mgr.telegram_user_id:
+                        send_telegram_message(mgr.telegram_user_id, notify_msg, parse_mode="HTML")
+            except Exception as e:
+                logger.warning("Failed to notify cooperative of commitment payment: %s", e)
 
             return (msg, {
                 "commitment_id": c.id,
@@ -875,7 +894,7 @@ class ToolRegistry:
                     sm = SettlementManager()
                     settlement_result = sm.record_settlement(
                         acceptance_id=a.id,
-                        recipient_address=coop.wallet_address,
+                        recipient_address=getattr(coop, "wallet_address", None),
                         amount_usd=total_amount,
                     )
                     a.settlement_tx_hash = settlement_result["tx_hash"]
@@ -910,6 +929,7 @@ class ToolRegistry:
                     f"💳 <b>Buyer Confirmed Payment</b>\n\n"
                     f"Acceptance: <code>{a.acceptance_number}</code>\n"
                     f"Amount: ${total_amount:,.2f} USD\n"
+                    f"Reference: {payment_reference or 'Via voice agent'}\n"
                     f"Please check your bank account and confirm receipt:\n"
                     f"<code>/confirm_receipt {a.acceptance_number}</code>"
                 )
@@ -1097,13 +1117,13 @@ class ToolRegistry:
             if record_type == "acceptance":
                 result = sm.record_cooperative_payout_for_acceptance(
                     acceptance_id=record_id,
-                    recipient_address=coop.wallet_address,
+                    recipient_address=getattr(coop, "wallet_address", None),
                     amount_usd=amount,
                 )
             else:
                 result = sm.record_cooperative_payout_for_commitment(
                     commitment_id=record_id,
-                    recipient_address=coop.wallet_address,
+                    recipient_address=getattr(coop, "wallet_address", None),
                     amount_usd=amount,
                 )
         except Exception as e:
