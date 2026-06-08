@@ -90,6 +90,7 @@ class ToolRegistry:
         self._tools["check_payment_status"] = self._check_payment_status
         self._tools["record_cooperative_payout"] = self._record_cooperative_payout
         self._tools["confirm_payment_received"] = self._confirm_payment_received
+        self._tools["dispute_payment"] = self._dispute_payment
 
         # DeFi Financing Pool tools (Agent #10)
         self._tools["check_financing_pool"] = self._check_financing_pool
@@ -1278,6 +1279,82 @@ class ToolRegistry:
         return (
             "Please provide a commitment_id or acceptance_number.",
             {"error": "missing_id"},
+        )
+
+    def _dispute_payment(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Raise a payment dispute for an RFQ acceptance.
+        Mirrors handle_dispute_payment in telegram/payment_handler.py.
+        """
+        from database.models import RFQAcceptance, UserIdentity
+        from datetime import datetime
+
+        acceptance_number = args.get("acceptance_number", "").upper()
+        reason = args.get("reason", "").strip()
+
+        if not acceptance_number:
+            return ("Please provide an acceptance_number.", {"error": "missing_acceptance"})
+        if not reason:
+            return ("Please provide a reason for the dispute.", {"error": "missing_reason"})
+
+        a = db.query(RFQAcceptance).filter_by(
+            acceptance_number=acceptance_number
+        ).first()
+        if not a:
+            return (f"Acceptance {acceptance_number} not found.", {"error": "not_found"})
+
+        if a.payment_status == "DISPUTED":
+            return (
+                f"Acceptance {acceptance_number} is already disputed: {a.payment_dispute_reason}",
+                {"error": "already_disputed"},
+            )
+
+        a.payment_status = "DISPUTED"
+        a.payment_dispute_reason = reason
+        a.payment_disputed_at = datetime.utcnow()
+        db.commit()
+
+        # Notify admins / both parties via Telegram
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            from database.models import RFQOffer, Organization
+
+            offer = db.query(RFQOffer).filter_by(id=a.offer_id).first()
+            coop_managers = db.query(UserIdentity).filter_by(
+                organization_id=offer.cooperative_id, role="COOPERATIVE_MANAGER"
+            ).all() if offer else []
+
+            from database.models import RFQ
+            rfq = db.query(RFQ).filter_by(id=a.rfq_id).first()
+            buyer = db.query(UserIdentity).filter_by(id=rfq.buyer_id).first() if rfq else None
+
+            notify_msg = (
+                f"⚠️ <b>Payment Dispute Raised</b>\n\n"
+                f"Acceptance: <code>{acceptance_number}</code>\n"
+                f"Reason: {reason}\n\n"
+                f"An administrator will review and contact both parties.\n"
+                f"Evidence: receipt={'Yes' if a.payment_receipt_url else 'No'}, "
+                f"blockchain={'Yes' if a.settlement_tx_hash else 'No'}"
+            )
+            for mgr in coop_managers:
+                if mgr.telegram_user_id:
+                    send_telegram_message(mgr.telegram_user_id, notify_msg, parse_mode="HTML")
+            if buyer and buyer.telegram_user_id:
+                send_telegram_message(buyer.telegram_user_id, notify_msg, parse_mode="HTML")
+        except Exception as e:
+            logger.warning("Failed to notify parties of dispute: %s", e)
+
+        return (
+            f"⚠️ Dispute raised for acceptance {acceptance_number}: {reason}. "
+            f"An administrator will review and contact both parties.",
+            {
+                "acceptance_number": acceptance_number,
+                "payment_status": "DISPUTED",
+                "dispute_reason": reason,
+            },
         )
 
     # ------------------------------------------------------------------

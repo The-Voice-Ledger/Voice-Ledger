@@ -1610,6 +1610,43 @@ GET_DON_PROVENANCE_METRICS = {
 # ---------------------------------------------------------------------------
 # All tools grouped
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Tool: dispute_payment  (WRITE - raise a payment dispute)
+# ---------------------------------------------------------------------------
+DISPUTE_PAYMENT = {
+    "type": "function",
+    "function": {
+        "name": "dispute_payment",
+        "description": (
+            "Raise a payment dispute for an RFQ acceptance. Use when a buyer or "
+            "cooperative reports a problem with a payment — e.g. payment not received "
+            "after several days, wrong amount, or bank transfer bounced. "
+            "Sets payment_status to DISPUTED and records the reason. "
+            "Use when user says 'dispute payment', 'payment not received', "
+            "'raise dispute', 'payment issue for ACC-XXXXXX'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "acceptance_number": {
+                    "type": "string",
+                    "description": "Acceptance number to dispute (e.g. ACC-000001)",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "Clear description of the dispute reason, "
+                        "e.g. 'Payment not received after 7 days' or 'Wrong amount transferred'"
+                    ),
+                },
+            },
+            "required": ["acceptance_number", "reason"],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -1660,6 +1697,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_PAYMENT_STATUS,
     RECORD_COOPERATIVE_PAYOUT,
     CONFIRM_PAYMENT_RECEIVED,
+    DISPUTE_PAYMENT,
     # DeFi Financing Pool (Agent #10)
     CHECK_FINANCING_POOL,
     REQUEST_FINANCING_ADVANCE,
