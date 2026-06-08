@@ -1197,3 +1197,126 @@ async def handle_voice_rfq_creation(
     
     finally:
         db.close()
+
+
+async def handle_confirm_shipment(
+    user_id: int,
+    message_text: str
+) -> Dict[str, Any]:
+    """
+    Cooperative confirms the coffee has been shipped.
+
+    Usage: /confirm_shipment ACC-000001
+
+    Transitions delivery_status: PREPARING_SHIPMENT → SHIPPED
+    Notifies buyer and dispatches SHIPPED webhook to LSPs / customs brokers.
+    """
+    from database.models import RFQAcceptance, RFQOffer
+
+    db = SessionLocal()
+    try:
+        parts = message_text.strip().split()
+        if len(parts) < 2:
+            return {
+                'message': (
+                    "❌ <b>Invalid Format</b>\n\n"
+                    "Usage: <code>/confirm_shipment ACC-000001</code>"
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        acceptance_number = parts[1].upper()
+
+        user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+        if not user:
+            return {'message': "❌ User not found. Please /register first."}
+
+        acceptance = db.query(RFQAcceptance).filter_by(
+            acceptance_number=acceptance_number
+        ).first()
+        if not acceptance:
+            return {
+                'message': f"❌ Acceptance <code>{acceptance_number}</code> not found.",
+                'parse_mode': 'HTML'
+            }
+
+        offer = db.query(RFQOffer).filter_by(id=acceptance.offer_id).first()
+        if not offer or user.organization_id != offer.cooperative_id:
+            return {'message': "❌ Access denied — you are not the cooperative for this acceptance."}
+
+        if acceptance.delivery_status == 'SHIPPED':
+            return {
+                'message': (
+                    f"ℹ️ Shipment already confirmed for <code>{acceptance_number}</code>.\n"
+                    f"Track status: <code>/payment_status {acceptance_number}</code>"
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        if acceptance.delivery_status not in ('PREPARING_SHIPMENT',):
+            return {
+                'message': (
+                    f"❌ Cannot confirm shipment — current status is "
+                    f"<b>{acceptance.delivery_status}</b>.\n"
+                    f"Payment must be received before shipping."
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        # Transition to SHIPPED
+        acceptance.delivery_status = 'SHIPPED'
+        acceptance.updated_at = datetime.utcnow()
+        db.commit()
+
+        rfq = db.query(RFQ).filter_by(id=acceptance.rfq_id).first()
+        total_amount = acceptance.quantity_accepted_kg * offer.price_per_kg
+
+        # Dispatch SHIPPED webhook to LSPs / customs brokers
+        try:
+            from voice.service.webhook_dispatcher import dispatch_webhook_sync
+            container = getattr(acceptance, 'container_offering', None)
+            dispatch_webhook_sync("SHIPPED", {
+                "acceptance_number": acceptance_number,
+                "container_sscc": getattr(container, 'container_sscc', None) if container else None,
+                "quantity_kg": acceptance.quantity_accepted_kg,
+                "delivery_location": rfq.delivery_location if rfq else None,
+                "total_amount_usd": total_amount,
+                "dpp_url": f"/api/dpp/batch/{acceptance_number}",
+            })
+        except Exception:
+            pass  # webhook delivery is best-effort
+
+        # Notify buyer
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            buyer = db.query(UserIdentity).filter_by(
+                id=rfq.buyer_id
+            ).first() if rfq else None
+            if buyer and buyer.telegram_user_id:
+                notify_msg = (
+                    f"🚚 <b>Your Coffee Has Been Shipped!</b>\n\n"
+                    f"Acceptance: <code>{acceptance_number}</code>\n"
+                    f"Quantity: {acceptance.quantity_accepted_kg:,.0f} kg\n"
+                    f"Destination: {rfq.delivery_location if rfq else 'N/A'}\n\n"
+                    f"Track status: <code>/payment_status {acceptance_number}</code>"
+                )
+                send_telegram_message(buyer.telegram_user_id, notify_msg, parse_mode='HTML')
+        except Exception as e:
+            logger.warning("Failed to notify buyer of shipment: %s", e)
+
+        return {
+            'message': (
+                f"✅ <b>Shipment Confirmed!</b>\n\n"
+                f"Acceptance: <code>{acceptance_number}</code>\n"
+                f"Quantity: {acceptance.quantity_accepted_kg:,.0f} kg\n"
+                f"Destination: {rfq.delivery_location if rfq else 'N/A'}\n\n"
+                f"Buyer has been notified. Delivery status → <b>SHIPPED</b>."
+            ),
+            'parse_mode': 'HTML'
+        }
+
+    except Exception as e:
+        logger.error(f"Error in handle_confirm_shipment: {e}", exc_info=True)
+        return {'message': f"❌ Error confirming shipment: {str(e)}"}
+    finally:
+        db.close()
