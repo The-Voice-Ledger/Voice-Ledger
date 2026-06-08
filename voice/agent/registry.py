@@ -2605,7 +2605,7 @@ class ToolRegistry:
         if offer.status != "PENDING":
             return (f"Offer is {offer.status}, cannot accept.", {"error": "offer_not_pending"})
 
-        quantity_accepted = args.get("quantity_accepted_kg", offer.quantity_offered_kg)
+        quantity_accepted = args.get("quantity_accepted_kg") or offer.quantity_offered_kg
         if quantity_accepted > offer.quantity_offered_kg:
             return (
                 f"Cannot accept more than offered ({offer.quantity_offered_kg} kg).",
@@ -3216,7 +3216,7 @@ class ToolRegistry:
             )
 
         # Perform verification
-        verified_quantity = args.get("verified_quantity_kg", batch.quantity_kg)
+        verified_quantity = args.get("verified_quantity_kg") or batch.quantity_kg
         quality_notes = args.get("quality_notes")
 
         batch.status = "VERIFIED"

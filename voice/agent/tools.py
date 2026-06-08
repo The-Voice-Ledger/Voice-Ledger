@@ -491,11 +491,7 @@ ACCEPT_OFFER = {
             "properties": {
                 "offer_number": {
                     "type": "string",
-                    "description": "The offer number to accept",
-                },
-                "rfq_id": {
-                    "type": "integer",
-                    "description": "RFQ ID the offer belongs to",
+                    "description": "The offer number to accept (e.g. OFF-000001)",
                 },
                 "quantity_accepted_kg": {
                     "type": "number",
@@ -509,7 +505,7 @@ ACCEPT_OFFER = {
                     "description": "Payment terms: NET_30, NET_60, CASH_ON_DELIVERY",
                 },
             },
-            "required": ["offer_id", "rfq_id"],
+            "required": ["offer_number"],
         },
     },
 }
