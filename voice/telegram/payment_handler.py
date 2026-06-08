@@ -390,7 +390,7 @@ async def handle_confirm_receipt(
             f"1. Prepare coffee shipment ({acceptance.quantity_accepted_kg:,.0f} kg)\n"
             f"2. Ship to: {rfq.delivery_location}\n"
             f"3. Confirm shipment with `/confirm_shipment {acceptance_number}`\n"
-            f"4. Buyer will confirm delivery\n\n"
+            f"4. Buyer confirms delivery with `/confirm_delivery {acceptance_number}`\n\n"
             f"💡 Payment transaction complete!"
         )
         

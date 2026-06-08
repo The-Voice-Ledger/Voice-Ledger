@@ -2735,6 +2735,20 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             return {"ok": True, "message": "confirm_shipment processed"}
 
+        if text.startswith('/confirm_delivery'):
+            from voice.telegram.rfq_handler import handle_confirm_delivery
+            response = await handle_confirm_delivery(
+                user_id=int(user_id),
+                message_text=text,
+            )
+            await processor.send_notification(
+                channel_name='telegram',
+                user_id=user_id,
+                message=response['message'],
+                parse_mode=response.get('parse_mode'),
+            )
+            return {"ok": True, "message": "confirm_delivery processed"}
+
         # Natural text query processing (non-slash commands)
         # Process like voice input: through conversational AI with NLU
         if not text.startswith('/'):

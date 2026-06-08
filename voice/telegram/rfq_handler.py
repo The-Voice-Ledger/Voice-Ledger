@@ -1320,3 +1320,133 @@ async def handle_confirm_shipment(
         return {'message': f"❌ Error confirming shipment: {str(e)}"}
     finally:
         db.close()
+
+
+async def handle_confirm_delivery(
+    user_id: int,
+    message_text: str
+) -> Dict[str, Any]:
+    """
+    Buyer confirms coffee has been delivered.
+
+    Usage: /confirm_delivery ACC-000001
+
+    Transitions delivery_status: SHIPPED → DELIVERED
+    Notifies cooperative and dispatches DELIVERED webhook.
+    """
+    from database.models import RFQAcceptance, RFQOffer
+
+    db = SessionLocal()
+    try:
+        parts = message_text.strip().split()
+        if len(parts) < 2:
+            return {
+                'message': (
+                    "❌ <b>Invalid Format</b>\n\n"
+                    "Usage: <code>/confirm_delivery ACC-000001</code>"
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        acceptance_number = parts[1].upper()
+
+        user = db.query(UserIdentity).filter_by(telegram_user_id=str(user_id)).first()
+        if not user:
+            return {'message': "❌ User not found. Please /register first."}
+
+        acceptance = db.query(RFQAcceptance).filter_by(
+            acceptance_number=acceptance_number
+        ).first()
+        if not acceptance:
+            return {
+                'message': f"❌ Acceptance <code>{acceptance_number}</code> not found.",
+                'parse_mode': 'HTML'
+            }
+
+        # Verify user is the buyer
+        rfq = db.query(RFQ).filter_by(id=acceptance.rfq_id).first()
+        if not rfq or rfq.buyer_id != user.id:
+            return {'message': "❌ Access denied — you are not the buyer for this acceptance."}
+
+        if acceptance.delivery_status == 'DELIVERED':
+            return {
+                'message': (
+                    f"ℹ️ Delivery already confirmed for <code>{acceptance_number}</code>.\n"
+                    f"Track status: <code>/payment_status {acceptance_number}</code>"
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        if acceptance.delivery_status != 'SHIPPED':
+            return {
+                'message': (
+                    f"❌ Cannot confirm delivery — current status is "
+                    f"<b>{acceptance.delivery_status}</b>.\n"
+                    f"Cooperative must confirm shipment first with "
+                    f"<code>/confirm_shipment {acceptance_number}</code>."
+                ),
+                'parse_mode': 'HTML'
+            }
+
+        # Transition to DELIVERED
+        acceptance.delivery_status = 'DELIVERED'
+        acceptance.delivered_at = datetime.utcnow()
+        acceptance.updated_at = datetime.utcnow()
+        db.commit()
+
+        offer = db.query(RFQOffer).filter_by(id=acceptance.offer_id).first()
+        total_amount = acceptance.quantity_accepted_kg * offer.price_per_kg if offer else 0
+
+        # Dispatch DELIVERED webhook to LSPs / customs brokers
+        try:
+            from voice.service.webhook_dispatcher import dispatch_webhook_sync
+            container = getattr(acceptance, 'container_offering', None)
+            dispatch_webhook_sync("DELIVERED", {
+                "acceptance_number": acceptance_number,
+                "container_sscc": getattr(container, 'container_sscc', None) if container else None,
+                "quantity_kg": acceptance.quantity_accepted_kg,
+                "delivery_location": rfq.delivery_location,
+                "total_amount_usd": total_amount,
+                "delivered_at": acceptance.delivered_at.isoformat(),
+                "dpp_url": f"/api/dpp/batch/{acceptance_number}",
+            })
+        except Exception:
+            pass  # webhook delivery is best-effort
+
+        # Notify cooperative managers
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            if offer:
+                coop_managers = db.query(UserIdentity).filter_by(
+                    organization_id=offer.cooperative_id,
+                    role='COOPERATIVE_MANAGER'
+                ).all()
+                notify_msg = (
+                    f"✅ <b>Coffee Delivery Confirmed by Buyer!</b>\n\n"
+                    f"Acceptance: <code>{acceptance_number}</code>\n"
+                    f"Quantity: {acceptance.quantity_accepted_kg:,.0f} kg\n"
+                    f"Amount: ${total_amount:,.2f} USD\n\n"
+                    f"Transaction complete. 🎉"
+                )
+                for mgr in coop_managers:
+                    if mgr.telegram_user_id:
+                        send_telegram_message(mgr.telegram_user_id, notify_msg, parse_mode='HTML')
+        except Exception as e:
+            logger.warning("Failed to notify cooperative of delivery: %s", e)
+
+        return {
+            'message': (
+                f"✅ <b>Delivery Confirmed!</b>\n\n"
+                f"Acceptance: <code>{acceptance_number}</code>\n"
+                f"Quantity: {acceptance.quantity_accepted_kg:,.0f} kg\n"
+                f"Delivered to: {rfq.delivery_location}\n\n"
+                f"Cooperative has been notified. Transaction complete! 🎉"
+            ),
+            'parse_mode': 'HTML'
+        }
+
+    except Exception as e:
+        logger.error(f"Error in handle_confirm_delivery: {e}", exc_info=True)
+        return {'message': f"❌ Error confirming delivery: {str(e)}"}
+    finally:
+        db.close()
