@@ -37,6 +37,9 @@ app.conf.update(
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
+
+    # Suppress Celery 6.0 deprecation warning — explicitly retain retry-on-startup behaviour
+    broker_connection_retry_on_startup=True,
     
     # Result backend settings
     result_expires=3600,  # Results expire after 1 hour
