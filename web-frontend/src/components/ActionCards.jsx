@@ -129,6 +129,12 @@ export default function ActionCards({ textStreams }) {
           case 'record_cooperative_payout':
           case 'confirm_payment_received':
             return <PaymentCard key={card._key} data={card} />
+          case 'dispute_payment':
+            return <DisputePaymentCard key={card._key} data={card} />
+          case 'confirm_shipment':
+            return <ShipmentConfirmCard key={card._key} data={card} />
+          case 'confirm_delivery':
+            return <DeliveryConfirmCard key={card._key} data={card} />
 
           /* ── DeFi ── */
           case 'check_financing_pool':
@@ -1257,6 +1263,113 @@ function TradeFinancingCard({ data }) {
       <Field label="Deadline" value={data.deadline} />
       <Field label="Created" value={data.created_at} />
     </CardShell>
+  )
+}
+
+
+/* ================================================================
+   DisputePaymentCard — payment dispute raised
+   ================================================================ */
+
+function DisputePaymentCard({ data }) {
+  return (
+    <CardShell icon={<AlertIcon />} title="Payment Dispute" accent="#F59E0B">
+      <Field label="Acceptance #" value={data.acceptance_number} mono />
+      {data.dispute_reason && (
+        <div className="mt-1">
+          <span className="text-[10px] text-white/30 uppercase tracking-wider">Reason</span>
+          <p className="text-xs text-amber-300/80 mt-0.5 leading-relaxed">{data.dispute_reason}</p>
+        </div>
+      )}
+      <div className="mt-2 pt-2 space-y-0.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+        <span className="text-[10px] text-white/20 uppercase tracking-widest">Evidence on Record</span>
+        <ComplianceCheck label="Receipt photo" ok={data.has_receipt} />
+        <ComplianceCheck label="Blockchain settlement" ok={data.has_settlement} />
+        <ComplianceCheck label="Buyer confirmed" ok={data.buyer_confirmed} />
+      </div>
+      <div className="mt-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(245,158,11,0.06)' }}>
+        <span className="text-[10px] text-amber-400/70">An administrator will review and contact both parties.</span>
+      </div>
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   ShipmentConfirmCard — cooperative confirms coffee shipped
+   ================================================================ */
+
+function ShipmentConfirmCard({ data }) {
+  return (
+    <CardShell icon={<TruckIcon />} title="Shipment Confirmed" accent="#6366F1">
+      <Field label="Acceptance #" value={data.acceptance_number} mono />
+      <Field label="Quantity" value={data.quantity_kg ? `${Number(data.quantity_kg).toLocaleString()} kg` : null} />
+      <Field label="Destination" value={data.delivery_location} />
+      <div className="flex justify-between items-center py-0.5 mt-0.5">
+        <span className="text-[10px] text-white/30 uppercase tracking-wider">Delivery Status</span>
+        <span className="text-xs font-semibold text-indigo-400">SHIPPED →</span>
+      </div>
+      <div className="mt-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(99,102,241,0.06)' }}>
+        <span className="text-[10px] text-indigo-300/70">Buyer has been notified. Awaiting delivery confirmation.</span>
+      </div>
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   DeliveryConfirmCard — buyer confirms coffee delivered
+   ================================================================ */
+
+function DeliveryConfirmCard({ data }) {
+  return (
+    <CardShell icon={<PackageCheckIcon />} title="Delivery Confirmed" accent="#10B981">
+      <Field label="Acceptance #" value={data.acceptance_number} mono />
+      <Field label="Delivered At" value={data.delivered_at ? data.delivered_at.slice(0, 19).replace('T', ' ') : null} />
+      <div className="flex justify-between items-center py-0.5 mt-0.5">
+        <span className="text-[10px] text-white/30 uppercase tracking-wider">Delivery Status</span>
+        <span className="text-xs font-semibold text-emerald-400">✓ DELIVERED</span>
+      </div>
+      <div className="mt-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(16,185,129,0.06)' }}>
+        <span className="text-[10px] text-emerald-300/70">Cooperative notified. Transaction complete! 🎉</span>
+      </div>
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   Micro-icons (new)
+   ================================================================ */
+
+function AlertIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 1L1 12h12L7 1z" />
+      <path d="M7 5.5v3" />
+      <circle cx="7" cy="10" r="0.5" fill="currentColor" />
+    </svg>
+  )
+}
+
+function TruckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 3h8v6H1z" />
+      <path d="M9 5h2l2 2v2H9" />
+      <circle cx="3" cy="10" r="1" />
+      <circle cx="11" cy="10" r="1" />
+    </svg>
+  )
+}
+
+function PackageCheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 4.5L7 2l5 2.5v5L7 12l-5-2.5z" />
+      <path d="M7 7v5M2 4.5L7 7l5-2.5" />
+      <path d="M4.5 7l1.5 1.5 3-3" />
+    </svg>
   )
 }
 
