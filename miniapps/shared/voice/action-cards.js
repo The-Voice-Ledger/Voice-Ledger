@@ -121,6 +121,19 @@ class ActionCards {
       case 'check_mass_balance':
         return this.createMassBalanceCard(card);
 
+      // Settlement / Payment
+      case 'confirm_payment':
+      case 'check_payment_status':
+      case 'record_cooperative_payout':
+      case 'confirm_payment_received':
+        return this.createPaymentCard(card);
+      case 'dispute_payment':
+        return this.createDisputePaymentCard(card);
+      case 'confirm_shipment':
+        return this.createShipmentConfirmCard(card);
+      case 'confirm_delivery':
+        return this.createDeliveryConfirmCard(card);
+
       // DPP / Traceability
       case 'dpp_passport':
         return this.createDppPassportCard(card);
@@ -1370,6 +1383,156 @@ class ActionCards {
       `;
     }
     
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create payment card (confirm_payment, check_payment_status, etc.)
+   */
+  createPaymentCard(card) {
+    const data = card.data || {};
+    const id = data.acceptance_number || (data.commitment_id ? `Commitment #${data.commitment_id}` : null);
+    const status = data.payment_status || data.status;
+    const statusColor =
+      status === 'PAID' || status === 'COMPLETED' ? '#10b981' :
+      status === 'PENDING' || status === 'AWAITING_PAYMENT' ? '#f59e0b' : 'rgba(255,255,255,0.6)';
+
+    const baseCard = this.createBaseCard('Payment', '#10B981');
+    const content = document.createElement('div');
+    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5;';
+
+    content.innerHTML = `
+      ${id ? `<div style="margin-bottom: 8px;"><strong>Reference:</strong> <span style="font-family: monospace;">${id}</span></div>` : ''}
+      ${data.cooperative ? `<div style="margin-bottom: 8px;"><strong>Cooperative:</strong> ${data.cooperative}</div>` : ''}
+      ${data.quantity_kg ? `<div style="margin-bottom: 8px;"><strong>Quantity:</strong> ${Number(data.quantity_kg).toLocaleString()} kg</div>` : ''}
+      ${(data.total_amount || data.amount) ? `<div style="margin-bottom: 8px;"><strong>Amount:</strong> $${Number(data.total_amount || data.amount).toLocaleString()}</div>` : ''}
+      ${status ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-bottom: 4px;">
+          <span style="font-size: 10px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px;">Status</span>
+          <span style="font-size: 12px; font-weight: 600; color: ${statusColor};">${status}</span>
+        </div>
+      ` : ''}
+      ${data.buyer_confirmed !== undefined ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
+          <span style="font-size: 10px; opacity: 0.3;">Buyer Confirmed</span>
+          <span style="font-size: 11px; color: ${data.buyer_confirmed ? '#10b981' : 'rgba(255,255,255,0.3)'};">${data.buyer_confirmed ? '✓' : '○'}</span>
+        </div>
+      ` : ''}
+      ${data.coop_confirmed !== undefined ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0;">
+          <span style="font-size: 10px; opacity: 0.3;">Coop Confirmed</span>
+          <span style="font-size: 11px; color: ${data.coop_confirmed ? '#10b981' : 'rgba(255,255,255,0.3)'};">${data.coop_confirmed ? '✓' : '○'}</span>
+        </div>
+      ` : ''}
+      ${data.delivery_status ? `<div style="margin-top: 6px;"><strong>Delivery:</strong> ${data.delivery_status}</div>` : ''}
+      ${data.settlement_tx ? `<div style="margin-top: 6px; font-size: 11px; font-family: monospace; opacity: 0.5;">Tx: ${data.settlement_tx.slice(0, 12)}…</div>` : ''}
+    `;
+
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create dispute payment card
+   */
+  createDisputePaymentCard(card) {
+    const data = card.data || {};
+    const baseCard = this.createBaseCard('Payment Dispute', '#F59E0B');
+    const content = document.createElement('div');
+    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5;';
+
+    content.innerHTML = `
+      ${data.acceptance_number ? `<div style="margin-bottom: 8px;"><strong>Acceptance #:</strong> <span style="font-family: monospace;">${data.acceptance_number}</span></div>` : ''}
+      ${data.dispute_reason ? `
+        <div style="margin-bottom: 10px;">
+          <div style="font-size: 10px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Reason</div>
+          <div style="font-size: 12px; color: rgba(245, 158, 11, 0.85); line-height: 1.5;">${data.dispute_reason}</div>
+        </div>
+      ` : ''}
+      ${data.has_receipt !== undefined || data.has_settlement !== undefined || data.buyer_confirmed !== undefined ? `
+        <div style="margin-bottom: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.04);">
+          <div style="font-size: 10px; opacity: 0.2; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">Evidence on Record</div>
+          ${data.has_receipt !== undefined ? `
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+              <span style="font-size: 10px; opacity: 0.4;">Receipt photo</span>
+              <span style="font-size: 11px; color: ${data.has_receipt ? '#10b981' : 'rgba(255,255,255,0.2)'};">${data.has_receipt ? '✓' : '○'}</span>
+            </div>
+          ` : ''}
+          ${data.has_settlement !== undefined ? `
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+              <span style="font-size: 10px; opacity: 0.4;">Blockchain settlement</span>
+              <span style="font-size: 11px; color: ${data.has_settlement ? '#10b981' : 'rgba(255,255,255,0.2)'};">${data.has_settlement ? '✓' : '○'}</span>
+            </div>
+          ` : ''}
+          ${data.buyer_confirmed !== undefined ? `
+            <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+              <span style="font-size: 10px; opacity: 0.4;">Buyer confirmed</span>
+              <span style="font-size: 11px; color: ${data.buyer_confirmed ? '#10b981' : 'rgba(255,255,255,0.2)'};">${data.buyer_confirmed ? '✓' : '○'}</span>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+      <div style="padding: 8px 10px; border-radius: 8px; background: rgba(245, 158, 11, 0.06); font-size: 11px; color: rgba(245, 158, 11, 0.7);">
+        An administrator will review and contact both parties.
+      </div>
+    `;
+
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create shipment confirm card (cooperative confirms shipped)
+   */
+  createShipmentConfirmCard(card) {
+    const data = card.data || {};
+    const baseCard = this.createBaseCard('Shipment Confirmed', '#6366F1');
+    const content = document.createElement('div');
+    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5;';
+
+    content.innerHTML = `
+      ${data.acceptance_number ? `<div style="margin-bottom: 8px;"><strong>Acceptance #:</strong> <span style="font-family: monospace;">${data.acceptance_number}</span></div>` : ''}
+      ${data.quantity_kg ? `<div style="margin-bottom: 8px;"><strong>Quantity:</strong> ${Number(data.quantity_kg).toLocaleString()} kg</div>` : ''}
+      ${data.delivery_location ? `<div style="margin-bottom: 8px;"><strong>Destination:</strong> ${data.delivery_location}</div>` : ''}
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-bottom: 8px;">
+        <span style="font-size: 10px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px;">Delivery Status</span>
+        <span style="font-size: 12px; font-weight: 600; color: #6366f1;">SHIPPED →</span>
+      </div>
+      <div style="padding: 8px 10px; border-radius: 8px; background: rgba(99, 102, 241, 0.06); font-size: 11px; color: rgba(99, 102, 241, 0.7);">
+        Buyer has been notified. Awaiting delivery confirmation.
+      </div>
+    `;
+
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create delivery confirm card (buyer confirms delivered)
+   */
+  createDeliveryConfirmCard(card) {
+    const data = card.data || {};
+    const baseCard = this.createBaseCard('Delivery Confirmed', '#10B981');
+    const content = document.createElement('div');
+    content.style.cssText = 'color: rgba(255, 255, 255, 0.7); font-size: 13px; line-height: 1.5;';
+
+    const deliveredAt = data.delivered_at
+      ? data.delivered_at.slice(0, 19).replace('T', ' ')
+      : null;
+
+    content.innerHTML = `
+      ${data.acceptance_number ? `<div style="margin-bottom: 8px;"><strong>Acceptance #:</strong> <span style="font-family: monospace;">${data.acceptance_number}</span></div>` : ''}
+      ${deliveredAt ? `<div style="margin-bottom: 8px;"><strong>Delivered At:</strong> ${deliveredAt}</div>` : ''}
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; margin-bottom: 8px;">
+        <span style="font-size: 10px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px;">Delivery Status</span>
+        <span style="font-size: 12px; font-weight: 600; color: #10b981;">✓ DELIVERED</span>
+      </div>
+      <div style="padding: 8px 10px; border-radius: 8px; background: rgba(16, 185, 129, 0.06); font-size: 11px; color: rgba(16, 185, 129, 0.7);">
+        Cooperative notified. Transaction complete! 🎉
+      </div>
+    `;
+
     baseCard.appendChild(content);
     return baseCard;
   }
