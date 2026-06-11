@@ -25,8 +25,10 @@ from sqlalchemy import and_
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from database.models import (
-    ContainerOffering, RFQAcceptance, Organization, 
-    UserIdentity, AggregationRelationship, SessionLocal
+    ContainerOffering, RFQAcceptance, Organization,
+    UserIdentity, AggregationRelationship, SessionLocal,
+    ContainerPool, BuyerCommitment, Buyer,
+    REGION_PORT_MAP, POOL_AUTO_CONFIRM_PCT,
 )
 from voice.marketplace.payment_messaging import send_payment_instructions
 
@@ -357,36 +359,104 @@ async def purchase_partial_container(
     
     # Calculate total amount
     total_amount = purchase.quantity_kg * offering.price_per_kg
-    
+
+    # Resolve buyer's destination region for pool assignment
+    country = getattr(purchase, 'delivery_country', None)
+    if not country:
+        buyer_profile = db.query(Buyer).filter_by(organization_id=user.organization_id).first()
+        if buyer_profile and getattr(buyer_profile, 'country', None):
+            country = buyer_profile.country[:2].upper()
+    if country and country.upper() in REGION_PORT_MAP:
+        port, region = REGION_PORT_MAP[country.upper()]
+    else:
+        port, region = "Djibouti", "International"
+
+    # Get or create pool for this offering + region
+    pool = (
+        db.query(ContainerPool)
+        .filter(
+            ContainerPool.container_offering_id == offering.id,
+            ContainerPool.destination_region == region,
+            ContainerPool.status == "FILLING",
+        )
+        .first()
+    )
+    if not pool:
+        pool = ContainerPool(
+            container_offering_id=offering.id,
+            destination_region=region,
+            destination_port=port,
+            fill_target_kg=offering.available_quantity_kg,
+            filled_kg=0,
+            status="FILLING",
+            deadline=datetime.utcnow() + timedelta(days=30),
+        )
+        db.add(pool)
+        db.flush()
+
+    # Clamp to pool remaining
+    quantity_kg = purchase.quantity_kg
+    if pool.remaining_kg > 0:
+        quantity_kg = min(quantity_kg, pool.remaining_kg)
+    total_amount = quantity_kg * offering.price_per_kg
+
     # Generate acceptance number
     acceptance_number = generate_acceptance_number(db)
-    
+
     # Create RFQAcceptance (links to Phase 4 payment system)
     acceptance = RFQAcceptance(
-        rfq_id=None,  # No RFQ for direct container purchase
-        offer_id=None,  # No offer for direct container purchase
+        rfq_id=None,
+        offer_id=None,
         container_offering_id=container_id,
         acceptance_number=acceptance_number,
-        quantity_accepted_kg=purchase.quantity_kg,
+        quantity_accepted_kg=quantity_kg,
         payment_terms=purchase.payment_terms or "Net 7 days",
         payment_status="PENDING",
         delivery_status="PENDING"
     )
-    
     db.add(acceptance)
-    
+    db.flush()
+
+    # Create BuyerCommitment so this purchase is visible to the pool system
+    commitment = BuyerCommitment(
+        pool_id=pool.id,
+        buyer_id=user.id,
+        organization_id=user.organization_id,
+        quantity_kg=quantity_kg,
+        unit_price=offering.price_per_kg,
+        total_amount=total_amount,
+        currency=offering.currency or "USD",
+        delivery_country=country,
+        delivery_city=getattr(purchase, 'delivery_city', None),
+        status="COMMITTED",
+    )
+    db.add(commitment)
+
+    # Update pool fill
+    pool.filled_kg += quantity_kg
+    pool.updated_at = datetime.utcnow()
+
+    # Auto-confirm pool if threshold reached
+    if pool.fill_pct >= POOL_AUTO_CONFIRM_PCT:
+        pool.status = "CONFIRMED"
+        pool.confirmed_at = datetime.utcnow()
+        for c in pool.commitments:
+            if c.status == "COMMITTED":
+                c.status = "PAYMENT_PENDING"
+                c.updated_at = datetime.utcnow()
+
     # Update container quantities
-    offering.available_quantity_kg -= purchase.quantity_kg
-    offering.reserved_quantity_kg += purchase.quantity_kg
-    
+    offering.available_quantity_kg -= quantity_kg
+    offering.reserved_quantity_kg += quantity_kg
+
     # Update status
     if offering.available_quantity_kg == 0:
         offering.status = 'FULLY_RESERVED'
     else:
         offering.status = 'PARTIALLY_SOLD'
-    
+
     offering.updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(acceptance)
     db.refresh(offering)
@@ -412,11 +482,11 @@ async def purchase_partial_container(
         acceptance_number=acceptance.acceptance_number,
         container_id=offering.id,
         container_sscc=offering.container_sscc,
-        quantity_purchased_kg=purchase.quantity_kg,
+        quantity_purchased_kg=quantity_kg,
         price_per_kg=offering.price_per_kg,
         total_amount_usd=total_amount,
         payment_status=acceptance.payment_status,
-        message=f"Successfully purchased {purchase.quantity_kg}kg. Payment instructions sent to your Telegram."
+        message=f"Successfully purchased {quantity_kg}kg. Payment instructions sent to your Telegram."
     )
 
 @router.get("/container/{container_id}", response_model=ContainerOfferingResponse)
