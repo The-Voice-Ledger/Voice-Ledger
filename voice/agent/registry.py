@@ -90,6 +90,7 @@ class ToolRegistry:
         self._tools["check_payment_status"] = self._check_payment_status
         self._tools["record_cooperative_payout"] = self._record_cooperative_payout
         self._tools["confirm_payment_received"] = self._confirm_payment_received
+        self._tools["confirm_pool_receipt"] = self._confirm_pool_receipt
         self._tools["dispute_payment"] = self._dispute_payment
         self._tools["confirm_shipment"] = self._confirm_shipment
         self._tools["confirm_delivery"] = self._confirm_delivery
@@ -1291,6 +1292,88 @@ class ToolRegistry:
         return (
             "Please provide a commitment_id or acceptance_number.",
             {"error": "missing_id"},
+        )
+
+    def _confirm_pool_receipt(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Cooperative confirms payment received for a pool commitment.
+        """
+        from database.models import (
+            BuyerCommitment, ContainerPool, ContainerOffering,
+            UserIdentity, Organization,
+        )
+        from datetime import datetime
+
+        commitment_id = args.get("commitment_id")
+        if not commitment_id:
+            return ("Please provide a commitment_id.", {"error": "missing_id"})
+
+        user = db.query(UserIdentity).filter_by(id=user_id).first()
+        if not user:
+            return ("User not found.", {"error": "user_not_found"})
+
+        commitment = db.query(BuyerCommitment).filter_by(id=int(commitment_id)).first()
+        if not commitment:
+            return (f"Commitment #{commitment_id} not found.", {"error": "not_found"})
+
+        pool = db.query(ContainerPool).filter_by(id=commitment.pool_id).first()
+        offering = (
+            db.query(ContainerOffering)
+            .filter_by(id=pool.container_offering_id)
+            .first()
+            if pool else None
+        )
+        if not offering or user.organization_id != offering.cooperative_id:
+            return ("Access denied — not your cooperative's container.", {"error": "forbidden"})
+
+        if commitment.status != "PAID":
+            return (
+                f"Buyer has not yet confirmed payment (status: {commitment.status}). "
+                f"Ask the buyer to confirm with: /confirm_pool_payment {commitment_id}",
+                {"error": "buyer_not_confirmed", "status": commitment.status},
+            )
+
+        if commitment.payment_received_by_coop_at:
+            return (
+                f"Receipt already confirmed for commitment #{commitment_id}.",
+                {"error": "already_confirmed"},
+            )
+
+        commitment.payment_received_by_coop_at = datetime.utcnow()
+        commitment.updated_at = datetime.utcnow()
+        db.commit()
+
+        # Notify buyer
+        try:
+            from voice.marketplace.payment_messaging import send_telegram_message
+            buyer = db.query(UserIdentity).filter_by(id=commitment.buyer_id).first()
+            if buyer and buyer.telegram_user_id:
+                send_telegram_message(
+                    buyer.telegram_user_id,
+                    (
+                        f"✅ <b>Payment Received — Shipment Starting!</b>\n\n"
+                        f"Commitment: <code>#{commitment_id}</code>\n"
+                        f"Amount: ${commitment.total_amount:,.2f} USD\n\n"
+                        f"The cooperative has confirmed receipt of your payment.\n"
+                        f"Your coffee shipment is now being prepared."
+                    ),
+                    parse_mode="HTML",
+                )
+        except Exception as e:
+            logger.warning("Failed to notify buyer of pool receipt: %s", e)
+
+        return (
+            f"Receipt confirmed for commitment #{commitment_id} "
+            f"(${commitment.total_amount:,.2f}). Shipment can proceed.",
+            {
+                "commitment_id": commitment.id,
+                "amount": commitment.total_amount,
+                "status": commitment.status,
+                "receipt_confirmed": True,
+            },
         )
 
     def _dispute_payment(
