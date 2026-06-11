@@ -458,8 +458,20 @@ def create_offer(
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    if rfq.status != "OPEN":
+    if rfq.status not in ("OPEN", "PARTIALLY_FILLED"):
         raise HTTPException(status_code=400, detail="RFQ is not open for offers")
+
+    # Calculate remaining quantity (total requested minus already accepted)
+    from sqlalchemy import func as sqlfunc
+    accepted_kg = db.query(sqlfunc.coalesce(sqlfunc.sum(RFQAcceptance.quantity_accepted_kg), 0))\
+        .filter_by(rfq_id=rfq.id).scalar() or 0
+    remaining_kg = rfq.quantity_kg - accepted_kg
+    if offer_data.quantity_offered_kg > remaining_kg:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Offered quantity ({offer_data.quantity_offered_kg} kg) exceeds remaining "
+                   f"unfulfilled quantity ({remaining_kg:.0f} kg)"
+        )
     
     # Generate offer number
     offer_number = generate_offer_number(db)

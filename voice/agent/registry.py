@@ -2405,13 +2405,27 @@ class ToolRegistry:
 
         if not rfq:
             return ("RFQ not found. Use browse_rfqs to see available requests.", {"error": "rfq_not_found"})
-        if rfq.status != "OPEN":
+        if rfq.status not in ("OPEN", "PARTIALLY_FILLED"):
             return (f"RFQ {rfq.rfq_number} is {rfq.status}, not open for offers.", {"error": "rfq_not_open"})
 
         quantity = args.get("quantity_offered_kg", 0)
         price = args.get("price_per_kg", 0)
         if quantity <= 0 or price <= 0:
             return ("Quantity and price must be greater than zero.", {"error": "invalid_values"})
+
+        # Check offered quantity does not exceed remaining unfulfilled quantity
+        from sqlalchemy import func as sqlfunc
+        from database.models import RFQAcceptance
+        accepted_kg = db.query(
+            sqlfunc.coalesce(sqlfunc.sum(RFQAcceptance.quantity_accepted_kg), 0)
+        ).filter_by(rfq_id=rfq.id).scalar() or 0
+        remaining_kg = rfq.quantity_kg - accepted_kg
+        if quantity > remaining_kg:
+            return (
+                f"Offered quantity ({quantity} kg) exceeds the remaining unfulfilled "
+                f"quantity for {rfq.rfq_number} ({remaining_kg:.0f} kg).",
+                {"error": "exceeds_remaining", "remaining_kg": remaining_kg},
+            )
 
         # Generate unique offer number — use MAX(id)+1 to avoid string-sort issues
         from sqlalchemy import func
