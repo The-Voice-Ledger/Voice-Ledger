@@ -1195,6 +1195,10 @@ COMMIT_TO_POOL = {
                     "type": "string",
                     "description": "City name for last-mile delivery",
                 },
+                "delivery_address": {
+                    "type": "string",
+                    "description": "Full delivery address for last-mile logistics (optional)",
+                },
             },
             "required": ["container_offering_id", "quantity_kg"],
         },

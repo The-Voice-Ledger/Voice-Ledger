@@ -739,12 +739,14 @@ async def commit_to_pool(
     quantity_kg: Annotated[float, "Quantity to commit in kg"],
     delivery_country: Annotated[str | None, "2-letter country code for delivery"] = None,
     delivery_city: Annotated[str | None, "Delivery city"] = None,
+    delivery_address: Annotated[str | None, "Full delivery address for last-mile logistics"] = None,
 ) -> str:
     return await _exec(ctx, "commit_to_pool", {
         "container_offering_id": container_offering_id,
         "quantity_kg": quantity_kg,
         "delivery_country": delivery_country,
         "delivery_city": delivery_city,
+        "delivery_address": delivery_address,
     })
 
 

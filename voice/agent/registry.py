@@ -669,12 +669,10 @@ class ToolRegistry:
             currency=offering.currency or "USD",
             delivery_country=country,
             delivery_city=args.get("delivery_city"),
+            delivery_address=args.get("delivery_address"),
             status="COMMITTED",
         )
         db.add(commitment)
-
-        pool.filled_kg += quantity_kg
-        pool.updated_at = datetime.utcnow()
 
         offering.available_quantity_kg -= quantity_kg
         offering.reserved_quantity_kg += quantity_kg
