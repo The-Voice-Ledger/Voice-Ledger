@@ -407,6 +407,11 @@ def list_my_commitments(
     resolved_id = _resolve_user_id_jwt_or_query(authorization, user_id)
     if not resolved_id:
         raise HTTPException(401, "Authentication required.")
+    user = _resolve_user_from_query(db, resolved_id)
+    if not user:
+        raise HTTPException(401, "User not found. Please register first.")
+    if user.role not in ("BUYER", "ADMIN"):
+        raise HTTPException(403, f"Only buyers can view commitments. Your role is {user.role}.")
     commitments = (
         db.query(BuyerCommitment)
         .filter(BuyerCommitment.buyer_id == resolved_id)
