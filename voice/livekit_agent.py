@@ -724,9 +724,12 @@ async def browse_pools(
     ctx: RunContext,
     region: Annotated[str | None, "Filter by destination region"] = None,
     container_offering_id: Annotated[int | None, "Filter by specific container"] = None,
+    status: Annotated[str | None, "Filter by status: FILLING (default), CONFIRMED, or ALL"] = None,
 ) -> str:
     return await _exec(ctx, "browse_pools", {
-        "region": region, "container_offering_id": container_offering_id,
+        "region": region,
+        "container_offering_id": container_offering_id,
+        "status": status,
     })
 
 

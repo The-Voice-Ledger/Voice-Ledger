@@ -1158,6 +1158,10 @@ BROWSE_POOLS = {
                     "type": "integer",
                     "description": "Filter pools for a specific container offering",
                 },
+                "status": {
+                    "type": "string",
+                    "description": "Filter by pool status: FILLING (default), CONFIRMED, or ALL",
+                },
             },
             "required": [],
         },

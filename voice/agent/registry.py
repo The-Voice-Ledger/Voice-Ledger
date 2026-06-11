@@ -536,9 +536,16 @@ class ToolRegistry:
         """Browse active container pools with fill-progress."""
         from database.models import ContainerPool, ContainerOffering, Organization
 
-        query = db.query(ContainerPool).filter(
-            ContainerPool.status.in_(["FILLING", "CONFIRMED"])
-        )
+        status_arg = (args.get("status") or "").upper()
+        if status_arg == "ALL":
+            query = db.query(ContainerPool)
+        elif status_arg in ("FILLING", "CONFIRMED", "SHIPPED", "CANCELLED"):
+            query = db.query(ContainerPool).filter(ContainerPool.status == status_arg)
+        else:
+            # Default: active pools only
+            query = db.query(ContainerPool).filter(
+                ContainerPool.status.in_(["FILLING", "CONFIRMED"])
+            )
 
         region = args.get("region")
         if region:
