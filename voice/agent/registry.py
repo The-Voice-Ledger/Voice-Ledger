@@ -653,6 +653,10 @@ class ToolRegistry:
             db.add(pool)
             db.flush()
 
+        # Clamp quantity to pool remaining capacity
+        if pool.remaining_kg > 0:
+            quantity_kg = min(quantity_kg, pool.remaining_kg)
+
         total_amount = round(quantity_kg * offering.price_per_kg, 2)
 
         commitment = BuyerCommitment(
