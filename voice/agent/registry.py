@@ -555,7 +555,8 @@ class ToolRegistry:
         if offering_id:
             query = query.filter(ContainerPool.container_offering_id == int(offering_id))
 
-        pools = query.order_by(ContainerPool.created_at.desc()).limit(20).all()
+        limit = min(int(args.get("limit") or 20), 50)
+        pools = query.order_by(ContainerPool.created_at.desc()).limit(limit).all()
 
         if not pools:
             return ("No active container pools found.", {"pools": [], "count": 0})

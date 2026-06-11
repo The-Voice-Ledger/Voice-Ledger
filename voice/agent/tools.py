@@ -1162,6 +1162,10 @@ BROWSE_POOLS = {
                     "type": "string",
                     "description": "Filter by pool status: FILLING (default), CONFIRMED, or ALL",
                 },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max number of pools to return (default 20, max 50)",
+                },
             },
             "required": [],
         },
