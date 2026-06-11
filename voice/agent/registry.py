@@ -469,7 +469,7 @@ class ToolRegistry:
         # Update offering quantities
         offering.available_quantity_kg -= quantity_kg
         offering.reserved_quantity_kg += quantity_kg
-        if offering.available_quantity_kg == 0:
+        if offering.available_quantity_kg <= 0:
             offering.status = 'FULLY_RESERVED'
         else:
             offering.status = 'PARTIALLY_SOLD'
