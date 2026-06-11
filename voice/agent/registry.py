@@ -595,7 +595,7 @@ class ToolRegistry:
         user = db.query(UserIdentity).filter_by(id=user_id).first()
         if not user:
             return ("User not found. Please register first.", {"error": "user_not_found"})
-        if user.role not in ("BUYER", "SYSTEM_ADMIN"):
+        if user.role not in ("BUYER", "ADMIN"):
             return (
                 f"Only buyers can commit to pools. Your role is {user.role}.",
                 {"error": "role_not_buyer"},
@@ -1579,7 +1579,7 @@ class ToolRegistry:
         from database.models import UserIdentity, RFQAcceptance, RFQOffer
 
         user = db.query(UserIdentity).filter_by(id=user_id).first()
-        if not user or user.role not in ("cooperative", "admin"):
+        if not user or user.role not in ("COOPERATIVE_MANAGER", "ADMIN"):
             return ("Only cooperatives can request financing advances.", {"error": "forbidden"})
 
         acceptance_number = args.get("acceptance_number")
@@ -1747,7 +1747,7 @@ class ToolRegistry:
         from database.models import UserIdentity, RFQAcceptance, RFQOffer
 
         user = db.query(UserIdentity).filter_by(id=user_id).first()
-        if not user or user.role not in ("buyer", "admin"):
+        if not user or user.role not in ("BUYER", "ADMIN"):
             return ("Only buyers can confirm delivery.", {"error": "forbidden"})
 
         trade_id = args.get("trade_id")
@@ -1842,7 +1842,7 @@ class ToolRegistry:
         from database.models import UserIdentity, RFQAcceptance, RFQOffer
 
         user = db.query(UserIdentity).filter_by(id=user_id).first()
-        if not user or user.role not in ("cooperative", "admin"):
+        if not user or user.role not in ("COOPERATIVE_MANAGER", "ADMIN"):
             return ("Only cooperatives can cancel trades.", {"error": "forbidden"})
 
         trade_id = args.get("trade_id")
@@ -1937,7 +1937,7 @@ class ToolRegistry:
         from database.models import UserIdentity, RFQAcceptance, RFQOffer
 
         user = db.query(UserIdentity).filter_by(id=user_id).first()
-        if not user or user.role not in ("cooperative", "admin"):
+        if not user or user.role not in ("COOPERATIVE_MANAGER", "ADMIN"):
             return ("Only cooperatives or admins can mark trades as defaulted.", {"error": "forbidden"})
 
         trade_id = args.get("trade_id")

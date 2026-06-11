@@ -303,7 +303,7 @@ def commit_to_pool(
     user = _resolve_user_from_query(db, resolved_id)
     if not user:
         raise HTTPException(401, "User not found. Please register first.")
-    if user.role not in ("BUYER", "SYSTEM_ADMIN"):
+    if user.role not in ("BUYER", "ADMIN"):
         raise HTTPException(403, f"Only buyers can commit. Your role is {user.role}.")
 
     # Validate offering
