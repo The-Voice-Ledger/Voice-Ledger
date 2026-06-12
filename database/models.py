@@ -874,7 +874,12 @@ class UATIssue(Base):
 
 
 # Database connection
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(
+    DATABASE_URL,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
 SessionLocal = sessionmaker(bind=engine)
 
 def init_database():
