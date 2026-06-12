@@ -25,7 +25,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 # JWT Configuration
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+if not JWT_SECRET_KEY:
+    raise ValueError(
+        "JWT_SECRET_KEY environment variable is required. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_DAYS = 7
 
