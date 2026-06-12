@@ -6,6 +6,7 @@ Handles webhooks from Telegram for voice messages, text commands, and callbacks.
 
 import logging
 import os
+import hmac
 from typing import Dict, Any
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
@@ -98,6 +99,12 @@ async def telegram_webhook(request: Request) -> Dict[str, Any]:
         }
     """
     try:
+        # Validate Telegram webhook secret token (if configured)
+        secret_token = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        if secret_token:
+            provided = request.headers.get("X-Telegram-Bot-Secret-Token", "")
+            if not hmac.compare_digest(provided, secret_token):
+                raise HTTPException(status_code=403, detail="Invalid webhook secret")
         # Check maintenance mode first
         if is_maintenance_mode():
             logger.info("System in maintenance mode, sending maintenance message")
