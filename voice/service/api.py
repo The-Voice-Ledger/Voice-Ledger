@@ -15,6 +15,7 @@ Endpoints:
 """
 
 import os
+import re
 import sys
 import logging
 from pathlib import Path
@@ -443,7 +444,8 @@ async def transcribe_audio(
     # Create temp directory for uploads
     temp_dir = Path("tests/samples/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / file.filename
+    safe_filename = re.sub(r'[^\w\-.]', '_', Path(file.filename).name)
+    temp_path = temp_dir / safe_filename
     wav_path = None
 
     try:
@@ -473,7 +475,8 @@ async def transcribe_audio(
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        logger.error(f"Transcription endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Transcription failed. Please try again.")
     finally:
         # Clean up temp files
         cleanup_temp_file(str(temp_path))
@@ -532,7 +535,8 @@ async def process_voice_command(
 
     temp_dir = Path("tests/samples/temp")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / file.filename
+    safe_filename = re.sub(r'[^\w\-.]', '_', Path(file.filename).name)
+    temp_path = temp_dir / safe_filename
     wav_path = None
 
     try:
@@ -591,7 +595,7 @@ async def process_voice_command(
                     "intent": intent,
                     "entities": entities,
                     "result": None,
-                    "error": f"Unexpected error: {str(e)}",
+                    "error": "An internal error occurred. Please try again.",
                     "audio_metadata": metadata
                 }
         
@@ -600,7 +604,8 @@ async def process_voice_command(
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Command processing failed: {str(e)}")
+        logger.error(f"Process-command endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Command processing failed. Please try again.")
     finally:
         # Clean up temp files
         cleanup_temp_file(str(temp_path))
@@ -638,7 +643,8 @@ async def asr_nlu_endpoint(
     # Create temp directory for uploads
     temp_dir = Path("tests/samples")
     temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / file.filename
+    safe_filename = re.sub(r'[^\w\-.]', '_', Path(file.filename).name)
+    temp_path = temp_dir / safe_filename
 
     try:
         # Save incoming file
@@ -660,7 +666,8 @@ async def asr_nlu_endpoint(
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+        logger.error(f"ASR-NLU endpoint error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred. Please try again.")
     finally:
         # Clean up temp file
         if temp_path.exists():
@@ -749,7 +756,8 @@ async def upload_audio_async(
         )
     
     # Save uploaded file to temp location
-    temp_path = Path(f"/tmp/voice_upload_{file.filename}")
+    safe_filename = re.sub(r'[^\w\-.]', '_', Path(file.filename).name)
+    temp_path = Path(f"/tmp/voice_upload_{safe_filename}")
     
     try:
         content = await file.read()
@@ -790,7 +798,7 @@ async def upload_audio_async(
             temp_path.unlink()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to queue task: {str(e)}"
+            detail="Failed to queue task. Please try again."
         )
 
 

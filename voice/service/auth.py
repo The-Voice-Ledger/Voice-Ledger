@@ -6,6 +6,7 @@ All requests to protected endpoints must include a valid API key in the X-API-Ke
 """
 
 import os
+import hmac
 from fastapi import HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
 
@@ -40,8 +41,7 @@ async def verify_api_key(
     """
     expected = get_expected_api_key()
     if not expected:
-        # API key not configured, reject requests
         raise HTTPException(status_code=500, detail="API key not configured")
-    if api_key != expected:
+    if not hmac.compare_digest(api_key or '', expected):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
