@@ -145,7 +145,7 @@ def require_admin(user: UserIdentity = Depends(get_current_user)) -> UserIdentit
     Raises:
         HTTPException: If user is not an admin
     """
-    if user.role != 'ADMIN' and not user.is_approved:
+    if user.role not in ('ADMIN', 'SYSTEM_ADMIN'):
         logger.warning(f"User {user.id} ({user.role}) attempted to access admin endpoint")
         raise HTTPException(status_code=403, detail="Admin access required")
     
