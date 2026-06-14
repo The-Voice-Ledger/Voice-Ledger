@@ -12,6 +12,8 @@ Lab 17: Admin Dashboard
 """
 
 import os
+import hmac
+import hashlib
 import jwt
 import bcrypt
 from datetime import datetime, timedelta
@@ -151,16 +153,37 @@ def require_admin(user: UserIdentity = Depends(get_current_user)) -> UserIdentit
 
 
 def get_user_from_telegram(
-    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id")
+    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id"),
+    x_telegram_proof: Optional[str] = Header(None, alias="X-Telegram-Proof"),
 ) -> Optional[UserIdentity]:
     """
     Get user from Telegram ID header (for mini apps).
-    
+
+    Validates X-Telegram-Proof header: HMAC-SHA256 of user_id with bot token.
+    Falls back to header-only with a warning for backward compatibility.
+
     Returns:
         UserIdentity object or None if header missing
     """
     if not x_telegram_user_id:
         return None
+
+    # Validate proof-of-possession
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if bot_token:
+        expected_proof = hmac.new(
+            bot_token.encode(),
+            x_telegram_user_id.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not x_telegram_proof or not hmac.compare_digest(x_telegram_proof, expected_proof):
+            logger.warning(
+                "Invalid or missing X-Telegram-Proof for user_id=%s",
+                x_telegram_user_id,
+            )
+            # Warn but allow — backward compatibility until all clients send the header
+            # To enforce strictly: raise HTTPException(status_code=403, detail="Invalid proof")
     
     with get_db() as db:
         from sqlalchemy.orm import joinedload
@@ -179,7 +202,8 @@ def get_user_from_telegram(
 
 def get_current_user_flexible(
     authorization: Optional[str] = Header(None),
-    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id")
+    x_telegram_user_id: Optional[str] = Header(None, alias="X-Telegram-User-Id"),
+    x_telegram_proof: Optional[str] = Header(None, alias="X-Telegram-Proof"),
 ) -> UserIdentity:
     """
     FastAPI dependency that accepts EITHER JWT token OR Telegram ID.
@@ -214,7 +238,10 @@ def get_current_user_flexible(
     
     # Try Telegram ID
     if x_telegram_user_id:
-        user = get_user_from_telegram(x_telegram_user_id)
+        user = get_user_from_telegram(
+            x_telegram_user_id=x_telegram_user_id,
+            x_telegram_proof=x_telegram_proof,
+        )
         if user:
             return user
     
