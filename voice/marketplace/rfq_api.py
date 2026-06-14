@@ -28,6 +28,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Header
 from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy import func
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -462,8 +463,7 @@ def create_offer(
         raise HTTPException(status_code=400, detail="RFQ is not open for offers")
 
     # Calculate remaining quantity (total requested minus already accepted)
-    from sqlalchemy import func as sqlfunc
-    accepted_kg = db.query(sqlfunc.coalesce(sqlfunc.sum(RFQAcceptance.quantity_accepted_kg), 0))\
+    accepted_kg = db.query(func.coalesce(func.sum(RFQAcceptance.quantity_accepted_kg), 0))\
         .filter_by(rfq_id=rfq.id).scalar() or 0
     remaining_kg = rfq.quantity_kg - accepted_kg
     if offer_data.quantity_offered_kg > remaining_kg:
@@ -655,9 +655,12 @@ async def accept_offer(
     # Update offer status
     offer.status = "ACCEPTED"
     
-    # Update RFQ status
-    total_accepted = db.query(RFQAcceptance).filter_by(rfq_id=rfq.id).count()
-    if acceptance.quantity_accepted_kg >= rfq.quantity_kg:
+    # Update RFQ status using cumulative accepted quantity
+    total_accepted_kg = db.query(
+        func.coalesce(func.sum(RFQAcceptance.quantity_accepted_kg), 0)
+    ).filter_by(rfq_id=rfq.id).scalar()
+    
+    if total_accepted_kg >= rfq.quantity_kg:
         rfq.status = "FULFILLED"
     else:
         rfq.status = "PARTIALLY_FILLED"
