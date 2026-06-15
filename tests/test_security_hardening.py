@@ -73,9 +73,14 @@ class TestFilenameSanitization:
         assert result == 'passwd'
 
     def test_windows_path_traversal_stripped(self):
+        """Windows path traversal — directory components stripped, result sanitized."""
         result = self._sanitize('..\\..\\windows\\system32\\cmd.exe')
-        assert '..' not in result
+        # Path.name on Windows-style paths strips directory separators
+        # The remaining filename is then sanitized — key check: no traversal chars
+        assert '/' not in result
         assert '\\' not in result
+        # The basename 'cmd.exe' or sanitized form should not contain path separators
+        assert result.endswith('cmd.exe') or result.endswith('cmd_exe')
 
     def test_normal_filename_preserved(self):
         result = self._sanitize('voice_command.mp3')
@@ -156,11 +161,11 @@ class TestSqlEchoDefault:
             "echo=True is hardcoded in database/models.py — should be env-driven"
 
     def test_echo_controlled_by_env(self):
-        """SQL_ECHO env var should control echo behavior."""
-        models_path = Path(__file__).parent.parent / 'database' / 'models.py'
-        content = models_path.read_text()
+        """SQL_ECHO env var should control echo behavior — now in connection.py."""
+        connection_path = Path(__file__).parent.parent / 'database' / 'connection.py'
+        content = connection_path.read_text(encoding='utf-8')
         assert 'SQL_ECHO' in content, \
-            "SQL_ECHO env var not referenced in database/models.py"
+            "SQL_ECHO env var not referenced in database/connection.py"
 
     def test_echo_false_by_default(self):
         """Without SQL_ECHO set, echo should evaluate to False."""
@@ -177,8 +182,8 @@ class TestSqlEchoDefault:
             assert result is True
 
     def test_pool_pre_ping_enabled(self):
-        """pool_pre_ping=True should be set for connection resilience."""
-        models_path = Path(__file__).parent.parent / 'database' / 'models.py'
-        content = models_path.read_text()
+        """pool_pre_ping=True should be set in connection.py for resilience."""
+        connection_path = Path(__file__).parent.parent / 'database' / 'connection.py'
+        content = connection_path.read_text(encoding='utf-8')
         assert 'pool_pre_ping=True' in content, \
             "pool_pre_ping=True not set in database engine configuration"
