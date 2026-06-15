@@ -931,10 +931,12 @@ if spa_dir.exists():
     # SPA catch-all: serve index.html for any /app/* route
     @app.get("/app/{rest_of_path:path}", include_in_schema=False)
     async def serve_spa(rest_of_path: str = ""):
-        # If the path matches a real file in dist, serve it
-        file_path = spa_dir / rest_of_path
-        if rest_of_path and file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
+        if rest_of_path:
+            file_path = (spa_dir / rest_of_path).resolve()
+            if not file_path.is_relative_to(spa_dir.resolve()):
+                raise HTTPException(status_code=404, detail="Not found")
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(str(file_path))
         # Otherwise serve index.html (client-side routing)
         return FileResponse(str(spa_dir / "index.html"))
 

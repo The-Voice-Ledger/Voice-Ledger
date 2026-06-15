@@ -3,9 +3,9 @@ SQLAlchemy models for Voice Ledger with Neon Postgres
 """
 
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Text, JSON, Boolean, ARRAY
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, Text, JSON, Boolean, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import relationship
 import os
 from dotenv import load_dotenv
 
@@ -873,14 +873,8 @@ class UATIssue(Base):
     reporter = relationship("UserIdentity", foreign_keys=[user_id])
 
 
-# Database connection
-engine = create_engine(
-    DATABASE_URL,
-    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
-    pool_pre_ping=True,
-    pool_recycle=3600,
-)
-SessionLocal = sessionmaker(bind=engine)
+# Database engine and session — connection.py is the single source of truth
+from database.connection import engine, SessionLocal
 
 def init_database():
     """Create all tables in Neon."""

@@ -12,12 +12,12 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(
-    DATABASE_URL, 
-    echo=False,
-    pool_pre_ping=True,  # Test connections before using them
-    pool_recycle=3600,   # Recycle connections after 1 hour
-    pool_size=5,         # Connection pool size
-    max_overflow=10      # Max overflow connections
+    DATABASE_URL,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=5,
+    max_overflow=10,
 )
 SessionLocal = sessionmaker(bind=engine)
 
