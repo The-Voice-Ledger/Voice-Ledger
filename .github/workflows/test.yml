@@ -38,11 +38,11 @@ jobs:
 
       - name: Run unit tests
         env:
-          DATABASE_URL: sqlite:///:memory:
-          OPENAI_API_KEY: test-key
-          TELEGRAM_BOT_TOKEN: test-token
-          JWT_SECRET_KEY: test-secret-for-ci-only
-          REDIS_URL: redis://localhost:6379/15
+          DATABASE_URL: "sqlite:///:memory:"
+          OPENAI_API_KEY: "test-key"
+          TELEGRAM_BOT_TOKEN: "test-token"
+          JWT_SECRET_KEY: "test-secret-for-ci-only"
+          REDIS_URL: "redis://localhost:6379/15"
           SQL_ECHO: "false"
         run: |
           pytest -m "not slow and not integration and not e2e" --tb=short -q --no-header
