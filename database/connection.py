@@ -11,13 +11,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+_is_sqlite = DATABASE_URL and DATABASE_URL.startswith("sqlite")
+_pool_kwargs = {} if _is_sqlite else {
+    "pool_size": 5,
+    "max_overflow": 10,
+}
 engine = create_engine(
     DATABASE_URL,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",
     pool_pre_ping=True,
     pool_recycle=3600,
-    pool_size=5,
-    max_overflow=10,
+    **_pool_kwargs,
 )
 SessionLocal = sessionmaker(bind=engine)
 
