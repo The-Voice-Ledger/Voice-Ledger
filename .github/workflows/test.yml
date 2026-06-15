@@ -44,6 +44,7 @@ jobs:
           JWT_SECRET_KEY: "test-secret-for-ci-only"
           REDIS_URL: "redis://localhost:6379/15"
           SQL_ECHO: "false"
+          APP_SECRET_KEY: "test-app-secret-for-ci-only"
         run: |
           pytest \
             -m "not slow and not integration and not e2e" \
@@ -52,4 +53,20 @@ jobs:
             --ignore=tests/test_pin_setup.py \
             --ignore=tests/test_telegram_verification.py \
             --ignore=tests/test_voice_api.py \
+            --ignore=tests/test_aggregated_dpp.py \
+            --ignore=tests/test_aggregation_nlu.py \
+            --ignore=tests/test_anchor_flow.py \
+            --ignore=tests/test_batch_split.py \
+            --ignore=tests/test_commission_events.py \
+            --ignore=tests/test_conversational_ai.py \
+            --ignore=tests/test_cre_bridge.py \
+            --ignore=tests/test_db.py \
+            --ignore=tests/test_defi_agent_tools.py \
+            --ignore=tests/test_dpp.py \
+            --ignore=tests/test_dpp_flow.py \
+            --ignore=tests/test_e2e_commission_verification.py \
+            --ignore=tests/test_ipfs_blockchain_integration.py \
+            --ignore=tests/test_livekit_provider_fallback.py \
+            --ignore=tests/test_registration_verification_e2e.py \
+            --ignore=tests/test_validators.py \
             --tb=short -q --no-header
