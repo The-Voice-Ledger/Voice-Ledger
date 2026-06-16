@@ -374,6 +374,27 @@ def clear_conversation_history(user_id: int):
 
 
 # ---------------------------------------------------------------------------
+# Read-only tool set — single source of truth
+# Used for: (1) write-operation tracking, (2) anonymous user gate
+# ---------------------------------------------------------------------------
+
+READ_ONLY_TOOLS: frozenset = frozenset({
+    "query_batches", "search_knowledge",
+    "browse_rfqs", "list_my_offers",
+    "check_eudr_compliance", "check_mass_balance",
+    "get_dpp", "get_container_dpp",
+    "trace_lineage", "validate_dpp",
+    "list_pending_verifications",
+    "check_blockchain_anchor", "get_token_info",
+    "verify_batch_hash",
+    "check_don_attestation", "get_don_provenance_metrics",
+    "browse_containers", "browse_pools",
+    "list_my_commitments", "check_payment_status",
+    "check_financing_pool", "check_trade_financing",
+})
+
+
+# ---------------------------------------------------------------------------
 # Agent Executor
 # ---------------------------------------------------------------------------
 
@@ -522,19 +543,7 @@ class AgentExecutor:
                         all_tool_calls.append(tool_call_record)
                         
                         # Track write operations
-                        if tool_result["success"] and tool_name not in (
-                            "query_batches", "search_knowledge",
-                            "browse_rfqs", "list_my_offers",
-                            "check_eudr_compliance", "check_mass_balance",
-                            "get_dpp", "get_container_dpp",
-                            "trace_lineage", "validate_dpp",
-                            "list_pending_verifications",
-                            "check_blockchain_anchor", "get_token_info",
-                            "verify_batch_hash",
-                            "check_don_attestation", "get_don_provenance_metrics",
-                            "browse_pools", "list_my_commitments",
-                            "browse_containers", "check_payment_status",
-                        ):
+                        if tool_result["success"] and tool_name not in READ_ONLY_TOOLS:
                             performed_write = True
                             last_intent = tool_name
                             last_entities = tool_args
@@ -670,20 +679,7 @@ class AgentExecutor:
         return prompt
     
     # Tools that anonymous (user_id=0) guests are allowed to call
-    READ_ONLY_TOOLS = {
-        "query_batches", "search_knowledge",
-        "browse_rfqs", "list_my_offers",
-        "check_eudr_compliance", "check_mass_balance",
-        "get_dpp", "get_container_dpp",
-        "trace_lineage", "validate_dpp",
-        "list_pending_verifications",
-        "check_blockchain_anchor", "get_token_info",
-        "verify_batch_hash",
-        "check_don_attestation", "get_don_provenance_metrics",
-        "browse_containers", "browse_pools",
-        "list_my_commitments", "check_payment_status",
-        "check_financing_pool", "check_trade_financing",
-    }
+    # Defined at module level as READ_ONLY_TOOLS — see above
 
     def _execute_tool(
         self,
@@ -699,7 +695,7 @@ class AgentExecutor:
             {"success": bool, "message": str, "data": dict}
         """
         # --- Anonymous user guard ---
-        if (user_id is None or user_id == 0) and tool_name not in self.READ_ONLY_TOOLS:
+        if (user_id is None or user_id == 0) and tool_name not in READ_ONLY_TOOLS:
             return {
                 "success": False,
                 "message": (

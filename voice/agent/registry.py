@@ -100,6 +100,13 @@ class ToolRegistry:
         self._tools["request_financing_advance"] = self._request_financing_advance
         self._tools["check_trade_financing"] = self._check_trade_financing
 
+        # Load any registered tool plugins (extensibility layer)
+        try:
+            from voice.agent.tool_plugins import register_all_plugins
+            register_all_plugins(self)
+        except ImportError:
+            pass  # plugin package not yet present — safe to skip
+
     # ------------------------------------------------------------------
     # Helper: Cooperative lookup
     # ------------------------------------------------------------------
