@@ -373,26 +373,15 @@ async def handle_photo_message(update_data: Dict[str, Any]) -> Dict[str, Any]:
         from voice.telegram.payment_photo_sessions import get_payment_photo_session, clear_payment_photo_session
         payment_session = get_payment_photo_session(user_id)
         if payment_session:
+            from voice.telegram.payment_handler import handle_confirm_payment
             photo_url = await _get_photo_url(photo_file_id)
-            acceptance_ref = payment_session["acceptance_number"]
+            acceptance_number = payment_session["acceptance_number"]
             clear_payment_photo_session(user_id)
-
-            # Pool commitment payment (session value starts with "POOL:")
-            if acceptance_ref.startswith("POOL:"):
-                from voice.telegram.payment_handler import handle_confirm_pool_payment
-                commitment_id = int(acceptance_ref.split(":", 1)[1])
-                response = await handle_confirm_pool_payment(
-                    user_id=int(user_id),
-                    commitment_id=commitment_id,
-                    photo_url=photo_url,
-                )
-            else:
-                from voice.telegram.payment_handler import handle_confirm_payment
-                response = await handle_confirm_payment(
-                    user_id=int(user_id),
-                    message_text=f"/confirm_payment {acceptance_ref}",
-                    photo_url=photo_url,
-                )
+            response = await handle_confirm_payment(
+                user_id=int(user_id),
+                message_text=f"/confirm_payment {acceptance_number}",
+                photo_url=photo_url,
+            )
             processor = get_processor()
             await processor.send_notification(
                 channel_name='telegram',
@@ -2682,58 +2671,6 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             return {"ok": True, "message": "Registration response sent"}
         
         # Payment coordination commands
-        if text.startswith('/confirm_pool_payment'):
-            from voice.telegram.payment_handler import handle_confirm_pool_payment
-            from voice.telegram.payment_photo_sessions import create_payment_photo_session
-            parts = text.strip().split()
-            if len(parts) < 2 or not parts[1].isdigit():
-                await processor.send_notification(
-                    channel_name='telegram',
-                    user_id=user_id,
-                    message="❌ Usage: <code>/confirm_pool_payment &lt;commitment_id&gt;</code>\nExample: <code>/confirm_pool_payment 5</code>",
-                    parse_mode='HTML',
-                )
-                return {"ok": True}
-            commitment_id = int(parts[1])
-            # Create a session so the next photo they send is used as the receipt
-            create_payment_photo_session(user_id, f"POOL:{commitment_id}")
-            await processor.send_notification(
-                channel_name='telegram',
-                user_id=user_id,
-                message=(
-                    f"📸 <b>Receipt Photo Required</b>\n\n"
-                    f"Please send a photo of your bank transfer receipt now.\n"
-                    f"Commitment: <code>#{commitment_id}</code>\n\n"
-                    f"You have 10 minutes to upload the photo."
-                ),
-                parse_mode='HTML',
-            )
-            return {"ok": True, "message": "confirm_pool_payment session created"}
-
-        if text.startswith('/confirm_pool_receipt'):
-            from voice.telegram.payment_handler import handle_confirm_pool_receipt
-            parts = text.strip().split()
-            if len(parts) < 2 or not parts[1].isdigit():
-                await processor.send_notification(
-                    channel_name='telegram',
-                    user_id=user_id,
-                    message="❌ Usage: <code>/confirm_pool_receipt &lt;commitment_id&gt;</code>\nExample: <code>/confirm_pool_receipt 5</code>",
-                    parse_mode='HTML',
-                )
-                return {"ok": True}
-            commitment_id = int(parts[1])
-            response = await handle_confirm_pool_receipt(
-                user_id=int(user_id),
-                commitment_id=commitment_id,
-            )
-            await processor.send_notification(
-                channel_name='telegram',
-                user_id=user_id,
-                message=response['message'],
-                parse_mode=response.get('parse_mode'),
-            )
-            return {"ok": True, "message": "confirm_pool_receipt processed"}
-
         if text.startswith('/confirm_payment'):
             from voice.telegram.payment_handler import handle_confirm_payment
             response = await handle_confirm_payment(

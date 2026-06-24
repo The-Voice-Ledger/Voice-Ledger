@@ -201,7 +201,6 @@ SETTLEMENT / PAYMENTS:
 • Check the payment/settlement status of an acceptance or commitment (check_payment_status)
 • Record that the cooperative has received and forwarded payment to farmers (record_cooperative_payout) - cooperative managers only
 • Confirm receipt of a cooperative payout (confirm_payment_received) - cooperative managers only
-• Confirm receipt of a pool commitment payment (confirm_pool_receipt) - cooperative managers only
 • Raise a payment dispute for an acceptance (dispute_payment) - buyers or cooperatives
 • Confirm coffee has been shipped (confirm_shipment) - cooperative managers only
 • Confirm coffee has been delivered (confirm_delivery) - buyers only

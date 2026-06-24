@@ -1354,31 +1354,6 @@ CONFIRM_PAYMENT_RECEIVED = {
     },
 }
 
-# Tool: confirm_pool_receipt  (WRITE - cooperative confirms pool payment received)
-# ──────────────────────────────────────────────────────────────────────────────
-CONFIRM_POOL_RECEIPT = {
-    "type": "function",
-    "function": {
-        "name": "confirm_pool_receipt",
-        "description": (
-            "Cooperative confirms they received the buyer's bank transfer for "
-            "a pool commitment (shared container purchase). "
-            "Use when cooperative says 'I received payment for commitment X', "
-            "'confirm pool receipt', 'payment arrived for commitment 5'."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "commitment_id": {
-                    "type": "integer",
-                    "description": "The pool commitment ID to confirm receipt for",
-                },
-            },
-            "required": ["commitment_id"],
-        },
-    },
-}
-
 
 # ===========================================================================
 # DeFi Financing Pool tools (Agent #10)
@@ -1788,7 +1763,6 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CHECK_PAYMENT_STATUS,
     RECORD_COOPERATIVE_PAYOUT,
     CONFIRM_PAYMENT_RECEIVED,
-    CONFIRM_POOL_RECEIPT,
     DISPUTE_PAYMENT,
     CONFIRM_SHIPMENT,
     CONFIRM_DELIVERY,

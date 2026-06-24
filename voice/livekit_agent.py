@@ -1136,20 +1136,6 @@ async def confirm_delivery(
     })
 
 
-@function_tool(description=(
-    "Cooperative confirms they received the buyer's payment for a pool commitment "
-    "(shared container purchase). Use when cooperative says 'I received the pool payment', "
-    "'confirm receipt for commitment 5'."
-))
-async def confirm_pool_receipt(
-    ctx: RunContext,
-    commitment_id: Annotated[int, "The pool commitment ID"],
-) -> str:
-    return await _exec(ctx, "confirm_pool_receipt", {
-        "commitment_id": commitment_id,
-    })
-
-
 # =====================================================================
 # 10. DeFi FINANCING POOL TOOLS
 # =====================================================================
@@ -1320,7 +1306,6 @@ SETTLEMENT & PAYMENTS
 • Check payment status (check_payment_status)
 • Record cooperative payout (record_cooperative_payout) — admin
 • Confirm payment received (confirm_payment_received) — cooperative
-• Confirm pool commitment payment received (confirm_pool_receipt) — cooperative
 • Raise a payment dispute (dispute_payment)
 • Confirm coffee has been shipped (confirm_shipment) — cooperative
 • Confirm coffee has been delivered (confirm_delivery) — buyer
@@ -1389,7 +1374,6 @@ ALL_TOOLS = [
     # Settlement (mixed)
     confirm_payment, check_payment_status,
     record_cooperative_payout, confirm_payment_received,
-    confirm_pool_receipt,
     dispute_payment, confirm_shipment, confirm_delivery,
     # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
