@@ -970,77 +970,161 @@ async def handle_text_command(update_data: Dict[str, Any]) -> Dict[str, Any]:
             from ssi.user_identity import get_user_by_telegram_id
             
             db = SessionLocal()
+            existing_user = None
             try:
                 existing_user = get_user_by_telegram_id(user_id, db)
-                db.close()
-                
-                # If user doesn't exist, prompt them to register
-                if not existing_user:
-                    logger.info(f"New user {user_id}, prompting to register")
-                    
-                    result = await processor.send_notification(
-                        channel_name='telegram',
-                        user_id=user_id,
-                        message=(
-                            "👋 *Welcome to Voice Ledger!*\n\n"
-                            "Voice Ledger helps coffee farmers, cooperatives, exporters, and buyers "
-                            "create digital supply chain records using natural conversation.\n\n"
-                            "📝 *Get Started:*\n"
-                            "To begin, please complete registration:\n"
-                            "👉 Send /register\n\n"
-                            "This will let you:\n"
-                            "• 🎙️ Create batches via voice messages\n"
-                            "• 📞 Call our IVR line: +41 62 539 1661\n"
-                            "• 📱 Receive SMS notifications\n"
-                            "• 🔐 Access the web dashboard with PIN\n\n"
-                            "Registration takes 2-5 minutes."
-                        ),
-                        parse_mode='Markdown',
-                        send_voice=True  # Welcome message - conversational content
-                    )
-                    logger.info(f"/start prompt to register: {result}")
-                    return {"ok": True, "message": "Prompted to register"}
-                
-                # User exists - show welcome message
             except Exception as e:
                 logger.error(f"Error checking user registration: {e}")
+            finally:
                 db.close()
+                
+            # If user doesn't exist, prompt them to register
+            if not existing_user:
+                logger.info(f"New user {user_id}, prompting to register")
+                
+                result = await processor.send_notification(
+                    channel_name='telegram',
+                    user_id=user_id,
+                    message=(
+                        "👋 *Welcome to Voice Ledger!*\n\n"
+                        "Voice Ledger helps coffee farmers, cooperatives, exporters, and buyers "
+                        "create digital supply chain records using natural conversation.\n\n"
+                        "📝 *Get Started:*\n"
+                        "To begin, please complete registration:\n"
+                        "👉 Send /register\n\n"
+                        "This will let you:\n"
+                        "• 🎙️ Create batches via voice messages\n"
+                        "• 📞 Call our IVR line: +41 62 539 1661\n"
+                        "• 📱 Receive SMS notifications\n"
+                        "• 🔐 Access the web dashboard with PIN\n\n"
+                        "Registration takes 2-5 minutes."
+                    ),
+                    parse_mode='Markdown',
+                    send_voice=True
+                )
+                logger.info(f"/start prompt to register: {result}")
+                return {"ok": True, "message": "Prompted to register"}
             
-            # Regular welcome message for registered users
+            # User exists — build role-specific welcome message
+            user_role = getattr(existing_user, 'role', None) or 'UNKNOWN'
+            first_name = message.get('from', {}).get('first_name', 'there')
+            is_approved = getattr(existing_user, 'is_approved', False)
+
+            pending_notice = (
+                "\n⏳ *Your account is pending admin approval.* Some features may be restricted until approved.\n"
+                if not is_approved else ""
+            )
+
+            # ── Common footer ──────────────────────────────────────────────
+            common_footer = (
+                "\n\n📝 *Account:*\n"
+                "/myidentity - Show your DID\n"
+                "/mycredentials - View track record\n"
+                "/language - Voice language preference\n\n"
+                "Type /help for the full command list. 🎤"
+            )
+
+            # ── Role-specific bodies ───────────────────────────────────────
+            if user_role == 'FARMER':
+                role_body = (
+                    f"👋 *Welcome back, {first_name}!*\n\n"
+                    "You're logged in as a *Farmer* 👨‍🌾\n"
+                    f"{pending_notice}\n"
+                    "🗣️ Just send a voice message to record your harvest or shipment.\n\n"
+                    "🌱 *Your Commands:*\n"
+                    "/commission - Record a new coffee batch\n"
+                    "/ship - Ship a batch to a cooperative\n"
+                    "/mybatches - View your batches\n"
+                    "/dpp - Generate Digital Product Passport\n\n"
+                    "🎙️ *Voice Examples:*\n"
+                    "• \"I harvested 120 kg of Yirgacheffe coffee\"\n"
+                    "• \"Ship batch F-001 to Addis cooperative\"\n"
+                    "• \"My batch from Gedeo zone, washed process\""
+                )
+
+            elif user_role == 'COOPERATIVE_MANAGER':
+                role_body = (
+                    f"👋 *Welcome back, {first_name}!*\n\n"
+                    "You're logged in as a *Cooperative Manager* 🏭\n"
+                    f"{pending_notice}\n"
+                    "🗣️ Just send a voice message to manage incoming batches, processing, and verification.\n\n"
+                    "🏭 *Your Commands:*\n"
+                    "/receive - Receive a batch from a farmer\n"
+                    "/transform - Record processing (wet/dry mill)\n"
+                    "/pack - Pack batches into export lots\n"
+                    "/export - Mark a batch ready for export\n"
+                    "/verify - Verify a batch ✅\n"
+                    "/dpp - Generate Digital Product Passport\n"
+                    "/mybatches - View managed batches\n\n"
+                    "🛒 *Marketplace:*\n"
+                    "/offers - Browse open purchase requests\n"
+                    "/myoffers - Track your submitted offers\n\n"
+                    "🎙️ *Voice Examples:*\n"
+                    "• \"Received batch F-001 in good condition, 118 kg net\"\n"
+                    "• \"Washed and sorted batch C-042, output 95 kg\"\n"
+                    "• \"Pack batches C-010, C-011, C-012 into pallet\""
+                )
+
+            elif user_role == 'EXPORTER':
+                role_body = (
+                    f"👋 *Welcome back, {first_name}!*\n\n"
+                    "You're logged in as an *Exporter* 🚢\n"
+                    f"{pending_notice}\n"
+                    "🗣️ Just send a voice message to manage shipments and export documentation.\n\n"
+                    "🚢 *Your Commands:*\n"
+                    "/receive - Receive batches from cooperatives\n"
+                    "/ship - Ship batches to buyers\n"
+                    "/pack - Pack lots for export containers\n"
+                    "/export - Finalize export records\n"
+                    "/dpp - Generate Digital Product Passport\n"
+                    "/mybatches - View your export batches\n\n"
+                    "🎙️ *Voice Examples:*\n"
+                    "• \"Received pallet P-007 from Yirgacheffe coop\"\n"
+                    "• \"Ship container EX-202 to buyer in Hamburg\"\n"
+                    "• \"Export lot L-55, 300 bags, Grade 1 washed\""
+                )
+
+            elif user_role == 'BUYER':
+                role_body = (
+                    f"👋 *Welcome back, {first_name}!*\n\n"
+                    "You're logged in as a *Buyer* ☕\n"
+                    f"{pending_notice}\n"
+                    "🗣️ Just send a voice message to place purchase requests or check your orders.\n\n"
+                    "🛒 *Your Commands:*\n"
+                    "/rfq - Create a new purchase request\n"
+                    "/myrfqs - View your RFQs and received offers\n"
+                    "/receive - Confirm receipt of a shipment\n"
+                    "/dpp - Verify a batch's Digital Product Passport\n"
+                    "/mybatches - View received batches\n\n"
+                    "🎙️ *Voice Examples:*\n"
+                    "• \"I need 500 kg of Grade 1 washed Yirgacheffe\"\n"
+                    "• \"Accept offer from Yirgacheffe Cooperative\"\n"
+                    "• \"Received shipment EX-202, all in good condition\""
+                )
+
+            else:
+                # Fallback for unknown / unrecognised roles
+                role_body = (
+                    f"👋 *Welcome back, {first_name}!*\n\n"
+                    f"Your role: *{user_role.replace('_', ' ').title()}*\n"
+                    f"{pending_notice}\n"
+                    "🗣️ Just send a voice message and I'll help you out.\n\n"
+                    "📋 *General Commands:*\n"
+                    "/mybatches - View your batches\n"
+                    "/dpp - Generate Digital Product Passport\n"
+                )
+
+            welcome_message = role_body + common_footer
+
             result = await processor.send_notification(
                 channel_name='telegram',
                 user_id=user_id,
-                message=(
-                    "👋 Welcome back to Voice Ledger!\n\n"
-                    "I help coffee farmers, cooperatives, exporters, and buyers create digital supply chain records using natural conversation.\n\n"
-                    "🗣️ *Just send a voice message!* I'll ask questions if I need more details.\n\n"
-                    "📝 *Account & Identity:*\n"
-                    "/register - Register new role\n"
-                    "/myidentity - Show your DID\n"
-                    "/mycredentials - View track record\n"
-                    "/mybatches - List your batches\n"
-                    "/language - Voice language preference\n\n"
-                    "🛒 *Marketplace:*\n"
-                    "/rfq - Create purchase request (buyers)\n"
-                    "/myrfqs - View my RFQs & offers (buyers)\n"
-                    "/offers - Browse available RFQs (cooperatives)\n"
-                    "/myoffers - Track submitted offers (cooperatives)\n\n"
-                    "📦 *Supply Chain:*\n"
-                    "/verify - Verify a batch (managers only)\n"
-                    "/dpp - Generate Digital Product Passport\n\n"
-                    "🎙️ *Voice Examples:*\n"
-                    "👨‍🌾 \"I harvested 50 kg coffee from Gedeo\"\n"
-                    "📦 \"Ship batch ABC123 to Addis warehouse\"\n"
-                    "🏭 \"Received batch XYZ456 in good condition\"\n"
-                    "☕ \"Roast batch DEF789, output 850kg\"\n"
-                    "📊 \"Pack batches A B C into pallet\"\n\n"
-                    "Type /help for more details! 🎤"
-                ),
+                message=welcome_message,
                 parse_mode='Markdown',
-                send_voice=True  # Menu - conversational, useful as voice
+                send_voice=True
             )
-            logger.info(f"/start notification result: {result}")
-            return {"ok": True, "message": "Sent welcome message"}
+            logger.info(f"/start notification result for role {user_role}: {result}")
+            return {"ok": True, "message": f"Sent role-based welcome message ({user_role})"}
         
         # Handle /help command
         if text.startswith('/help'):
