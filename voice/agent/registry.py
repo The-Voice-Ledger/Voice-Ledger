@@ -107,6 +107,9 @@ class ToolRegistry:
         self._tools["list_webhook_subscriptions"]      = self._list_webhook_subscriptions
         self._tools["unregister_webhook_subscription"] = self._unregister_webhook_subscription
 
+        # Shipment status / timeline (Agent #13)
+        self._tools["get_shipment_status"] = self._get_shipment_status
+
         # Load any registered tool plugins (extensibility layer)
         try:
             from voice.agent.tool_plugins import register_all_plugins
@@ -2362,6 +2365,150 @@ class ToolRegistry:
             f"✅ Webhook `{webhook_id}` removed. It will no longer receive events.",
             {"success": True, "found": True, "id": webhook_id},
         )
+
+    # ------------------------------------------------------------------
+    # Shipment status / timeline (Agent #13)
+    # ------------------------------------------------------------------
+
+    def _get_shipment_status(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Return the current delivery status and full EPCIS event timeline for a
+        container identified by its SSCC.
+
+        Combines marketplace delivery_status with all EPCIS events (including
+        LSP-ingested milestones) to give a complete logistics picture.
+        """
+        from sqlalchemy import String
+
+        container_sscc = (args.get("container_sscc") or "").strip()
+        if not container_sscc:
+            return "❌ container_sscc is required.", {"success": False}
+
+        # ── Resolve container ─────────────────────────────────────────
+        try:
+            from database.models import ContainerOffering
+            offering = (
+                db.query(ContainerOffering)
+                .filter(ContainerOffering.container_sscc == container_sscc)
+                .first()
+            )
+        except Exception as exc:
+            logger.error("get_shipment_status DB error looking up container: %s", exc)
+            return f"❌ Database error: {exc}", {"success": False}
+
+        if not offering:
+            return (
+                f"❌ Container `{container_sscc}` not found.",
+                {"success": False},
+            )
+
+        # ── Latest delivery status from RFQ acceptance ────────────────
+        try:
+            from database.models import RFQAcceptance
+            acceptance = (
+                db.query(RFQAcceptance)
+                .filter(RFQAcceptance.container_offering_id == offering.id)
+                .order_by(RFQAcceptance.created_at.desc())
+                .first()
+            )
+            delivery_status = acceptance.delivery_status if acceptance else "PENDING"
+        except Exception:
+            delivery_status = "UNKNOWN"
+
+        # ── EPCIS events that reference this SSCC ─────────────────────
+        events_list: list = []
+        milestones_list: list = []
+        try:
+            from database.models import EPCISEvent
+            epcis_events = (
+                db.query(EPCISEvent)
+                .filter(EPCISEvent.event_json.cast(String).contains(container_sscc))
+                .order_by(EPCISEvent.event_time.asc())
+                .all()
+            )
+
+            for evt in epcis_events:
+                entry = {
+                    "event_type":           evt.event_type,
+                    "biz_step":             evt.biz_step,
+                    "event_time":           evt.event_time.isoformat() if evt.event_time else None,
+                    "blockchain_tx_hash":   evt.blockchain_tx_hash,
+                    "ipfs_cid":             evt.ipfs_cid,
+                    "blockchain_confirmed": evt.blockchain_confirmed,
+                }
+                event_json = evt.event_json if isinstance(evt.event_json, dict) else {}
+                ext        = event_json.get("extension", {})
+
+                if ext.get("source") == "LSP_INTEGRATION":
+                    milestones_list.append({
+                        **entry,
+                        "milestone_type":    ext.get("milestoneType"),
+                        "carrier":           ext.get("carrier"),
+                        "vessel_imo":        ext.get("vesselIMO"),
+                        "tracking_reference": ext.get("trackingReference"),
+                    })
+                else:
+                    events_list.append(entry)
+        except Exception as exc:
+            logger.warning("get_shipment_status EPCIS query failed: %s", exc)
+
+        # ── Format response ───────────────────────────────────────────
+        qty   = getattr(offering, "total_quantity_kg", None)
+        variety = getattr(offering, "variety", None)
+
+        status_emoji = {
+            "PENDING":    "⏳",
+            "SHIPPED":    "🚢",
+            "IN_TRANSIT": "🚢",
+            "DELIVERED":  "✅",
+            "UNKNOWN":    "❓",
+        }.get(delivery_status, "📦")
+
+        lines = [
+            f"📦 *Shipment Status: {container_sscc}*\n",
+            f"{status_emoji} Delivery status: *{delivery_status}*",
+        ]
+        if qty:
+            lines.append(f"⚖️  Quantity: {qty:,.0f} kg")
+        if variety:
+            lines.append(f"☕ Variety: {variety}")
+
+        if milestones_list:
+            lines.append(f"\n🗺️ *Logistics milestones ({len(milestones_list)}):*")
+            for m in milestones_list:
+                t = m.get("event_time", "")[:19].replace("T", " ") if m.get("event_time") else "—"
+                label = (m.get("milestone_type") or "").replace("_", " ").title()
+                carrier = f"  · {m['carrier']}" if m.get("carrier") else ""
+                lines.append(f"  • {label}  {t}{carrier}")
+
+        if events_list:
+            lines.append(f"\n📋 *Supply chain events ({len(events_list)}):*")
+            for e in events_list:
+                t = e.get("event_time", "")[:19].replace("T", " ") if e.get("event_time") else "—"
+                step = (e.get("biz_step") or e.get("event_type") or "event")
+                anchored = " ⛓️" if e.get("blockchain_tx_hash") else ""
+                lines.append(f"  • {step}  {t}{anchored}")
+
+        if not milestones_list and not events_list:
+            lines.append("\n_No events recorded yet._")
+
+        logger.info(
+            "Shipment status for %s: %s (%d events, %d milestones)",
+            container_sscc, delivery_status, len(events_list), len(milestones_list),
+        )
+
+        return "\n".join(lines), {
+            "success":          True,
+            "container_sscc":   container_sscc,
+            "delivery_status":  delivery_status,
+            "total_quantity_kg": qty,
+            "variety":          variety,
+            "events":           events_list,
+            "milestones":       milestones_list,
+        }
 
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""

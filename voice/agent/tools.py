@@ -1906,6 +1906,41 @@ UNREGISTER_WEBHOOK_SUBSCRIPTION = {
 }
 
 
+
+
+# ===========================================================================
+# SHIPMENT STATUS TOOLS (Agent #13 - container timeline & delivery status)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: get_shipment_status  (READ - full EPCIS timeline + delivery status)
+# ---------------------------------------------------------------------------
+GET_SHIPMENT_STATUS = {
+    "type": "function",
+    "function": {
+        "name": "get_shipment_status",
+        "description": (
+            "Return the current delivery status and full event timeline for a "
+            "shipping container identified by its SSCC. Combines the marketplace "
+            "delivery_status with all EPCIS supply chain events and LSP-ingested "
+            "milestones (port arrivals, customs clearance, vessel departures). "
+            "Use when a user asks 'where is container XYZ', 'shipment status', "
+            "'track my container', 'show delivery timeline', 'has it cleared customs'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_sscc": {
+                    "type": "string",
+                    "description": "SSCC (Serial Shipping Container Code) of the container to look up.",
+                },
+            },
+            "required": ["container_sscc"],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -1972,5 +2007,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     REGISTER_WEBHOOK_SUBSCRIPTION,
     LIST_WEBHOOK_SUBSCRIPTIONS,
     UNREGISTER_WEBHOOK_SUBSCRIPTION,
+    # Shipment Status / Timeline (Agent #13)
+    GET_SHIPMENT_STATUS,
 ]
 
