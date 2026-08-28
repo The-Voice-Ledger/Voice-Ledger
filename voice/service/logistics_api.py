@@ -150,7 +150,9 @@ async def register_webhook_endpoint(body: WebhookRegisterRequest):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return WebhookResponse(**wh.to_dict())
+    d = wh.to_dict()
+    d.pop("secret", None)   # WebhookResponse has no secret field
+    return WebhookResponse(**d)
 
 
 @router.get("/api/webhooks", response_model=List[WebhookResponse])

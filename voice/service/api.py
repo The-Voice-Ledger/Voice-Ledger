@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
@@ -195,10 +196,47 @@ except ImportError as e:
     LOGISTICS_API_AVAILABLE = False
     print(f"ℹ️  Logistics/webhook API module not available: {e}")
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """
+    FastAPI lifespan handler.
+
+    Startup:
+      - Pre-load webhook registrations from Redis into the in-process cache
+        so the first dispatch has zero cold-start cost.
+      - Start the Redis pub/sub subscriber thread so all replicas stay in sync
+        when webhooks are registered or unregistered on any instance.
+
+    Shutdown:
+      - Drain in-flight webhook delivery tasks (up to 30 s).
+      - Close the shared httpx client cleanly.
+    """
+    # ── Startup ──────────────────────────────────────────────────────────
+    try:
+        from voice.service.webhook_dispatcher import warm_cache, _start_subscriber
+        count = warm_cache()
+        logger.info("Webhook cache warmed: %d registrations loaded", count)
+        _start_subscriber()
+    except Exception as exc:
+        logger.warning("Webhook startup init failed (non-fatal): %s", exc)
+
+    yield   # app is now running
+
+    # ── Shutdown ─────────────────────────────────────────────────────────
+    try:
+        from voice.service.webhook_dispatcher import await_in_flight, close_httpx_client
+        await await_in_flight(timeout=30.0)
+        await close_httpx_client()
+        logger.info("Webhook dispatcher shut down cleanly")
+    except Exception as exc:
+        logger.warning("Webhook shutdown cleanup failed (non-fatal): %s", exc)
+
+
 app = FastAPI(
     title="Voice Ledger Voice Interface API",
     description="Voice input capability for supply chain traceability",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=_lifespan,
 )
 
 # Include IVR router if available (Phase 3)
