@@ -1713,6 +1713,94 @@ CONFIRM_DELIVERY = {
 }
 
 
+
+
+# ===========================================================================
+# LOGISTICS TOOLS (Agent #11 - LSP milestone ingestion)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: ingest_milestone  (WRITE - record an LSP tracking milestone)
+# ---------------------------------------------------------------------------
+INGEST_MILESTONE = {
+    "type": "function",
+    "function": {
+        "name": "ingest_milestone",
+        "description": (
+            "Record a logistics tracking milestone for a shipping container. "
+            "Use when a user reports a shipping event such as pickup, port arrival, "
+            "vessel departure, customs clearance, or final delivery. "
+            "Examples: 'Container XYZ arrived at Hamburg port', "
+            "'Our shipment cleared customs in Rotterdam', "
+            "'Vessel departed on voyage EX-202', 'Mark container as delivered'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "container_sscc": {
+                    "type": "string",
+                    "description": "SSCC (Serial Shipping Container Code) of the container",
+                },
+                "milestone_type": {
+                    "type": "string",
+                    "description": (
+                        "Type of milestone event. One of: "
+                        "PICKUP, PORT_ARRIVAL_ORIGIN, VESSEL_DEPARTURE, "
+                        "TRANSSHIPMENT, PORT_ARRIVAL_DESTINATION, "
+                        "CUSTOMS_CLEARED, DELIVERED"
+                    ),
+                    "enum": [
+                        "PICKUP",
+                        "PORT_ARRIVAL_ORIGIN",
+                        "VESSEL_DEPARTURE",
+                        "TRANSSHIPMENT",
+                        "PORT_ARRIVAL_DESTINATION",
+                        "CUSTOMS_CLEARED",
+                        "DELIVERED",
+                    ],
+                },
+                "location_name": {
+                    "type": "string",
+                    "description": "Human-readable location name, e.g. 'Port of Hamburg'",
+                },
+                "location_gln": {
+                    "type": "string",
+                    "description": "GS1 GLN of the location (optional, preferred over location_name)",
+                },
+                "carrier": {
+                    "type": "string",
+                    "description": "Carrier or shipping line name, e.g. 'Maersk', 'CMA CGM'",
+                },
+                "vessel_imo": {
+                    "type": "string",
+                    "description": "IMO number of the vessel, e.g. '9321483'",
+                },
+                "voyage_number": {
+                    "type": "string",
+                    "description": "Voyage or trip reference number",
+                },
+                "tracking_reference": {
+                    "type": "string",
+                    "description": "Carrier tracking number or booking reference",
+                },
+                "timestamp": {
+                    "type": "string",
+                    "description": (
+                        "ISO-8601 timestamp of the milestone event. "
+                        "Defaults to current server time if not provided."
+                    ),
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Free-text notes about this milestone",
+                },
+            },
+            "required": ["container_sscc", "milestone_type"],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -1773,5 +1861,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     CONFIRM_TRADE_DELIVERY,
     CANCEL_TRADE,
     MARK_DEFAULT,
+    # Logistics / LSP Milestones (Agent #11)
+    INGEST_MILESTONE,
 ]
 

@@ -99,6 +99,9 @@ class ToolRegistry:
         self._tools["request_financing_advance"] = self._request_financing_advance
         self._tools["check_trade_financing"] = self._check_trade_financing
 
+        # Logistics / LSP Milestone tools (Agent #11)
+        self._tools["ingest_milestone"] = self._ingest_milestone
+
         # Load any registered tool plugins (extensibility layer)
         try:
             from voice.agent.tool_plugins import register_all_plugins
@@ -2038,6 +2041,184 @@ class ToolRegistry:
                 f"Failed to mark trade as defaulted: {e}",
                 {"error": str(e)},
             )
+
+    # ------------------------------------------------------------------
+    # Logistics / LSP Milestone tools (Agent #11)
+    # ------------------------------------------------------------------
+
+    def _ingest_milestone(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Ingest a logistics tracking milestone from an LSP and record it as a
+        blockchain-anchored EPCIS event in the container's timeline.
+
+        Mirrors POST /api/logistics/milestone in voice/service/logistics_api.py.
+        """
+        import json
+        import hashlib
+        from datetime import datetime, timezone
+
+        MILESTONE_EPCIS_MAP = {
+            "PICKUP":                   ("ObjectEvent", "shipping",   "in_transit"),
+            "PORT_ARRIVAL_ORIGIN":      ("ObjectEvent", "arriving",   "in_transit"),
+            "VESSEL_DEPARTURE":         ("ObjectEvent", "shipping",   "in_transit"),
+            "TRANSSHIPMENT":            ("ObjectEvent", "arriving",   "in_transit"),
+            "PORT_ARRIVAL_DESTINATION": ("ObjectEvent", "arriving",   "in_progress"),
+            "CUSTOMS_CLEARED":          ("ObjectEvent", "inspecting", "sellable_accessible"),
+            "DELIVERED":                ("ObjectEvent", "receiving",  "in_progress"),
+        }
+
+        container_sscc  = (args.get("container_sscc") or "").strip()
+        milestone_type  = (args.get("milestone_type") or "").upper().strip()
+        location_gln    = args.get("location_gln")
+        location_name   = args.get("location_name")
+        carrier         = args.get("carrier")
+        vessel_imo      = args.get("vessel_imo")
+        voyage_number   = args.get("voyage_number")
+        tracking_ref    = args.get("tracking_reference")
+        timestamp       = args.get("timestamp")
+        notes           = args.get("notes")
+
+        if not container_sscc:
+            return "❌ container_sscc is required.", {"success": False}
+
+        if milestone_type not in MILESTONE_EPCIS_MAP:
+            valid = ", ".join(sorted(MILESTONE_EPCIS_MAP.keys()))
+            return (
+                f"❌ Invalid milestone_type '{milestone_type}'. Valid: {valid}",
+                {"success": False},
+            )
+
+        event_type, biz_step, disposition = MILESTONE_EPCIS_MAP[milestone_type]
+
+        # Resolve container
+        from database.models import ContainerOffering
+        container = (
+            db.query(ContainerOffering)
+            .filter(ContainerOffering.container_sscc == container_sscc)
+            .first()
+        )
+        if not container:
+            return (
+                f"❌ Container '{container_sscc}' not found.",
+                {"success": False},
+            )
+
+        # Build EPCIS 2.0 event
+        event_time = timestamp or datetime.now(timezone.utc).isoformat()
+        location_id = (
+            f"urn:epc:id:sgln:{location_gln}.0"
+            if location_gln
+            else f"urn:voiceledger:location:{location_name or 'unknown'}"
+        )
+
+        epcis_event = {
+            "@context": ["https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld"],
+            "type": event_type,
+            "eventTime": event_time,
+            "eventTimeZoneOffset": "+00:00",
+            "action": "OBSERVE",
+            "bizStep": f"urn:epcglobal:cbv:bizstep:{biz_step}",
+            "disposition": f"urn:epcglobal:cbv:disp:{disposition}",
+            "epcList": [f"urn:epc:id:sscc:{container_sscc}"],
+            "readPoint": {"id": location_id},
+            "bizLocation": {"id": location_id},
+            "extension": {
+                k: v for k, v in {
+                    "milestoneType":     milestone_type,
+                    "carrier":           carrier,
+                    "vesselIMO":         vessel_imo,
+                    "voyageNumber":      voyage_number,
+                    "trackingReference": tracking_ref,
+                    "notes":             notes,
+                    "source":            "LSP_INTEGRATION",
+                }.items() if v is not None
+            },
+        }
+
+        canonical  = json.dumps(epcis_event, sort_keys=True, separators=(",", ":"))
+        event_hash = hashlib.sha256(canonical.encode()).hexdigest()
+
+        # Persist EPCIS event
+        db_event = None
+        try:
+            from database.crud import create_event
+            db_event = create_event(
+                db,
+                event_data={
+                    "event_type":       event_type,
+                    "event_json":       epcis_event,
+                    "event_hash":       event_hash,
+                    "event_time":       datetime.fromisoformat(
+                        event_time.replace("Z", "+00:00") if event_time.endswith("Z") else event_time
+                    ),
+                    "canonical_nquads": canonical,
+                    "biz_step":         biz_step,
+                    "biz_location":     location_id,
+                    "batch_id":         None,
+                    "submitter_id":     user_id or None,
+                },
+                pin_to_ipfs=True,
+                anchor_to_blockchain=True,
+            )
+        except Exception as exc:
+            logger.error("Failed to persist EPCIS milestone event: %s", exc)
+            return (f"❌ Failed to record milestone: {exc}", {"success": False})
+
+        # Fire MILESTONE_RECEIVED webhook (best-effort)
+        try:
+            import asyncio
+            from voice.service.webhook_dispatcher import dispatch_webhook
+            asyncio.create_task(
+                dispatch_webhook(
+                    "MILESTONE_RECEIVED",
+                    {
+                        "container_sscc": container_sscc,
+                        "milestone_type": milestone_type,
+                        "event_hash":     event_hash,
+                        "location":       location_name or location_gln,
+                        "timestamp":      event_time,
+                    },
+                )
+            )
+        except Exception as exc:
+            logger.warning("Webhook dispatch skipped (non-fatal): %s", exc)
+
+        blockchain_tx = getattr(db_event, "blockchain_tx_hash", None) if db_event else None
+        ipfs_cid      = getattr(db_event, "ipfs_cid", None) if db_event else None
+        loc_display   = location_name or location_gln or "unspecified location"
+        label         = milestone_type.replace("_", " ").title()
+
+        lines = [
+            f"✅ *Milestone recorded: {label}*\n",
+            f"📦 Container: `{container_sscc}`",
+            f"📍 Location: {loc_display}",
+            f"🕐 Time: {event_time}",
+            f"🔑 Event hash: `{event_hash[:16]}...`",
+        ]
+        if carrier:       lines.append(f"🚢 Carrier: {carrier}")
+        if vessel_imo:    lines.append(f"⚓ Vessel IMO: {vessel_imo}")
+        if voyage_number: lines.append(f"🗺️ Voyage: {voyage_number}")
+        if blockchain_tx: lines.append(f"⛓️ Blockchain TX: `{blockchain_tx[:20]}...`")
+        if ipfs_cid:      lines.append(f"📁 IPFS CID: `{ipfs_cid}`")
+
+        logger.info(
+            "Milestone %s ingested for container %s (hash=%s)",
+            milestone_type, container_sscc, event_hash[:12],
+        )
+
+        return "\n".join(lines), {
+            "success":            True,
+            "status":             "recorded",
+            "milestone_type":     milestone_type,
+            "container_sscc":     container_sscc,
+            "epcis_event_hash":   event_hash,
+            "epcis_event_type":   event_type,
+            "blockchain_tx_hash": blockchain_tx,
+            "ipfs_cid":           ipfs_cid,
+        }
 
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""
