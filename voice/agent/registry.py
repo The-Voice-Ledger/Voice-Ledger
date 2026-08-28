@@ -102,6 +102,11 @@ class ToolRegistry:
         # Logistics / LSP Milestone tools (Agent #11)
         self._tools["ingest_milestone"] = self._ingest_milestone
 
+        # Webhook Subscription Management tools (Agent #12)
+        self._tools["register_webhook_subscription"]   = self._register_webhook_subscription
+        self._tools["list_webhook_subscriptions"]      = self._list_webhook_subscriptions
+        self._tools["unregister_webhook_subscription"] = self._unregister_webhook_subscription
+
         # Load any registered tool plugins (extensibility layer)
         try:
             from voice.agent.tool_plugins import register_all_plugins
@@ -2054,7 +2059,6 @@ class ToolRegistry:
         Ingest a logistics tracking milestone from an LSP and record it as a
         blockchain-anchored EPCIS event in the container's timeline.
 
-        Mirrors POST /api/logistics/milestone in voice/service/logistics_api.py.
         """
         import json
         import hashlib
@@ -2219,6 +2223,145 @@ class ToolRegistry:
             "blockchain_tx_hash": blockchain_tx,
             "ipfs_cid":           ipfs_cid,
         }
+
+    # ------------------------------------------------------------------
+    # Webhook Subscription Management tools (Agent #12)
+    # ------------------------------------------------------------------
+
+    def _register_webhook_subscription(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Register an external HTTPS endpoint to receive Voice Ledger event notifications.
+        """
+        from voice.service.webhook_dispatcher import (
+            register_webhook, VALID_EVENTS,
+        )
+
+        url         = (args.get("url") or "").strip()
+        events      = args.get("events") or []
+        secret      = args.get("secret")
+        description = args.get("description")
+
+        if not url:
+            return "❌ A webhook URL is required.", {"success": False}
+        if not events:
+            return (
+                f"❌ At least one event type is required. "
+                f"Valid: {', '.join(sorted(VALID_EVENTS))}",
+                {"success": False},
+            )
+
+        try:
+            wh = register_webhook(
+                url=url,
+                events=events,
+                secret=secret,
+                description=description,
+            )
+        except ValueError as exc:
+            return f"❌ {exc}", {"success": False}
+        except Exception as exc:
+            logger.error("register_webhook_subscription failed: %s", exc)
+            return f"❌ Failed to register webhook: {exc}", {"success": False}
+
+        events_display = ", ".join(wh.events)
+        desc_line = f"\n📝 Label: {wh.description}" if wh.description else ""
+        secret_line = "\n🔑 Signing secret stored (HMAC-SHA256)." if wh.secret else ""
+
+        message = (
+            f"✅ *Webhook registered successfully*\n\n"
+            f"🆔 ID: `{wh.id}`\n"
+            f"🔗 URL: {wh.url}\n"
+            f"📡 Events: {events_display}"
+            f"{desc_line}"
+            f"{secret_line}\n\n"
+            f"Save the ID — you'll need it to unregister later."
+        )
+
+        logger.info("Agent registered webhook %s → %s for %s", wh.id, url, events)
+        return message, {
+            "success":     True,
+            "id":          wh.id,
+            "url":         wh.url,
+            "events":      wh.events,
+            "description": wh.description,
+            "active":      wh.active,
+        }
+
+    def _list_webhook_subscriptions(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        List all registered webhook subscriptions.
+        """
+        from voice.service.webhook_dispatcher import list_webhooks
+
+        try:
+            webhooks = list_webhooks()
+        except Exception as exc:
+            logger.error("list_webhook_subscriptions failed: %s", exc)
+            return f"❌ Failed to list webhooks: {exc}", {"success": False}
+
+        if not webhooks:
+            return (
+                "📭 No webhook subscriptions are currently registered.\n\n"
+                "Use `register_webhook_subscription` to add one.",
+                {"success": True, "webhooks": [], "count": 0},
+            )
+
+        lines = [f"📡 *{len(webhooks)} webhook subscription(s):*\n"]
+        for wh in webhooks:
+            events_str = ", ".join(wh.get("events", []))
+            status     = "✅ active" if wh.get("active") else "⏸ inactive"
+            desc       = f" — {wh['description']}" if wh.get("description") else ""
+            lines.append(
+                f"• `{wh['id']}`{desc}\n"
+                f"  🔗 {wh['url']}\n"
+                f"  📡 {events_str}  |  {status}  |  "
+                f"delivered: {wh.get('delivery_count', 0)}  "
+                f"failed: {wh.get('failure_count', 0)}"
+            )
+
+        return "\n".join(lines), {
+            "success":  True,
+            "count":    len(webhooks),
+            "webhooks": webhooks,
+        }
+
+    def _unregister_webhook_subscription(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Remove a registered webhook subscription by ID.
+        """
+        from voice.service.webhook_dispatcher import unregister_webhook
+
+        webhook_id = (args.get("webhook_id") or "").strip()
+        if not webhook_id:
+            return "❌ webhook_id is required.", {"success": False}
+
+        try:
+            found = unregister_webhook(webhook_id)
+        except Exception as exc:
+            logger.error("unregister_webhook_subscription failed: %s", exc)
+            return f"❌ Failed to unregister webhook: {exc}", {"success": False}
+
+        if not found:
+            return (
+                f"❌ Webhook `{webhook_id}` not found. "
+                "Use `list_webhook_subscriptions` to see registered IDs.",
+                {"success": False, "found": False},
+            )
+
+        logger.info("Agent unregistered webhook %s", webhook_id)
+        return (
+            f"✅ Webhook `{webhook_id}` removed. It will no longer receive events.",
+            {"success": True, "found": True, "id": webhook_id},
+        )
 
     def register(self, name: str, handler: Callable):
         """Register a custom tool handler."""

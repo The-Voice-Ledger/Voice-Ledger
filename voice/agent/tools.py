@@ -1801,6 +1801,111 @@ INGEST_MILESTONE = {
 }
 
 
+
+
+# ===========================================================================
+# WEBHOOK SUBSCRIPTION TOOLS (Agent #12 - manage LSP / partner webhook hooks)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: register_webhook_subscription  (WRITE - register a webhook URL)
+# ---------------------------------------------------------------------------
+REGISTER_WEBHOOK_SUBSCRIPTION = {
+    "type": "function",
+    "function": {
+        "name": "register_webhook_subscription",
+        "description": (
+            "Register an external HTTPS endpoint to receive Voice Ledger event "
+            "notifications. Use when a user or system says 'subscribe to events', "
+            "'register my webhook', 'notify me when a shipment is ready', "
+            "'hook my LSP system', or 'send me delivery updates'. "
+            "Requires a valid HTTPS URL and at least one event type."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": (
+                        "HTTPS endpoint that will receive POST payloads. "
+                        "Must start with https://."
+                    ),
+                },
+                "events": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "List of event types to subscribe to. "
+                        "Valid values: PREPARING_SHIPMENT, SHIPPED, DELIVERED, "
+                        "PAYMENT_CONFIRMED, MILESTONE_RECEIVED."
+                    ),
+                },
+                "secret": {
+                    "type": "string",
+                    "description": (
+                        "Optional HMAC-SHA256 signing secret. When provided, every "
+                        "delivery includes an X-VoiceLedger-Signature header so the "
+                        "receiver can verify authenticity."
+                    ),
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Human-readable label for this subscription, e.g. 'Maersk LSP hook'.",
+                },
+            },
+            "required": ["url", "events"],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: list_webhook_subscriptions  (READ - list registered webhooks)
+# ---------------------------------------------------------------------------
+LIST_WEBHOOK_SUBSCRIPTIONS = {
+    "type": "function",
+    "function": {
+        "name": "list_webhook_subscriptions",
+        "description": (
+            "List all registered webhook subscriptions. "
+            "Use when a user asks 'show my webhooks', 'what endpoints are registered', "
+            "'list subscriptions', or 'which systems will be notified'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool: unregister_webhook_subscription  (WRITE - remove a webhook)
+# ---------------------------------------------------------------------------
+UNREGISTER_WEBHOOK_SUBSCRIPTION = {
+    "type": "function",
+    "function": {
+        "name": "unregister_webhook_subscription",
+        "description": (
+            "Remove a registered webhook subscription by its ID. "
+            "Use when a user says 'delete webhook', 'remove subscription', "
+            "'unregister hook', or 'stop sending notifications to <url>'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "webhook_id": {
+                    "type": "string",
+                    "description": "The webhook ID to remove (shown in list_webhook_subscriptions).",
+                },
+            },
+            "required": ["webhook_id"],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -1863,5 +1968,9 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     MARK_DEFAULT,
     # Logistics / LSP Milestones (Agent #11)
     INGEST_MILESTONE,
+    # Webhook Subscription Management (Agent #12)
+    REGISTER_WEBHOOK_SUBSCRIPTION,
+    LIST_WEBHOOK_SUBSCRIPTIONS,
+    UNREGISTER_WEBHOOK_SUBSCRIPTION,
 ]
 
