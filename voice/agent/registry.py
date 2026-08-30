@@ -2174,21 +2174,18 @@ class ToolRegistry:
             logger.error("Failed to persist EPCIS milestone event: %s", exc)
             return (f"❌ Failed to record milestone: {exc}", {"success": False})
 
-        # Fire MILESTONE_RECEIVED webhook (best-effort)
+        # Fire MILESTONE_RECEIVED webhook
         try:
-            import asyncio
-            from voice.service.webhook_dispatcher import dispatch_webhook
-            asyncio.create_task(
-                dispatch_webhook(
-                    "MILESTONE_RECEIVED",
-                    {
-                        "container_sscc": container_sscc,
-                        "milestone_type": milestone_type,
-                        "event_hash":     event_hash,
-                        "location":       location_name or location_gln,
-                        "timestamp":      event_time,
-                    },
-                )
+            from voice.service.webhook_dispatcher import dispatch_webhook_sync
+            dispatch_webhook_sync(
+                "MILESTONE_RECEIVED",
+                {
+                    "container_sscc": container_sscc,
+                    "milestone_type": milestone_type,
+                    "event_hash":     event_hash,
+                    "location":       location_name or location_gln,
+                    "timestamp":      event_time,
+                },
             )
         except Exception as exc:
             logger.warning("Webhook dispatch skipped (non-fatal): %s", exc)
