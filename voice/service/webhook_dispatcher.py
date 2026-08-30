@@ -506,7 +506,10 @@ _httpx_client: Optional[httpx.AsyncClient] = None
 
 
 def _get_httpx_client() -> httpx.AsyncClient:
-    """Return the shared AsyncClient, creating it on first use."""
+    """
+    Return the shared AsyncClient, creating it on first use or after it has
+    been closed (e.g. after a previous asyncio.run() call tore down a loop).
+    """
     global _httpx_client
     if _httpx_client is None or _httpx_client.is_closed:
         _httpx_client = httpx.AsyncClient(timeout=10.0)
@@ -662,14 +665,34 @@ def dispatch_webhook_sync(event_type: str, payload: Dict[str, Any]) -> int:
 
     If an event loop is already running (FastAPI request), schedules the dispatch
     as a background task and returns -1 (count is unknowable synchronously).
-    Otherwise creates a temporary event loop and awaits completion.
+    Otherwise creates a temporary event loop, dispatches, drains all delivery
+    tasks, then closes the httpx client so it is not reused across loop instances.
     """
     try:
         loop = asyncio.get_running_loop()
+        # Inside an async context (FastAPI) — schedule as background task
         loop.create_task(dispatch_webhook(event_type, payload))
         return -1
     except RuntimeError:
-        return asyncio.run(dispatch_webhook(event_type, payload))
+        # No running loop — create one, dispatch, drain tasks, clean up client.
+        async def _run_and_drain():
+            # Always use a fresh client for this isolated loop
+            global _httpx_client
+            _httpx_client = httpx.AsyncClient(timeout=10.0)
+            try:
+                count = await dispatch_webhook(event_type, payload)
+                # Drain delivery tasks (fire-and-forget tasks live here)
+                tasks = list(_delivery_tasks)
+                if tasks:
+                    await asyncio.wait(tasks, timeout=15.0)
+                return count
+            finally:
+                # Close client before loop tears down to avoid ResourceWarning
+                if _httpx_client and not _httpx_client.is_closed:
+                    await _httpx_client.aclose()
+                _httpx_client = None
+
+        return asyncio.run(_run_and_drain())
 
 
 # ---------------------------------------------------------------------------
