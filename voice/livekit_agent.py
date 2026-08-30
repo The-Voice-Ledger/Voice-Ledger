@@ -1230,6 +1230,118 @@ async def mark_default(
 
 
 # =====================================================================
+# 11. LOGISTICS / LSP MILESTONE TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Record a logistics tracking milestone for a shipping container — "
+    "pickup, port arrival, vessel departure, transshipment, customs clearance, "
+    "or final delivery. Creates a blockchain-anchored EPCIS event and fires "
+    "MILESTONE_RECEIVED webhooks to subscribed LSP systems. "
+    "Use when user reports 'container arrived at port', 'vessel departed', "
+    "'shipment cleared customs', 'container delivered'."
+))
+async def ingest_milestone(
+    ctx: RunContext,
+    container_sscc: Annotated[str, "SSCC of the container"],
+    milestone_type: Annotated[str, (
+        "Milestone type: PICKUP, PORT_ARRIVAL_ORIGIN, VESSEL_DEPARTURE, "
+        "TRANSSHIPMENT, PORT_ARRIVAL_DESTINATION, CUSTOMS_CLEARED, DELIVERED"
+    )],
+    location_name: Annotated[str | None, "Human-readable location name, e.g. 'Port of Hamburg'"] = None,
+    location_gln: Annotated[str | None, "GS1 GLN of the location (optional)"] = None,
+    carrier: Annotated[str | None, "Carrier or shipping line name, e.g. 'Maersk'"] = None,
+    vessel_imo: Annotated[str | None, "IMO number of the vessel"] = None,
+    voyage_number: Annotated[str | None, "Voyage or trip reference number"] = None,
+    tracking_reference: Annotated[str | None, "Carrier tracking number or booking reference"] = None,
+    timestamp: Annotated[str | None, "ISO-8601 timestamp (defaults to now)"] = None,
+    notes: Annotated[str | None, "Free-text notes about this milestone"] = None,
+) -> str:
+    return await _exec(ctx, "ingest_milestone", {
+        "container_sscc":    container_sscc,
+        "milestone_type":    milestone_type,
+        "location_name":     location_name,
+        "location_gln":      location_gln,
+        "carrier":           carrier,
+        "vessel_imo":        vessel_imo,
+        "voyage_number":     voyage_number,
+        "tracking_reference": tracking_reference,
+        "timestamp":         timestamp,
+        "notes":             notes,
+    })
+
+
+# =====================================================================
+# 12. WEBHOOK SUBSCRIPTION MANAGEMENT TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Register an external HTTPS endpoint to receive Voice Ledger event "
+    "notifications (PREPARING_SHIPMENT, SHIPPED, DELIVERED, PAYMENT_CONFIRMED, "
+    "MILESTONE_RECEIVED). Use when user says 'subscribe to events', "
+    "'register my webhook', 'notify my system when shipments are ready'."
+))
+async def register_webhook_subscription(
+    ctx: RunContext,
+    url: Annotated[str, "HTTPS endpoint to receive POST payloads"],
+    events: Annotated[list[str], (
+        "Event types to subscribe to: PREPARING_SHIPMENT, SHIPPED, DELIVERED, "
+        "PAYMENT_CONFIRMED, MILESTONE_RECEIVED"
+    )],
+    description: Annotated[str | None, "Human-readable label, e.g. 'Maersk LSP hook'"] = None,
+) -> str:
+    return await _exec(ctx, "register_webhook_subscription", {
+        "url":         url,
+        "events":      events,
+        "description": description,
+    })
+
+
+@function_tool(description=(
+    "List all registered webhook subscriptions with their IDs, URLs, "
+    "subscribed events, and delivery stats. READ-ONLY. "
+    "Use when user asks 'show my webhooks', 'what endpoints are registered', "
+    "'which systems will be notified'."
+))
+async def list_webhook_subscriptions(ctx: RunContext) -> str:
+    return await _exec(ctx, "list_webhook_subscriptions", {})
+
+
+@function_tool(description=(
+    "Remove a registered webhook subscription by its ID. "
+    "Use when user says 'delete webhook', 'remove subscription', "
+    "'stop sending notifications to my endpoint'."
+))
+async def unregister_webhook_subscription(
+    ctx: RunContext,
+    webhook_id: Annotated[str, "Webhook ID to remove (from list_webhook_subscriptions)"],
+) -> str:
+    return await _exec(ctx, "unregister_webhook_subscription", {
+        "webhook_id": webhook_id,
+    })
+
+
+# =====================================================================
+# 13. SHIPMENT STATUS / TIMELINE TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Return the current delivery status and full event timeline for a "
+    "shipping container — combines marketplace delivery_status with all "
+    "EPCIS supply chain events and LSP-ingested milestones. READ-ONLY. "
+    "Use when user asks 'where is container XYZ', 'track my shipment', "
+    "'has it cleared customs', 'show delivery timeline'."
+))
+async def get_shipment_status(
+    ctx: RunContext,
+    container_sscc: Annotated[str, "SSCC of the container to look up"],
+) -> str:
+    return await _exec(ctx, "get_shipment_status", {
+        "container_sscc": container_sscc,
+    })
+
+
+# =====================================================================
 # System prompt — full capabilities
 # =====================================================================
 
@@ -1318,6 +1430,15 @@ DeFi FINANCING
 • Cancel pending or active trade (cancel_trade)
 • Mark trade as defaulted (mark_default)
 
+LOGISTICS & SHIPMENT TRACKING
+• Record an LSP milestone — port arrival, customs clearance, delivery (ingest_milestone)
+• Get full shipment status and event timeline for a container (get_shipment_status)
+
+WEBHOOK SUBSCRIPTIONS
+• Register an endpoint to receive event notifications (register_webhook_subscription)
+• List registered webhook subscriptions (list_webhook_subscriptions)
+• Remove a webhook subscription (unregister_webhook_subscription)
+
 RULES:
 1. Be warm, clear, and concise — the user is speaking to you live.
 2. When the user gives enough info, call the tool immediately.
@@ -1347,9 +1468,11 @@ GUEST_TOOLS = [
     check_don_attestation, get_don_provenance_metrics,
     check_payment_status,
     check_financing_pool, check_trade_financing,
+    # Logistics read-only
+    get_shipment_status, list_webhook_subscriptions,
 ]
 
-# All 40 tools (registered / authenticated users)
+# All tools (registered / authenticated users)
 ALL_TOOLS = [
     # Supply chain recording (write)
     record_commission, record_shipment, record_receipt,
@@ -1378,6 +1501,12 @@ ALL_TOOLS = [
     # DeFi (mixed)
     check_financing_pool, request_financing_advance, check_trade_financing,
     confirm_trade_delivery, cancel_trade, mark_default,
+    # Logistics / LSP milestones (write)
+    ingest_milestone,
+    # Webhook subscription management (mixed)
+    register_webhook_subscription, list_webhook_subscriptions, unregister_webhook_subscription,
+    # Shipment status / timeline (read)
+    get_shipment_status,
 ]
 
 
