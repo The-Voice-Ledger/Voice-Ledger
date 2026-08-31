@@ -607,7 +607,197 @@ export function ResponseCard({ responseType, data }) {
       return <PaymentStatusCard data={data} />
     case 'coop_payout':
       return <CoopPayoutCard data={data} />
+    // ── Logistics / Webhooks (Agent #11-13)
+    case 'ingest_milestone':
+    case 'milestone':
+      return <MilestoneResponseCard data={data} />
+    case 'register_webhook_subscription':
+    case 'webhook_registered':
+      return <WebhookRegisteredResponseCard data={data} />
+    case 'list_webhook_subscriptions':
+    case 'webhook_list':
+      return <WebhookListResponseCard data={data} />
+    case 'unregister_webhook_subscription':
+    case 'webhook_removed':
+      return <WebhookRemovedResponseCard data={data} />
+    case 'get_shipment_status':
+    case 'shipment_status':
+      return <ShipmentStatusResponseCard data={data} />
     default:
       return null
   }
+}
+
+// ── Milestone Result ──────────────────────────────────────────────────
+const MILESTONE_LABELS = {
+  PICKUP:                   'Pickup',
+  PORT_ARRIVAL_ORIGIN:      'Port Arrival (Origin)',
+  VESSEL_DEPARTURE:         'Vessel Departure',
+  TRANSSHIPMENT:            'Transshipment',
+  PORT_ARRIVAL_DESTINATION: 'Port Arrival (Destination)',
+  CUSTOMS_CLEARED:          'Customs Cleared',
+  DELIVERED:                'Delivered',
+}
+const MILESTONE_EMOJIS = {
+  PICKUP: '🚛', PORT_ARRIVAL_ORIGIN: '⚓', VESSEL_DEPARTURE: '🚢',
+  TRANSSHIPMENT: '🔄', PORT_ARRIVAL_DESTINATION: '🏗️',
+  CUSTOMS_CLEARED: '✅', DELIVERED: '📦',
+}
+
+export function MilestoneResponseCard({ data }) {
+  const type  = (data.milestone_type || '').toUpperCase()
+  const label = MILESTONE_LABELS[type] || type.replace(/_/g, ' ')
+  const emoji = MILESTONE_EMOJIS[type] || '📍'
+  const ok    = data.success !== false
+
+  return (
+    <div className={`mt-2 rounded-lg border p-3 text-sm space-y-1
+      ${ok ? 'border-cyan-200 bg-cyan-50' : 'border-red-200 bg-red-50'}`}>
+      <div className={`font-semibold flex items-center gap-1.5 ${ok ? 'text-cyan-800' : 'text-red-700'}`}>
+        <span>{emoji}</span> Milestone: {label}
+      </div>
+      {data.container_sscc && <div><span className="text-stone-500">Container:</span> <code className="text-xs">{data.container_sscc}</code></div>}
+      {data.location        && <div><span className="text-stone-500">Location:</span> {data.location}</div>}
+      {data.carrier         && <div><span className="text-stone-500">Carrier:</span> {data.carrier}</div>}
+      {data.epcis_event_hash && (
+        <div className="text-xs text-stone-500 font-mono truncate">
+          Hash: {data.epcis_event_hash.slice(0, 16)}…
+        </div>
+      )}
+      {data.blockchain_tx_hash && (
+        <div className="text-xs text-stone-500 font-mono truncate">
+          TX: {data.blockchain_tx_hash.slice(0, 18)}…
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Webhook Registered ────────────────────────────────────────────────
+export function WebhookRegisteredResponseCard({ data }) {
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm space-y-1">
+      <div className="font-semibold text-emerald-700">🔗 Webhook Registered</div>
+      {data.id  && <div><span className="text-stone-500">ID:</span> <code className="text-xs">{data.id}</code></div>}
+      {data.url && <div className="truncate"><span className="text-stone-500">URL:</span> {data.url}</div>}
+      {data.events?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {data.events.map((e, i) => (
+            <span key={i} className="inline-block text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-mono">{e}</span>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-stone-400 pt-1">Save the ID to remove this subscription later.</p>
+    </div>
+  )
+}
+
+// ── Webhook List ──────────────────────────────────────────────────────
+export function WebhookListResponseCard({ data }) {
+  const hooks = data.webhooks || []
+  if (!hooks.length) {
+    return (
+      <div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-500 italic">
+        No webhook subscriptions registered.
+      </div>
+    )
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      {hooks.map((wh, i) => (
+        <div key={wh.id || i} className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
+          <div className="flex justify-between items-start">
+            <code className="text-xs text-stone-600 break-all">{wh.id}</code>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ml-2 shrink-0
+              ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
+              {wh.active ? 'active' : 'inactive'}
+            </span>
+          </div>
+          <div className="text-stone-600 truncate mt-0.5">{wh.url}</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {(wh.events || []).map((e, j) => (
+              <span key={j} className="text-[9px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 font-mono">{e}</span>
+            ))}
+          </div>
+          <div className="text-[10px] text-stone-400 mt-1">
+            ✅ {wh.delivery_count ?? 0} delivered · ❌ {wh.failure_count ?? 0} failed
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Webhook Removed ───────────────────────────────────────────────────
+export function WebhookRemovedResponseCard({ data }) {
+  const ok = data.success !== false && data.found !== false
+  return (
+    <div className={`mt-2 rounded-lg border p-3 text-sm
+      ${ok ? 'border-red-200 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
+      <div className={`font-semibold flex items-center gap-1.5 ${ok ? 'text-red-700' : 'text-stone-500'}`}>
+        {ok ? '🗑️ Webhook Removed' : '❓ Webhook Not Found'}
+      </div>
+      {data.id && <div className="text-xs text-stone-500 mt-1 font-mono">{data.id}</div>}
+      {ok && <p className="text-[10px] text-stone-400 mt-1">This endpoint will no longer receive events.</p>}
+    </div>
+  )
+}
+
+// ── Shipment Status ───────────────────────────────────────────────────
+const DS_STYLES = {
+  PENDING:    { bg: 'bg-amber-50  border-amber-200',  txt: 'text-amber-700',  emoji: '⏳' },
+  SHIPPED:    { bg: 'bg-cyan-50   border-cyan-200',   txt: 'text-cyan-700',   emoji: '🚢' },
+  IN_TRANSIT: { bg: 'bg-cyan-50   border-cyan-200',   txt: 'text-cyan-700',   emoji: '🚢' },
+  DELIVERED:  { bg: 'bg-emerald-50 border-emerald-200', txt: 'text-emerald-700', emoji: '✅' },
+}
+
+export function ShipmentStatusResponseCard({ data }) {
+  const ds    = (data.delivery_status || 'PENDING').toUpperCase()
+  const s     = DS_STYLES[ds] || { bg: 'bg-stone-50 border-stone-200', txt: 'text-stone-700', emoji: '📦' }
+  const milestones = data.milestones || []
+  const events     = data.events     || []
+
+  return (
+    <div className={`mt-2 rounded-lg border p-3 text-sm space-y-2 ${s.bg}`}>
+      <div className={`font-semibold flex items-center gap-1.5 ${s.txt}`}>
+        <span>{s.emoji}</span> {ds}
+        {data.container_sscc && (
+          <code className="ml-1 text-xs text-stone-500 font-mono">{data.container_sscc}</code>
+        )}
+      </div>
+
+      {data.variety          && <div><span className="text-stone-500">Variety:</span> {data.variety}</div>}
+      {data.total_quantity_kg && (
+        <div><span className="text-stone-500">Quantity:</span> {Number(data.total_quantity_kg).toLocaleString()} kg</div>
+      )}
+
+      {milestones.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-stone-600 mb-1">Milestones</div>
+          <ul className="space-y-0.5">
+            {milestones.map((m, i) => {
+              const mEmoji = MILESTONE_EMOJIS[(m.milestone_type || '').toUpperCase()] || '📍'
+              const mLabel = MILESTONE_LABELS[(m.milestone_type || '').toUpperCase()] || m.milestone_type
+              const t = m.event_time ? m.event_time.slice(0, 16).replace('T', ' ') : ''
+              return (
+                <li key={i} className="flex items-center gap-1.5 text-stone-600 text-xs">
+                  <span>{mEmoji}</span>
+                  <span>{mLabel}</span>
+                  {t && <span className="text-stone-400 text-[10px]">{t}</span>}
+                  {m.carrier && <span className="text-stone-400 text-[10px]">· {m.carrier}</span>}
+                  {m.blockchain_tx_hash && <span className="text-[10px] text-cyan-600">⛓</span>}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="text-[10px] text-stone-400">
+          {events.length} supply chain event{events.length > 1 ? 's' : ''} recorded.
+        </div>
+      )}
+    </div>
+  )
 }

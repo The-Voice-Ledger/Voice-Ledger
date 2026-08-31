@@ -144,6 +144,22 @@ export default function ActionCards({ textStreams }) {
           case 'check_trade_financing':
             return <TradeFinancingCard key={card._key} data={card} />
 
+          /* ── Logistics / LSP Milestones */
+          case 'ingest_milestone':
+            return <MilestoneCard key={card._key} data={card} />
+
+          /* ── Webhook Subscription Management*/
+          case 'register_webhook_subscription':
+            return <WebhookRegisteredCard key={card._key} data={card} />
+          case 'list_webhook_subscriptions':
+            return <WebhookListCard key={card._key} data={card} />
+          case 'unregister_webhook_subscription':
+            return <WebhookRemovedCard key={card._key} data={card} />
+
+          /* ── Shipment Status / Timeline*/
+          case 'get_shipment_status':
+            return <ShipmentStatusCard key={card._key} data={card} />
+
           default:
             return <GenericCard key={card._key} data={card} />
         }
@@ -1425,6 +1441,272 @@ function GenericCard({ data }) {
 
 
 /* ================================================================
+   MilestoneCard — ingest_milestone result
+   ================================================================ */
+
+const MILESTONE_LABELS = {
+  PICKUP:                   'Pickup',
+  PORT_ARRIVAL_ORIGIN:      'Port Arrival (Origin)',
+  VESSEL_DEPARTURE:         'Vessel Departure',
+  TRANSSHIPMENT:            'Transshipment',
+  PORT_ARRIVAL_DESTINATION: 'Port Arrival (Destination)',
+  CUSTOMS_CLEARED:          'Customs Cleared',
+  DELIVERED:                'Delivered',
+}
+
+const MILESTONE_ICONS = {
+  PICKUP:                   '🚛',
+  PORT_ARRIVAL_ORIGIN:      '⚓',
+  VESSEL_DEPARTURE:         '🚢',
+  TRANSSHIPMENT:            '🔄',
+  PORT_ARRIVAL_DESTINATION: '🏗️',
+  CUSTOMS_CLEARED:          '✅',
+  DELIVERED:                '📦',
+}
+
+function MilestoneCard({ data }) {
+  const type    = data.milestone_type || ''
+  const label   = MILESTONE_LABELS[type] || type.replace(/_/g, ' ')
+  const emoji   = MILESTONE_ICONS[type] || '📍'
+  const success = data.success !== false
+
+  return (
+    <CardShell icon={<ShipIcon />} title={`Milestone: ${label}`} accent="#06B6D4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xl">{emoji}</span>
+        <span className={`text-sm font-semibold ${success ? 'text-cyan-300' : 'text-red-400'}`}>
+          {success ? label : 'Failed'}
+        </span>
+      </div>
+      <Field label="Container" value={data.container_sscc} mono />
+      <Field label="Location"  value={data.location} />
+      <Field label="Carrier"   value={data.carrier} />
+      <Field label="Vessel IMO" value={data.vessel_imo} mono />
+      <Field label="Voyage"    value={data.voyage_number} />
+      <Field label="Tracking"  value={data.tracking_reference} mono />
+      {data.timestamp && (
+        <Field label="Time" value={new Date(data.timestamp).toLocaleString()} />
+      )}
+      {data.epcis_event_hash && (
+        <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <Field label="Event Hash" value={`${data.epcis_event_hash.slice(0, 12)}…`} mono />
+          {data.blockchain_tx_hash && (
+            <Field label="Blockchain TX" value={`${data.blockchain_tx_hash.slice(0, 14)}…`} mono />
+          )}
+          {data.ipfs_cid && (
+            <Field label="IPFS CID" value={`${data.ipfs_cid.slice(0, 14)}…`} mono />
+          )}
+        </div>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   WebhookRegisteredCard — register_webhook_subscription (Agent #12)
+   ================================================================ */
+
+function WebhookRegisteredCard({ data }) {
+  return (
+    <CardShell icon={<WebhookIcon />} title="Webhook Registered" accent="#10B981">
+      <Field label="ID"  value={data.id} mono />
+      <Field label="URL" value={data.url} />
+      {data.events?.length > 0 && (
+        <div className="mt-1">
+          <span className="text-[10px] text-white/30 uppercase tracking-wider">Events</span>
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {data.events.map((e, i) => (
+              <span key={i}
+                className="inline-block px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/15 text-emerald-300/80">
+                {e}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {data.description && <Field label="Label" value={data.description} />}
+      <p className="mt-2 text-[10px] text-white/30">Save the ID to unregister later.</p>
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   WebhookListCard — list_webhook_subscriptions
+   ================================================================ */
+
+function WebhookListCard({ data }) {
+  const hooks    = data.webhooks || []
+  const [expanded, setExpanded] = useState(false)
+  const visible  = expanded ? hooks : hooks.slice(0, 4)
+
+  if (!hooks.length) {
+    return (
+      <CardShell icon={<WebhookIcon />} title="Webhook Subscriptions" accent="#6366F1">
+        <p className="text-xs text-white/40 italic">No subscriptions registered.</p>
+      </CardShell>
+    )
+  }
+
+  return (
+    <CardShell icon={<WebhookIcon />} title={`Webhooks (${data.count ?? hooks.length})`} accent="#6366F1">
+      <div className="space-y-2">
+        {visible.map((wh, i) => (
+          <div key={i} className="px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-white/50">{wh.id}</span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                wh.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'
+              }`}>{wh.active ? 'active' : 'inactive'}</span>
+            </div>
+            <p className="text-[10px] text-white/60 truncate mt-0.5">{wh.url}</p>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {(wh.events || []).map((e, j) => (
+                <span key={j} className="text-[8px] px-1 py-0.5 rounded bg-indigo-500/10 text-indigo-300/70 font-mono">{e}</span>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-0.5 text-[9px] text-white/25">
+              <span>✅ {wh.delivery_count ?? 0}</span>
+              <span>❌ {wh.failure_count ?? 0}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {hooks.length > 4 && (
+        <button onClick={() => setExpanded(v => !v)}
+                className="w-full mt-2 text-[10px] text-indigo-400/60 hover:text-indigo-400 transition-colors">
+          {expanded ? 'Show less' : `Show all ${hooks.length}`}
+        </button>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   WebhookRemovedCard — unregister_webhook_subscription
+   ================================================================ */
+
+function WebhookRemovedCard({ data }) {
+  const success = data.success !== false && data.found !== false
+  return (
+    <CardShell icon={<WebhookIcon />} title="Webhook Removed" accent={success ? '#EF4444' : '#6B7280'}>
+      {success ? (
+        <>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-red-400 text-sm">🗑️</span>
+            <span className="text-xs text-white/60">Subscription deleted</span>
+          </div>
+          <Field label="ID" value={data.id} mono />
+          <p className="mt-1 text-[10px] text-white/25">This endpoint will no longer receive events.</p>
+        </>
+      ) : (
+        <p className="text-xs text-white/40 italic">Webhook not found.</p>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
+   ShipmentStatusCard — get_shipment_status
+   ================================================================ */
+
+const DELIVERY_STATUS_STYLES = {
+  PENDING:    { color: '#F59E0B', emoji: '⏳' },
+  SHIPPED:    { color: '#06B6D4', emoji: '🚢' },
+  IN_TRANSIT: { color: '#06B6D4', emoji: '🚢' },
+  DELIVERED:  { color: '#10B981', emoji: '✅' },
+  UNKNOWN:    { color: '#6B7280', emoji: '❓' },
+}
+
+function ShipmentStatusCard({ data }) {
+  const ds       = (data.delivery_status || 'UNKNOWN').toUpperCase()
+  const style    = DELIVERY_STATUS_STYLES[ds] || DELIVERY_STATUS_STYLES.UNKNOWN
+  const events   = data.events   || []
+  const milestones = data.milestones || []
+  const [showEvents, setShowEvents] = useState(false)
+
+  return (
+    <CardShell icon={<ShipIcon />} title="Shipment Status" accent={style.color}>
+      {/* Status hero */}
+      <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg"
+           style={{ background: `${style.color}15` }}>
+        <span className="text-xl">{style.emoji}</span>
+        <div>
+          <p className="text-xs font-bold" style={{ color: style.color }}>{ds}</p>
+          <p className="text-[10px] text-white/40 font-mono">{data.container_sscc}</p>
+        </div>
+      </div>
+
+      <Field label="Variety"  value={data.variety} />
+      <Field label="Quantity" value={data.total_quantity_kg ? `${Number(data.total_quantity_kg).toLocaleString()} kg` : null} />
+
+      {/* Milestones */}
+      {milestones.length > 0 && (
+        <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <span className="text-[10px] text-white/20 uppercase tracking-widest">
+            Milestones ({milestones.length})
+          </span>
+          <div className="mt-1 space-y-1">
+            {milestones.map((m, i) => {
+              const mEmoji = MILESTONE_ICONS[m.milestone_type] || '📍'
+              const mLabel = MILESTONE_LABELS[m.milestone_type] || (m.milestone_type || '').replace(/_/g, ' ')
+              const t = m.event_time ? m.event_time.slice(0, 16).replace('T', ' ') : '—'
+              return (
+                <div key={i} className="flex items-start gap-1.5">
+                  <span className="text-xs mt-0.5">{mEmoji}</span>
+                  <div>
+                    <span className="text-[10px] text-white/60">{mLabel}</span>
+                    <span className="text-[9px] text-white/25 ml-1">{t}</span>
+                    {m.carrier && <span className="text-[9px] text-white/25 ml-1">· {m.carrier}</span>}
+                    {m.blockchain_tx_hash && <span className="text-[9px] text-cyan-400/40 ml-1">⛓</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Supply chain events (collapsible) */}
+      {events.length > 0 && (
+        <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <button
+            onClick={() => setShowEvents(v => !v)}
+            className="text-[10px] text-white/30 hover:text-white/50 transition-colors"
+          >
+            {showEvents ? '▾' : '▸'} Supply chain events ({events.length})
+          </button>
+          {showEvents && (
+            <div className="mt-1 space-y-1">
+              {events.map((e, i) => {
+                const t = e.event_time ? e.event_time.slice(0, 16).replace('T', ' ') : '—'
+                const step = e.biz_step || e.event_type || 'event'
+                return (
+                  <div key={i} className="flex items-center gap-1.5 text-[10px] text-white/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <span>{step}</span>
+                    <span className="text-white/20">{t}</span>
+                    {e.blockchain_tx_hash && <span className="text-cyan-400/40">⛓</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {milestones.length === 0 && events.length === 0 && (
+        <p className="mt-1 text-[10px] text-white/25 italic">No events recorded yet.</p>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
    Micro-icons
    ================================================================ */
 
@@ -1651,6 +1933,27 @@ function LineageIcon() {
       <circle cx="11" cy="7" r="1.5" />
       <circle cx="3" cy="11" r="1.5" />
       <path d="M4.5 3.5L9.5 6.5M4.5 10.5L9.5 7.5" />
+    </svg>
+  )
+}
+
+function ShipIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 9.5l1.5-5h9L13 9.5" />
+      <path d="M4.5 4.5V2.5h5v2" />
+      <path d="M1 9.5c1 1.5 3 1.5 4 0s3-.5 4 0 3-1 3-1" />
+      <path d="M3 12h8" />
+    </svg>
+  )
+}
+
+function WebhookIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="7" r="2" />
+      <path d="M7 1v2M7 11v2M1 7h2M11 7h2" />
+      <path d="M3 3l1.4 1.4M9.6 9.6L11 11M11 3l-1.4 1.4M4.4 9.6L3 11" />
     </svg>
   )
 }
