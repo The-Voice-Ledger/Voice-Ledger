@@ -156,9 +156,9 @@ class ActionCards {
       case 'unregister_webhook_subscription':
         return this.createWebhookRemovedCard(card);
 
-      // Shipment Status / Timeline (Agent #13)
-      case 'get_shipment_status':
-        return this.createShipmentStatusCard(card);
+      // SSI / DID Verification (Agent #14)
+      case 'verify_did':
+        return this.createVerifyDidCard(card);
 
       default:
         return this.createGenericCard(card);
@@ -1706,6 +1706,77 @@ class ActionCards {
 
     if (events.length) {
       html += `<div style="margin-top:6px;font-size:10px;opacity:0.35">${events.length} supply chain event${events.length > 1 ? 's' : ''} recorded.</div>`;
+    }
+
+    content.innerHTML = html;
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create DID verification card — verify_did (Agent #14)
+   */
+  createVerifyDidCard(card) {
+    const d     = card.data || card;
+    const s     = d.summary  || {};
+    const creds = d.credentials || [];
+    const user  = d.user_info   || {};
+    const allValid = creds.length > 0 && creds.every(c => c.verified);
+
+    const baseCard = this.createBaseCard('🪪 DID Verification', '#8B5CF6');
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:12px;line-height:1.6;';
+
+    // DID chip
+    let html = '';
+    if (d.did) {
+      html += `<div style="font-family:monospace;font-size:10px;color:rgba(255,255,255,0.4);background:rgba(139,92,246,0.08);padding:4px 8px;border-radius:6px;margin-bottom:8px;word-break:break-all">${d.did}</div>`;
+    }
+
+    // Status + name
+    const badge = allValid ? '✅' : '⚠️';
+    const verified = s.verified_credentials ?? 0;
+    const total    = s.total_credentials    ?? 0;
+    html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <span>${badge}</span>
+      <span style="font-size:12px">${verified}/${total} credentials verified</span>
+      ${user.name ? `<span style="font-size:10px;opacity:0.35;margin-left:auto">👤 ${user.name}</span>` : ''}
+    </div>`;
+
+    // Stats row
+    const stats = [
+      s.credit_score != null  && { v: s.credit_score,                              l: 'Score'   },
+      s.total_batches != null && { v: s.total_batches,                             l: 'Batches' },
+      s.total_volume_kg != null && { v: Number(s.total_volume_kg).toLocaleString(), l: 'kg'      },
+      s.days_active != null   && { v: s.days_active,                               l: 'Days'    },
+    ].filter(Boolean);
+
+    if (stats.length) {
+      html += `<div style="display:flex;gap:6px;margin-bottom:8px">`;
+      stats.forEach(({ v, l }) => {
+        html += `<div style="flex:1;text-align:center;padding:4px;border-radius:6px;background:rgba(139,92,246,0.08)">
+          <div style="font-size:13px;font-weight:700;color:rgba(167,139,250,0.9)">${v}</div>
+          <div style="font-size:9px;opacity:0.3;text-transform:uppercase;letter-spacing:1px">${l}</div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Credentials list
+    if (creds.length) {
+      html += `<div style="font-size:10px;opacity:0.3;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Credentials</div>`;
+      creds.forEach(c => {
+        const b     = c.verified ? '✅' : '❌';
+        const types = Array.isArray(c.type)
+          ? c.type.filter(t => t !== 'VerifiableCredential').join(', ')
+          : String(c.type || 'Credential');
+        const date  = c.issuance_date ? c.issuance_date.slice(0, 10) : '';
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;opacity:0.65">
+          <span>${b}</span>
+          <span>${types || 'Credential'}</span>
+          ${date ? `<span style="font-size:9px;opacity:0.4;margin-left:auto">${date}</span>` : ''}
+        </div>`;
+      });
     }
 
     content.innerHTML = html;

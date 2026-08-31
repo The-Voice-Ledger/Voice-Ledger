@@ -1941,6 +1941,43 @@ GET_SHIPMENT_STATUS = {
 }
 
 
+
+# ===========================================================================
+# SSI / IDENTITY TOOLS
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Tool: verify_did  (READ - resolve DID and verify credentials)
+# ---------------------------------------------------------------------------
+VERIFY_DID = {
+    "type": "function",
+    "function": {
+        "name": "verify_did",
+        "description": (
+            "Resolve a Decentralized Identifier (DID) and verify all associated "
+            "verifiable credentials — organic certifications, farm registrations, "
+            "batch history, and credit score. No authentication required. "
+            "Use when user asks 'verify my DID', 'show my credentials', "
+            "'check my identity', 'who is did:key:z6Mk...', "
+            "'verify this farmer's identity', or 'show my track record'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "did": {
+                    "type": "string",
+                    "description": (
+                        "The DID to resolve, e.g. 'did:key:z6MkhaXgBZDvotDkL5257f…'. "
+                        "If omitted, resolves the calling user's own DID."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+
 SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     # Core supply chain (Agent #1)
     RECORD_COMMISSION,
@@ -2009,5 +2046,7 @@ SUPPLY_CHAIN_TOOLS: List[Dict[str, Any]] = [
     UNREGISTER_WEBHOOK_SUBSCRIPTION,
     # Shipment Status / Timeline (Agent #13)
     GET_SHIPMENT_STATUS,
+    # SSI / DID Verification (Agent #14)
+    VERIFY_DID,
 ]
 

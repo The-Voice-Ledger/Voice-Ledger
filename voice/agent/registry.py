@@ -107,8 +107,11 @@ class ToolRegistry:
         self._tools["list_webhook_subscriptions"]      = self._list_webhook_subscriptions
         self._tools["unregister_webhook_subscription"] = self._unregister_webhook_subscription
 
-        # Shipment status / timeline (Agent #13)
+    # Shipment status / timeline (Agent #13)
         self._tools["get_shipment_status"] = self._get_shipment_status
+
+        # SSI / DID Verification (Agent #14)
+        self._tools["verify_did"] = self._verify_did
 
         # Load any registered tool plugins (extensibility layer)
         try:
@@ -2505,6 +2508,145 @@ class ToolRegistry:
             "variety":          variety,
             "events":           events_list,
             "milestones":       milestones_list,
+        }
+
+    # ------------------------------------------------------------------
+    # SSI / DID Verification
+    # ------------------------------------------------------------------
+
+    def _verify_did(
+        self, db: Session, args: Dict[str, Any],
+        user_id: int = None, user_did: str = None
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Resolve and verify a DID — returns the DID document, verifiable
+        credentials (organic certifications, farm registrations), and a
+        credit-score summary.
+        """
+        did = (args.get("did") or "").strip()
+
+        # If no DID supplied, resolve the calling user's own DID
+        if not did:
+            if user_did:
+                did = user_did
+            elif user_id:
+                try:
+                    from database.models import UserIdentity
+                    u = db.query(UserIdentity).filter_by(id=user_id).first()
+                    did = getattr(u, "did", None) or ""
+                except Exception:
+                    pass
+
+        if not did:
+            return (
+                "❌ No DID provided and none found for your account. "
+                "Register first with /register.",
+                {"success": False},
+            )
+
+        try:
+            from ssi.batch_credentials import get_user_credentials, calculate_simple_credit_score
+            from ssi.credentials.verify import verify_credential
+        except ImportError as exc:
+            return (f"❌ SSI module unavailable: {exc}", {"success": False})
+
+        # ── Fetch credentials ────────────────────────────────────────
+        try:
+            raw_creds = get_user_credentials(did) or []
+        except Exception as exc:
+            logger.error("verify_did: get_user_credentials failed: %s", exc)
+            return (f"❌ Could not load credentials: {exc}", {"success": False})
+
+        if not raw_creds:
+            return (
+                f"❌ No credentials found for DID `{did}`.\n\n"
+                "This DID may not be registered in Voice Ledger.",
+                {"success": False, "did": did},
+            )
+
+        # ── Verify each credential signature ─────────────────────────
+        verified_creds = []
+        for cred in raw_creds:
+            try:
+                is_valid = verify_credential(cred)
+            except Exception:
+                is_valid = False
+            cred_types = cred.get("type", [])
+            if isinstance(cred_types, list):
+                cred_types = [t for t in cred_types if t != "VerifiableCredential"]
+            verified_creds.append({
+                "credential_id":  cred.get("id"),
+                "type":           cred_types,
+                "issuer":         cred.get("issuer"),
+                "issuance_date":  cred.get("issuanceDate"),
+                "subject":        cred.get("credentialSubject"),
+                "verified":       is_valid,
+            })
+
+        # ── Credit score ──────────────────────────────────────────────
+        try:
+            score = calculate_simple_credit_score(did)
+        except Exception:
+            score = {}
+
+        # ── User info ─────────────────────────────────────────────────
+        user_info = {}
+        try:
+            from ssi.user_identity import get_user_by_did
+            u = get_user_by_did(did, db_session=db)
+            if u:
+                user_info = {
+                    "name":       u.telegram_first_name or u.telegram_username,
+                    "created_at": u.created_at.isoformat() if u.created_at else None,
+                }
+        except Exception:
+            pass
+
+        total   = len(verified_creds)
+        ok_count = sum(1 for c in verified_creds if c["verified"])
+        credit  = score.get("score", 0)
+
+        # ── Format message ────────────────────────────────────────────
+        status_line = "✅ All signatures valid" if ok_count == total else f"⚠️ {ok_count}/{total} signatures valid"
+        lines = [
+            f"🪪 *DID Verification*\n",
+            f"`{did}`\n",
+        ]
+        if user_info.get("name"):
+            lines.append(f"👤 {user_info['name']}")
+        lines += [
+            f"📜 Credentials: {total}  |  {status_line}",
+            f"⭐ Credit score: {credit}",
+        ]
+        if score.get("batch_count"):
+            lines.append(f"📦 Batches: {score['batch_count']}  |  {score.get('total_kg', 0):,.0f} kg")
+        if score.get("days_active"):
+            lines.append(f"📅 Active {score['days_active']} days")
+
+        if verified_creds:
+            lines.append("\n📋 *Credentials:*")
+            for c in verified_creds:
+                badge = "✅" if c["verified"] else "❌"
+                ctype = ", ".join(c["type"]) if isinstance(c["type"], list) else str(c["type"] or "Unknown")
+                lines.append(f"  {badge} {ctype}")
+
+        logger.info("verify_did resolved %s: %d creds, score=%s", did[:20], total, credit)
+
+        return "\n".join(lines), {
+            "success":            True,
+            "did":                did,
+            "user_info":          user_info,
+            "credentials":        verified_creds,
+            "summary": {
+                "total_credentials":    total,
+                "verified_credentials": ok_count,
+                "credit_score":         credit,
+                "total_batches":        score.get("batch_count", 0),
+                "total_volume_kg":      score.get("total_kg", 0),
+                "days_active":          score.get("days_active", 0),
+                "first_batch_date":     score.get("first_batch_date"),
+                "latest_batch_date":    score.get("latest_batch_date"),
+            },
         }
 
     def register(self, name: str, handler: Callable):

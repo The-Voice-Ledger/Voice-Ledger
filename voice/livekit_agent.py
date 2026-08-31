@@ -1342,6 +1342,26 @@ async def get_shipment_status(
 
 
 # =====================================================================
+# SSI / DID VERIFICATION TOOLS
+# =====================================================================
+
+@function_tool(description=(
+    "Resolve a Decentralized Identifier (DID) and verify all associated "
+    "verifiable credentials — organic certifications, farm registrations, "
+    "batch history, and credit score. No authentication required; credentials "
+    "are public and signatures prove authenticity. "
+    "Use when user asks 'verify my DID', 'show my credentials', "
+    "'check my identity', 'who is did:key:z6Mk...', "
+    "'verify this farmer', or 'show my track record'."
+))
+async def verify_did(
+    ctx: RunContext,
+    did: Annotated[str | None, "DID to resolve, e.g. did:key:z6Mk… (omit to use your own)"] = None,
+) -> str:
+    return await _exec(ctx, "verify_did", {"did": did or ""})
+
+
+# =====================================================================
 # System prompt — full capabilities
 # =====================================================================
 
@@ -1439,6 +1459,9 @@ WEBHOOK SUBSCRIPTIONS
 • List registered webhook subscriptions (list_webhook_subscriptions)
 • Remove a webhook subscription (unregister_webhook_subscription)
 
+SSI / IDENTITY
+• Resolve a DID and verify associated credentials (verify_did)
+
 RULES:
 1. Be warm, clear, and concise — the user is speaking to you live.
 2. When the user gives enough info, call the tool immediately.
@@ -1468,8 +1491,8 @@ GUEST_TOOLS = [
     check_don_attestation, get_don_provenance_metrics,
     check_payment_status,
     check_financing_pool, check_trade_financing,
-    # Logistics read-only
     get_shipment_status, list_webhook_subscriptions,
+    verify_did,
 ]
 
 # All tools (registered / authenticated users)
@@ -1505,8 +1528,10 @@ ALL_TOOLS = [
     ingest_milestone,
     # Webhook subscription management (mixed)
     register_webhook_subscription, list_webhook_subscriptions, unregister_webhook_subscription,
-    # Shipment status / timeline (read)
+    # Shipment status / timeline
     get_shipment_status,
+    # SSI / DID verification
+    verify_did,
 ]
 
 

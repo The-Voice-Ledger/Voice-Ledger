@@ -160,6 +160,10 @@ export default function ActionCards({ textStreams }) {
           case 'get_shipment_status':
             return <ShipmentStatusCard key={card._key} data={card} />
 
+          /* ── SSI / DID Verification ── */
+          case 'verify_did':
+            return <VerifyDidCard key={card._key} data={card} />
+
           default:
             return <GenericCard key={card._key} data={card} />
         }
@@ -1707,6 +1711,102 @@ function ShipmentStatusCard({ data }) {
 
 
 /* ================================================================
+   VerifyDidCard — verify_did result
+   ================================================================ */
+
+function VerifyDidCard({ data }) {
+  const s       = data.summary || {}
+  const creds   = data.credentials || []
+  const user    = data.user_info || {}
+  const ok      = data.success !== false
+  const allValid = creds.length > 0 && creds.every(c => c.verified)
+
+  return (
+    <CardShell icon={<IdentityIcon />} title="DID Verification" accent="#8B5CF6">
+      {/* DID */}
+      {data.did && (
+        <div className="mb-2 px-2 py-1.5 rounded-lg font-mono text-[10px] text-white/50 break-all"
+             style={{ background: 'rgba(139,92,246,0.08)' }}>
+          {data.did}
+        </div>
+      )}
+
+      {/* Identity summary row */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`text-sm ${allValid ? 'text-violet-300' : 'text-amber-400'}`}>
+          {allValid ? '✅' : '⚠️'}
+        </span>
+        <span className="text-xs text-white/60">
+          {s.verified_credentials ?? 0}/{s.total_credentials ?? 0} credentials verified
+        </span>
+        {user.name && (
+          <span className="text-[10px] text-white/30 ml-auto">👤 {user.name}</span>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="flex gap-3 mb-2">
+        {s.credit_score != null && (
+          <div className="flex flex-col items-center px-2 py-1 rounded-lg flex-1"
+               style={{ background: 'rgba(139,92,246,0.08)' }}>
+            <span className="text-sm font-bold text-violet-300">{s.credit_score}</span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">Score</span>
+          </div>
+        )}
+        {s.total_batches != null && (
+          <div className="flex flex-col items-center px-2 py-1 rounded-lg flex-1"
+               style={{ background: 'rgba(139,92,246,0.08)' }}>
+            <span className="text-sm font-bold text-white/60">{s.total_batches}</span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">Batches</span>
+          </div>
+        )}
+        {s.total_volume_kg != null && (
+          <div className="flex flex-col items-center px-2 py-1 rounded-lg flex-1"
+               style={{ background: 'rgba(139,92,246,0.08)' }}>
+            <span className="text-sm font-bold text-white/60">
+              {Number(s.total_volume_kg).toLocaleString()}
+            </span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">kg</span>
+          </div>
+        )}
+        {s.days_active != null && (
+          <div className="flex flex-col items-center px-2 py-1 rounded-lg flex-1"
+               style={{ background: 'rgba(139,92,246,0.08)' }}>
+            <span className="text-sm font-bold text-white/60">{s.days_active}</span>
+            <span className="text-[9px] text-white/25 uppercase tracking-wider">Days</span>
+          </div>
+        )}
+      </div>
+
+      {/* Credentials list */}
+      {creds.length > 0 && (
+        <div className="mt-1 pt-2 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <span className="text-[10px] text-white/20 uppercase tracking-widest">Credentials</span>
+          {creds.map((c, i) => {
+            const badge = c.verified ? '✅' : '❌'
+            const types = Array.isArray(c.type)
+              ? c.type.filter(t => t !== 'VerifiableCredential').join(', ')
+              : String(c.type || 'Unknown')
+            return (
+              <div key={i} className="flex items-start gap-1.5 text-[11px] text-white/50">
+                <span className="shrink-0">{badge}</span>
+                <span>{types || 'Credential'}</span>
+                {c.issuance_date && (
+                  <span className="text-[9px] text-white/20 ml-auto shrink-0">
+                    {c.issuance_date.slice(0, 10)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </CardShell>
+  )
+}
+
+
+/* ================================================================
    Micro-icons
    ================================================================ */
 
@@ -1954,6 +2054,16 @@ function WebhookIcon() {
       <circle cx="7" cy="7" r="2" />
       <path d="M7 1v2M7 11v2M1 7h2M11 7h2" />
       <path d="M3 3l1.4 1.4M9.6 9.6L11 11M11 3l-1.4 1.4M4.4 9.6L3 11" />
+    </svg>
+  )
+}
+
+function IdentityIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="5" r="2.5" />
+      <path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" />
+      <path d="M9.5 2.5l1 1-1 1" strokeWidth="1" />
     </svg>
   )
 }

@@ -390,8 +390,8 @@ READ_ONLY_TOOLS: frozenset = frozenset({
     "browse_containers", "browse_pools",
     "list_my_commitments", "check_payment_status",
     "check_financing_pool", "check_trade_financing",
-    # Logistics (Agent #11-13)
     "get_shipment_status", "list_webhook_subscriptions",
+    "verify_did",
 })
 
 

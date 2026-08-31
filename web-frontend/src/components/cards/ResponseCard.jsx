@@ -607,7 +607,6 @@ export function ResponseCard({ responseType, data }) {
       return <PaymentStatusCard data={data} />
     case 'coop_payout':
       return <CoopPayoutCard data={data} />
-    // ── Logistics / Webhooks (Agent #11-13)
     case 'ingest_milestone':
     case 'milestone':
       return <MilestoneResponseCard data={data} />
@@ -623,6 +622,9 @@ export function ResponseCard({ responseType, data }) {
     case 'get_shipment_status':
     case 'shipment_status':
       return <ShipmentStatusResponseCard data={data} />
+    case 'verify_did':
+    case 'did_verification':
+      return <VerifyDidResponseCard data={data} />
     default:
       return null
   }
@@ -796,6 +798,89 @@ export function ShipmentStatusResponseCard({ data }) {
       {events.length > 0 && (
         <div className="text-[10px] text-stone-400">
           {events.length} supply chain event{events.length > 1 ? 's' : ''} recorded.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── DID Verification ─────────────────────────────────────────────────
+export function VerifyDidResponseCard({ data }) {
+  const s     = data?.summary     || {}
+  const creds = data?.credentials || []
+  const user  = data?.user_info   || {}
+  const allValid = creds.length > 0 && creds.every(c => c.verified)
+
+  return (
+    <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm space-y-2">
+      {/* Header */}
+      <div className="font-semibold text-violet-800 flex items-center gap-1.5">
+        🪪 DID Verification
+        {user.name && <span className="ml-auto text-xs text-stone-400 font-normal">👤 {user.name}</span>}
+      </div>
+
+      {/* DID chip */}
+      {data?.did && (
+        <code className="block text-[10px] text-stone-500 break-all bg-white/60 rounded px-2 py-1">
+          {data.did}
+        </code>
+      )}
+
+      {/* Status */}
+      <div className="flex items-center gap-1.5 text-xs">
+        <span>{allValid ? '✅' : '⚠️'}</span>
+        <span className={allValid ? 'text-green-700' : 'text-amber-700'}>
+          {s.verified_credentials ?? 0}/{s.total_credentials ?? 0} credentials verified
+        </span>
+      </div>
+
+      {/* Stats */}
+      {(s.credit_score != null || s.total_batches != null) && (
+        <div className="flex gap-2 flex-wrap">
+          {s.credit_score != null && (
+            <div className="rounded bg-violet-100 px-2 py-1 text-center min-w-[52px]">
+              <div className="font-bold text-violet-700 text-sm">{s.credit_score}</div>
+              <div className="text-[9px] text-stone-400 uppercase tracking-wide">Score</div>
+            </div>
+          )}
+          {s.total_batches != null && (
+            <div className="rounded bg-violet-100 px-2 py-1 text-center min-w-[52px]">
+              <div className="font-bold text-stone-700 text-sm">{s.total_batches}</div>
+              <div className="text-[9px] text-stone-400 uppercase tracking-wide">Batches</div>
+            </div>
+          )}
+          {s.total_volume_kg != null && (
+            <div className="rounded bg-violet-100 px-2 py-1 text-center min-w-[52px]">
+              <div className="font-bold text-stone-700 text-sm">{Number(s.total_volume_kg).toLocaleString()}</div>
+              <div className="text-[9px] text-stone-400 uppercase tracking-wide">kg</div>
+            </div>
+          )}
+          {s.days_active != null && (
+            <div className="rounded bg-violet-100 px-2 py-1 text-center min-w-[52px]">
+              <div className="font-bold text-stone-700 text-sm">{s.days_active}</div>
+              <div className="text-[9px] text-stone-400 uppercase tracking-wide">Days</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Credentials */}
+      {creds.length > 0 && (
+        <div className="space-y-0.5 pt-1 border-t border-violet-200">
+          {creds.map((c, i) => {
+            const types = Array.isArray(c.type)
+              ? c.type.filter(t => t !== 'VerifiableCredential').join(', ')
+              : String(c.type || 'Credential')
+            return (
+              <div key={i} className="flex items-center gap-1.5 text-xs text-stone-600">
+                <span>{c.verified ? '✅' : '❌'}</span>
+                <span>{types || 'Credential'}</span>
+                {c.issuance_date && (
+                  <span className="ml-auto text-[10px] text-stone-400">{c.issuance_date.slice(0, 10)}</span>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
