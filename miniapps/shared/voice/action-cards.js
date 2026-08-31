@@ -144,6 +144,22 @@ class ActionCards {
       case 'validate_dpp':
         return this.createValidateDppCard(card);
 
+      // Logistics / LSP Milestones (Agent #11)
+      case 'ingest_milestone':
+        return this.createMilestoneCard(card);
+
+      // Webhook Subscription Management (Agent #12)
+      case 'register_webhook_subscription':
+        return this.createWebhookRegisteredCard(card);
+      case 'list_webhook_subscriptions':
+        return this.createWebhookListCard(card);
+      case 'unregister_webhook_subscription':
+        return this.createWebhookRemovedCard(card);
+
+      // Shipment Status / Timeline (Agent #13)
+      case 'get_shipment_status':
+        return this.createShipmentStatusCard(card);
+
       default:
         return this.createGenericCard(card);
     }
@@ -1533,6 +1549,166 @@ class ActionCards {
       </div>
     `;
 
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create milestone card — ingest_milestone
+   */
+  createMilestoneCard(card) {
+    const LABELS = {
+      PICKUP: 'Pickup', PORT_ARRIVAL_ORIGIN: 'Port Arrival (Origin)',
+      VESSEL_DEPARTURE: 'Vessel Departure', TRANSSHIPMENT: 'Transshipment',
+      PORT_ARRIVAL_DESTINATION: 'Port Arrival (Destination)',
+      CUSTOMS_CLEARED: 'Customs Cleared', DELIVERED: 'Delivered',
+    };
+    const EMOJIS = {
+      PICKUP: '🚛', PORT_ARRIVAL_ORIGIN: '⚓', VESSEL_DEPARTURE: '🚢',
+      TRANSSHIPMENT: '🔄', PORT_ARRIVAL_DESTINATION: '🏗️',
+      CUSTOMS_CLEARED: '✅', DELIVERED: '📦',
+    };
+    const d = card.data || card;
+    const type  = (d.milestone_type || '').toUpperCase();
+    const label = LABELS[type] || type.replace(/_/g, ' ') || 'Milestone';
+    const emoji = EMOJIS[type] || '📍';
+
+    const baseCard = this.createBaseCard(`${emoji} ${label}`, '#06B6D4');
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:13px;line-height:1.6;';
+    const rows = [
+      d.container_sscc && `<div><strong>Container:</strong> <code style="font-size:11px">${d.container_sscc}</code></div>`,
+      d.location        && `<div><strong>Location:</strong> ${d.location}</div>`,
+      d.carrier         && `<div><strong>Carrier:</strong> ${d.carrier}</div>`,
+      d.vessel_imo      && `<div><strong>Vessel IMO:</strong> ${d.vessel_imo}</div>`,
+      d.voyage_number   && `<div><strong>Voyage:</strong> ${d.voyage_number}</div>`,
+      d.epcis_event_hash && `<div style="font-size:11px;opacity:0.5;font-family:monospace">Hash: ${d.epcis_event_hash.slice(0,14)}…</div>`,
+      d.blockchain_tx_hash && `<div style="font-size:11px;opacity:0.5;font-family:monospace">TX: ${d.blockchain_tx_hash.slice(0,16)}…</div>`,
+    ].filter(Boolean);
+    content.innerHTML = rows.join('');
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create webhook registered card — register_webhook_subscription
+   */
+  createWebhookRegisteredCard(card) {
+    const d = card.data || card;
+    const baseCard = this.createBaseCard('🔗 Webhook Registered', '#10B981');
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:13px;line-height:1.6;';
+    const eventPills = (d.events || []).map(e =>
+      `<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-family:monospace;background:rgba(16,185,129,0.15);color:#10b981;margin:2px">${e}</span>`
+    ).join('');
+    content.innerHTML = `
+      ${d.id  ? `<div><strong>ID:</strong> <code style="font-size:11px">${d.id}</code></div>` : ''}
+      ${d.url ? `<div style="word-break:break-all"><strong>URL:</strong> ${d.url}</div>` : ''}
+      ${eventPills ? `<div style="margin-top:4px">${eventPills}</div>` : ''}
+      <div style="font-size:10px;opacity:0.4;margin-top:4px">Save the ID to unregister later.</div>
+    `;
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create webhook list card — list_webhook_subscriptions
+   */
+  createWebhookListCard(card) {
+    const d     = card.data || card;
+    const hooks = d.webhooks || [];
+    const baseCard = this.createBaseCard(`📡 Webhooks (${d.count ?? hooks.length})`, '#6366F1');
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:12px;line-height:1.5;max-height:280px;overflow-y:auto;';
+    if (!hooks.length) {
+      content.innerHTML = '<div style="opacity:0.4;font-style:italic">No subscriptions registered.</div>';
+    } else {
+      content.innerHTML = hooks.map(wh => `
+        <div style="padding:6px 8px;margin-bottom:6px;border-radius:8px;background:rgba(255,255,255,0.03)">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <code style="font-size:10px;opacity:0.6">${wh.id || ''}</code>
+            <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:${wh.active ? 'rgba(16,185,129,0.15)' : 'rgba(107,114,128,0.15)'};color:${wh.active ? '#10b981' : '#9ca3af'}">${wh.active ? 'active' : 'inactive'}</span>
+          </div>
+          <div style="font-size:11px;opacity:0.6;word-break:break-all">${wh.url || ''}</div>
+          <div style="font-size:9px;opacity:0.35;margin-top:2px">✅ ${wh.delivery_count ?? 0} &nbsp; ❌ ${wh.failure_count ?? 0}</div>
+        </div>
+      `).join('');
+    }
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create webhook removed card — unregister_webhook_subscription
+   */
+  createWebhookRemovedCard(card) {
+    const d   = card.data || card;
+    const ok  = d.success !== false && d.found !== false;
+    const baseCard = this.createBaseCard(ok ? '🗑️ Webhook Removed' : '❓ Not Found', ok ? '#EF4444' : '#6B7280');
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:13px;';
+    content.innerHTML = ok
+      ? `${d.id ? `<div><code style="font-size:11px">${d.id}</code></div>` : ''}<div style="font-size:11px;opacity:0.4;margin-top:4px">No longer receiving events.</div>`
+      : '<div style="opacity:0.5">Webhook ID not found.</div>';
+    baseCard.appendChild(content);
+    return baseCard;
+  }
+
+  /**
+   * Create shipment status card — get_shipment_status
+   */
+  createShipmentStatusCard(card) {
+    const STATUS_COLOR = { PENDING:'#F59E0B', SHIPPED:'#06B6D4', IN_TRANSIT:'#06B6D4', DELIVERED:'#10B981' };
+    const STATUS_EMOJI = { PENDING:'⏳', SHIPPED:'🚢', IN_TRANSIT:'🚢', DELIVERED:'✅' };
+    const MILESTONE_LABELS = {
+      PICKUP:'Pickup', PORT_ARRIVAL_ORIGIN:'Port Arrival (Origin)',
+      VESSEL_DEPARTURE:'Vessel Departure', TRANSSHIPMENT:'Transshipment',
+      PORT_ARRIVAL_DESTINATION:'Port Arrival (Destination)',
+      CUSTOMS_CLEARED:'Customs Cleared', DELIVERED:'Delivered',
+    };
+    const MILESTONE_EMOJIS = {
+      PICKUP:'🚛', PORT_ARRIVAL_ORIGIN:'⚓', VESSEL_DEPARTURE:'🚢',
+      TRANSSHIPMENT:'🔄', PORT_ARRIVAL_DESTINATION:'🏗️',
+      CUSTOMS_CLEARED:'✅', DELIVERED:'📦',
+    };
+
+    const d          = card.data || card;
+    const ds         = (d.delivery_status || 'PENDING').toUpperCase();
+    const accent     = STATUS_COLOR[ds] || '#6B7280';
+    const emoji      = STATUS_EMOJI[ds]  || '📦';
+    const milestones = d.milestones || [];
+    const events     = d.events     || [];
+
+    const baseCard = this.createBaseCard(`${emoji} Shipment: ${ds}`, accent);
+    const content  = document.createElement('div');
+    content.style.cssText = 'color:rgba(255,255,255,0.7);font-size:12px;line-height:1.6;';
+
+    let html = '';
+    if (d.container_sscc) html += `<div style="font-family:monospace;font-size:11px;opacity:0.6;margin-bottom:4px">${d.container_sscc}</div>`;
+    if (d.variety)           html += `<div><strong>Variety:</strong> ${d.variety}</div>`;
+    if (d.total_quantity_kg) html += `<div><strong>Qty:</strong> ${Number(d.total_quantity_kg).toLocaleString()} kg</div>`;
+
+    if (milestones.length) {
+      html += `<div style="margin-top:8px;font-size:10px;opacity:0.4;text-transform:uppercase;letter-spacing:1px">Milestones</div>`;
+      html += milestones.map(m => {
+        const mt    = (m.milestone_type || '').toUpperCase();
+        const mlbl  = MILESTONE_LABELS[mt] || mt.replace(/_/g, ' ');
+        const memj  = MILESTONE_EMOJIS[mt] || '📍';
+        const t     = m.event_time ? m.event_time.slice(0, 16).replace('T', ' ') : '';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:2px 0">
+          <span>${memj}</span>
+          <span style="font-size:11px">${mlbl}</span>
+          ${t ? `<span style="font-size:10px;opacity:0.35">${t}</span>` : ''}
+          ${m.blockchain_tx_hash ? '<span style="font-size:10px;color:#06b6d4;opacity:0.6">⛓</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+
+    if (events.length) {
+      html += `<div style="margin-top:6px;font-size:10px;opacity:0.35">${events.length} supply chain event${events.length > 1 ? 's' : ''} recorded.</div>`;
+    }
+
+    content.innerHTML = html;
     baseCard.appendChild(content);
     return baseCard;
   }
