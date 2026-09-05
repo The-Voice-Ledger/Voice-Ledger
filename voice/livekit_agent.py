@@ -298,7 +298,17 @@ def _build_livekit_stt(language: str = "en"):
             )
         else:
             logger.info("Using AddisAI STT for language=%s", lang)
-            return lk_addisai.STT(language=lang)
+            # AddisAI STT can be slow — use a generous timeout
+            stt_timeout = float(os.getenv("ADDISAI_STT_TIMEOUT", "30.0"))
+            try:
+                from livekit.agents.types import APIConnectOptions
+                return lk_addisai.STT(
+                    language=lang,
+                    conn_options=APIConnectOptions(timeout=stt_timeout, max_retry=2),
+                )
+            except TypeError:
+                # Older plugin versions may not accept conn_options in constructor
+                return lk_addisai.STT(language=lang)
 
     # Default: Deepgram English
     return deepgram.STT(model="nova-2", language="en-US")
@@ -1545,6 +1555,33 @@ RULES:
 8. Respond in English only (Amharic support coming soon).
 """
 
+# ── Language-specific system prompt addenda ───────────────────────────────
+# Injected when the session language is not English. The LLM handles all
+# translation — no hardcoded strings in other languages anywhere in the code.
+
+AMHARIC_PROMPT_ADDENDUM = """
+
+LANGUAGE: This session is in Amharic (አማርኛ).
+- You MUST respond ONLY in Amharic. Never switch to English.
+- All tool result summaries, confirmations, errors, and questions must be in Amharic.
+- Numbers, dates, and IDs may be left as-is (Latin digits are fine).
+- Keep responses short and clear — the user is speaking live on voice.
+"""
+
+OROMO_PROMPT_ADDENDUM = """
+
+LANGUAGE: This session is in Afaan Oromoo.
+- You MUST respond ONLY in Afaan Oromoo. Never switch to English.
+- All tool result summaries, confirmations, errors, and questions must be in Afaan Oromoo.
+- Numbers, dates, and IDs may be left as-is (Latin digits are fine).
+- Keep responses short and clear — the user is speaking live on voice.
+"""
+
+_LANGUAGE_ADDENDA = {
+    "am": AMHARIC_PROMPT_ADDENDUM,
+    "om": OROMO_PROMPT_ADDENDUM,
+}
+
 
 # =====================================================================
 # Tool sets — guests see only read-only tools; registered users see all
@@ -1629,10 +1666,14 @@ AUTHENTICATION STATUS: This user is a GUEST (not signed in).
 class VoiceLedgerAgent(Agent):
     """LiveKit voice agent for Voice Ledger."""
 
-    def __init__(self, user_name: str = "there", is_guest: bool = False):
+    def __init__(self, user_name: str = "there", is_guest: bool = False, language: str = "en"):
         prompt = SYSTEM_PROMPT + f"\nThe user's name is {user_name}."
         if is_guest:
             prompt += GUEST_PROMPT_ADDENDUM
+        # Inject language instruction if not English
+        lang_addendum = _LANGUAGE_ADDENDA.get(language.lower().strip(), "")
+        if lang_addendum:
+            prompt += lang_addendum
         super().__init__(
             instructions=prompt,
             tools=GUEST_TOOLS if is_guest else ALL_TOOLS,
@@ -1696,12 +1737,14 @@ async def handle_session(ctx: agents.JobContext):
     )
 
     await session.start(
-        agent=VoiceLedgerAgent(user_name=user_name, is_guest=is_guest),
+        agent=VoiceLedgerAgent(user_name=user_name, is_guest=is_guest, language=user_language),
         room=ctx.room,
         room_options=room_io.RoomOptions(),
     )
 
-    # Build a role-aware greeting that tells users what they can actually do
+    # Build greeting in English — the agent's system prompt already instructs it
+    # to translate all output to the selected language, so session.say() will
+    # speak through the LLM which handles the translation automatically.
     if is_guest:
         what_i_can_do = (
             "As a guest, I can help you explore — browse coffee batches, "
@@ -1738,18 +1781,19 @@ async def handle_session(ctx: agents.JobContext):
         f"Hello {user_name}! Welcome to The Voice Ledger. "
         f"{what_i_can_do} Just tell me what you need, and I will help right away."
     )
+
     try:
         speech = session.say(greeting_text)
         await speech
         await _send_assistant_transcript(ctx, greeting_text)
-        logger.info("Greeting delivered for user=%s", user_name)
+        logger.info("Greeting delivered for user=%s language=%s", user_name, user_language)
     except Exception as e:
         _maybe_trip_openai_circuit_from_exception(e, llm_provider)
         logger.error("greeting say() failed: %s", e)
         try:
             fallback = (
                 f"Hello {user_name}! Welcome to The Voice Ledger. "
-                f"{what_i_can_do} Just tell me what you need!"
+                f"Just tell me what you need!"
             )
             speech = session.say(fallback)
             await speech
