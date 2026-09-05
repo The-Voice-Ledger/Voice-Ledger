@@ -48,6 +48,11 @@ from livekit.agents import (  # pyright: ignore[reportMissingImports]
 from livekit.plugins import deepgram, openai, silero  # pyright: ignore[reportMissingImports]
 
 try:
+    from livekit.plugins import addisai as lk_addisai  # pyright: ignore[reportMissingImports]
+except ImportError:
+    lk_addisai = None  # plugin not installed — English-only fallback
+
+try:
     from livekit.plugins import google as lk_google  # pyright: ignore[reportMissingImports]
 except Exception:  # pragma: no cover - optional dependency in some environments
     lk_google = None
@@ -258,6 +263,72 @@ def _build_livekit_tts(provider_name: str):
     openai_tts_model = os.getenv("LIVEKIT_OPENAI_TTS_MODEL", "tts-1")
     openai_tts_voice = os.getenv("LIVEKIT_OPENAI_TTS_VOICE", "nova")
     return openai.TTS(model=openai_tts_model, voice=openai_tts_voice)
+
+
+# ── AddisAI Amharic / Oromo STT + TTS ─────────────────────────────────
+
+_ADDISAI_SUPPORTED = {"am", "om"}   # languages handled by the AddisAI plugin
+
+
+def _build_livekit_stt(language: str = "en"):
+    """
+    Return the appropriate STT provider for the requested language.
+
+    - "am" (Amharic) or "om" (Oromo) → AddisAI STT (requires ADDISAI_API_KEY)
+    - anything else → Deepgram nova-2 English (current default)
+
+    Falls back silently to Deepgram when:
+      • livekit-plugins-addisai is not installed
+      • ADDISAI_API_KEY is not set
+    """
+    lang = (language or "en").lower().strip()
+
+    if lang in _ADDISAI_SUPPORTED:
+        if lk_addisai is None:
+            logger.warning(
+                "Language '%s' requested but livekit-plugins-addisai is not installed. "
+                "Run: pip install livekit-plugins-addisai  — falling back to Deepgram English.",
+                lang,
+            )
+        elif not os.getenv("ADDISAI_API_KEY"):
+            logger.warning(
+                "Language '%s' requested but ADDISAI_API_KEY is not set "
+                "— falling back to Deepgram English.",
+                lang,
+            )
+        else:
+            logger.info("Using AddisAI STT for language=%s", lang)
+            return lk_addisai.STT(language=lang)
+
+    # Default: Deepgram English
+    return deepgram.STT(model="nova-2", language="en-US")
+
+
+def _build_livekit_addisai_tts(language: str, llm_provider: str):
+    """
+    Return the appropriate TTS provider for the requested language.
+
+    - "am" / "om" → AddisAI TTS (requires ADDISAI_API_KEY)
+    - anything else → standard _build_livekit_tts() selection
+    """
+    lang = (language or "en").lower().strip()
+
+    if lang in _ADDISAI_SUPPORTED:
+        if lk_addisai is None:
+            logger.warning(
+                "AddisAI TTS not available (plugin not installed) for language=%s; "
+                "using standard TTS.", lang,
+            )
+        elif not os.getenv("ADDISAI_API_KEY"):
+            logger.warning(
+                "AddisAI TTS not available (ADDISAI_API_KEY missing) for language=%s; "
+                "using standard TTS.", lang,
+            )
+        else:
+            logger.info("Using AddisAI TTS for language=%s", lang)
+            return lk_addisai.TTS(language=lang)
+
+    return _build_livekit_tts(llm_provider)
 
 
 def _maybe_trip_openai_circuit_from_exception(exc: Exception, llm_provider: str) -> None:
@@ -1592,20 +1663,25 @@ async def handle_session(ctx: agents.JobContext):
     user_name = metadata.get("name", "there")
     user_id = metadata.get("user_id", "anonymous")
     user_role = metadata.get("role", "user")
+    user_language = (metadata.get("language") or "en").lower().strip()
     is_guest = (not user_id or str(user_id) == "anonymous" or str(user_id) == "0")
 
     logger.info(
-        "Session started: user=%s (id=%s, role=%s, guest=%s)",
-        user_name, user_id, user_role, is_guest,
+        "Session started: user=%s (id=%s, role=%s, guest=%s, language=%s)",
+        user_name, user_id, user_role, is_guest, user_language,
     )
 
     llm_instance, llm_provider, llm_model = _build_livekit_llm()
-    tts_instance = _build_livekit_tts(llm_provider)
+    stt_instance = _build_livekit_stt(user_language)
+    tts_instance = _build_livekit_addisai_tts(user_language, llm_provider)
 
-    logger.info("LiveKit provider selection: llm_provider=%s, llm_model=%s", llm_provider, llm_model)
+    logger.info(
+        "LiveKit provider selection: llm_provider=%s, llm_model=%s, language=%s",
+        llm_provider, llm_model, user_language,
+    )
 
     session = AgentSession(
-        stt=deepgram.STT(model="nova-2", language="en-US"),
+        stt=stt_instance,
         llm=llm_instance,
         tts=tts_instance,
         vad=silero.VAD.load(),
@@ -1615,6 +1691,7 @@ async def handle_session(ctx: agents.JobContext):
             "name": user_name,
             "role": user_role,
             "is_guest": is_guest,
+            "language": user_language,
         },
     )
 

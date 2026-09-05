@@ -57,24 +57,37 @@ const STATE_LABELS = {
 const PULSING_STATES = new Set(['listening', 'connecting', 'thinking'])
 
 /* ================================================================
+   Language options supported by the panel
+   ================================================================ */
+
+const LANGUAGES = [
+  { code: 'en', label: 'English',  flag: '🇬🇧' },
+  { code: 'am', label: 'አማርኛ',    flag: '🇪🇹' },
+  { code: 'om', label: 'Afaan Oromoo', flag: '🇪🇹' },
+]
+
+/* ================================================================
    Outer wrapper — manages token + session
    ================================================================ */
 
 export default function LiveVoicePanel({ isOpen, onClose }) {
   const { user } = useAuthStore()
+  const [language, setLanguage] = useState('en')
 
   const tokenSource = useMemo(
     () =>
       TokenSource.custom(async () => {
         const data = await getLiveKitToken({
-          userId: user?.id?.toString() || 'anonymous',
+          userId:   user?.id?.toString() || 'anonymous',
           userName: user?.full_name || 'Guest',
           userRole: user?.role || 'user',
-          userDid: user?.did || null,
+          userDid:  user?.did || null,
+          language,
         })
         return { participantToken: data.token, serverUrl: data.url }
       }),
-    [user?.id, user?.full_name, user?.role],
+    // Re-create token source when language changes so new session picks it up
+    [user?.id, user?.full_name, user?.role, language],
   )
 
   const session = useSession(tokenSource)
@@ -87,6 +100,8 @@ export default function LiveVoicePanel({ isOpen, onClose }) {
         session={session}
         onClose={onClose}
         userName={user?.full_name || 'Guest'}
+        language={language}
+        onLanguageChange={setLanguage}
       />
     </SessionProvider>
   )
@@ -96,7 +111,7 @@ export default function LiveVoicePanel({ isOpen, onClose }) {
    The overlay — hero-themed, orb, transcript, action cards, controls
    ================================================================ */
 
-function VoicePanelOverlay({ session, onClose, userName }) {
+function VoicePanelOverlay({ session, onClose, userName, language, onLanguageChange }) {
   const { state: agentState, audioTrack } = useVoiceAssistant()
   useAgent() // keep the agent connection alive
   
@@ -295,14 +310,39 @@ function VoicePanelOverlay({ session, onClose, userName }) {
             </span>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/5 transition-all duration-200"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M4 4l8 8M12 4l-8 8" />
-          </svg>
-        </button>
+
+        {/* ── Language selector ── */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-xl overflow-hidden"
+               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => !isStarted && onLanguageChange(lang.code)}
+                disabled={isStarted}
+                title={isStarted ? 'Language cannot be changed during an active session' : lang.label}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium transition-all duration-150
+                  ${isStarted ? 'cursor-not-allowed opacity-50' : 'hover:bg-white/5 cursor-pointer'}
+                  ${language === lang.code
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'text-white/35'
+                  }`}
+              >
+                <span>{lang.flag}</span>
+                <span className="hidden sm:inline">{lang.code === 'en' ? 'EN' : lang.code === 'am' ? 'አማ' : 'OM'}</span>
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/5 transition-all duration-200"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* ── Split panel body ── */}

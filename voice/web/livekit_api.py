@@ -80,6 +80,7 @@ class TokenRequest(BaseModel):
     user_name: Optional[str] = "Guest"
     user_role: Optional[str] = "user"
     user_did: Optional[str] = None
+    language: Optional[str] = "en"   # "en" | "am" (Amharic) | "om" (Oromo)
 
 
 class TokenResponse(BaseModel):
@@ -131,6 +132,7 @@ async def create_token(req: TokenRequest):
         "user_id": internal_user_id,  # Use mapped internal user_id
         "original_user_id": req.user_id,  # Keep original for reference
         "user_did": req.user_did,
+        "language": req.language or "en",   # "en" | "am" | "om"
     })
 
     token = (

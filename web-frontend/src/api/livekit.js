@@ -6,7 +6,7 @@ import { postJSON, getJSON } from './client'
 
 /**
  * Get a LiveKit room token from our backend.
- * @param {object} opts  { userId, userName, userRole, userDid }
+ * @param {object} opts  { userId, userName, userRole, userDid, language }
  * @returns {Promise<{token: string, url: string, room: string}>}
  */
 export async function getLiveKitToken(opts = {}) {
@@ -15,6 +15,7 @@ export async function getLiveKitToken(opts = {}) {
     user_name: opts.userName || 'Guest',
     user_role: opts.userRole || 'user',
     user_did: opts.userDid || null,
+    language:  opts.language || 'en',
   })
 }
 
