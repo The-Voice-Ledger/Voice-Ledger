@@ -1782,6 +1782,28 @@ async def handle_session(ctx: agents.JobContext):
         f"{what_i_can_do} Just tell me what you need, and I will help right away."
     )
 
+    # If the session language is not English, translate the greeting through
+    if user_language in _LANGUAGE_ADDENDA:
+        try:
+            from openai import AsyncOpenAI
+            _oa = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=10.0)
+            lang_names = {"am": "Amharic (አማርኛ)", "om": "Afaan Oromoo"}
+            lang_label = lang_names.get(user_language, user_language)
+            result = await _oa.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": f"Translate the following text to {lang_label}. Return only the translated text, nothing else."},
+                    {"role": "user",   "content": greeting_text},
+                ],
+                max_tokens=200,
+                temperature=0,
+            )
+            translated = result.choices[0].message.content.strip()
+            if translated:
+                greeting_text = translated
+        except Exception as exc:
+            logger.warning("Greeting translation failed, using English: %s", exc)
+
     try:
         speech = session.say(greeting_text)
         await speech
