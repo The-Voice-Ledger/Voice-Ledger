@@ -10,6 +10,7 @@ python-multipart==0.0.6
 pydantic>=2.5.0
 python-dotenv==1.0.0
 python-dateutil==2.8.2
+redis==5.0.1
 
 # LiveKit Real-Time Voice Agent
 livekit==1.1.5
@@ -19,6 +20,7 @@ livekit-plugins-deepgram==1.5.6
 livekit-plugins-google==1.5.6
 livekit-plugins-openai==1.5.6
 livekit-plugins-silero==1.5.6
+livekit-plugins-addisai
 
 # OpenAI (LLM + TTS)
 openai>=1.12.0
