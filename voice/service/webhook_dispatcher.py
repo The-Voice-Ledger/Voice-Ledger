@@ -368,42 +368,64 @@ def _start_subscriber() -> None:
     register/unregister messages to _webhooks_cache.
 
     Call this once from the FastAPI startup event (alongside warm_cache).
-    No-ops if Redis is unavailable.
+    No-ops if Redis is unavailable — the loop will retry every 30s.
+    The thread reconnects automatically after any socket-level error (TimeoutError,
+    ConnectionError, etc.) so a transient Redis restart doesn't kill the subscriber.
     """
-    r = _get_redis()
-    if not r:
-        return
 
     def _run() -> None:
-        try:
-            pubsub = r.pubsub(ignore_subscribe_messages=True)
-            pubsub.subscribe(_REDIS_PUBSUB_CHAN)
-            for msg in pubsub.listen():
-                try:
-                    data    = json.loads(msg["data"])
-                    action  = data.get("action")
-                    payload = data.get("payload", {})
+        while True:
+            # Use a dedicated client with no socket timeout for blocking pub/sub
+            try:
+                import redis as redis_lib
+                pubsub_client = redis_lib.from_url(
+                    os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                    socket_timeout=None,    # blocking read — no timeout
+                )
+                pubsub_client.ping()
+            except Exception as exc:
+                logger.debug("Webhook pub/sub: Redis unavailable (%s), retrying in 30s", exc)
+                import time as _time
+                _time.sleep(30)
+                continue
 
-                    if action == "register":
-                        # Fetch the full record (with secret) from Redis rather than
-                        # trusting the pub/sub payload (which has secret stripped).
-                        wid = payload.get("id")
-                        if wid:
-                            raw = r.get(f"{_REDIS_KEY_PREFIX}{wid}")
-                            if raw:
-                                rec = json.loads(raw)
-                                if rec.get("secret"):
-                                    rec["secret"] = _decrypt_secret(rec["secret"])
-                                wh = WebhookRegistration.from_dict(rec)
-                                _webhooks_cache[wh.id] = wh
+            try:
+                pubsub = pubsub_client.pubsub(ignore_subscribe_messages=True)
+                pubsub.subscribe(_REDIS_PUBSUB_CHAN)
+                for msg in pubsub.listen():
+                    if msg is None:
+                        continue
+                    try:
+                        data    = json.loads(msg["data"])
+                        action  = data.get("action")
+                        payload = data.get("payload", {})
 
-                    elif action == "unregister":
-                        _webhooks_cache.pop(payload.get("id", ""), None)
+                        if action == "register":
+                            wid = payload.get("id")
+                            if wid:
+                                raw = pubsub_client.get(f"{_REDIS_KEY_PREFIX}{wid}")
+                                if raw:
+                                    rec = json.loads(raw)
+                                    if rec.get("secret"):
+                                        rec["secret"] = _decrypt_secret(rec["secret"])
+                                    wh = WebhookRegistration.from_dict(rec)
+                                    _webhooks_cache[wh.id] = wh
 
-                except Exception:
-                    logger.exception("Error processing webhook pub/sub message")
-        except Exception:
-            logger.exception("Webhook pub/sub subscriber exited unexpectedly")
+                        elif action == "unregister":
+                            _webhooks_cache.pop(payload.get("id", ""), None)
+
+                    except Exception:
+                        logger.exception("Error processing webhook pub/sub message")
+
+            except Exception as exc:
+                # Connection lost (Redis restart, network blip, etc.) — reconnect
+                logger.debug("Webhook pub/sub connection lost (%s), reconnecting in 5s", exc)
+                import time as _time
+                _time.sleep(5)
+                global _redis_client
+                _redis_client = None   # force reconnect on next _get_redis() call
 
     thread = threading.Thread(target=_run, daemon=True, name="webhook-pubsub-subscriber")
     thread.start()
