@@ -137,11 +137,34 @@
             <div style="color: rgba(255,255,255,0.3); font-size: 10px; font-family: monospace;">voice assistant</div>
           </div>
         </div>
-        <button onclick="closeLiveKitVoicePanel()" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: transparent; color: rgba(255,255,255,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.background='transparent'">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M4 4l8 8M12 4l-8 8"></path>
-          </svg>
-        </button>
+
+        <!-- Language selector + close -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <!-- Language toggle — disabled once session is active (JS sets pointer-events:none) -->
+          <div id="livekitLangPicker" style="display: flex; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
+            <button onclick="setLiveKitLanguage('en')" data-lang="en"
+              style="padding: 5px 10px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.15s; background: rgba(16,185,129,0.2); color: #34D399;"
+              title="English">🇬🇧 EN</button>
+            <button onclick="setLiveKitLanguage('am')" data-lang="am"
+              style="padding: 5px 10px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.15s; background: transparent; color: rgba(255,255,255,0.3);"
+              title="Amharic / አማርኛ">🇪🇹 አማ</button>
+            <button onclick="setLiveKitLanguage('om')" data-lang="om"
+              style="padding: 5px 10px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.15s; background: transparent; color: rgba(255,255,255,0.3);"
+              title="Afaan Oromoo">🇪🇹 OM</button>
+          </div>
+          <!-- Hidden select consumed by assistant-livekit-voice.js -->
+          <select id="livekitLanguageSelect" style="display:none;">
+            <option value="en" selected>English</option>
+            <option value="am">Amharic</option>
+            <option value="om">Oromo</option>
+          </select>
+
+          <button onclick="closeLiveKitVoicePanel()" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: transparent; color: rgba(255,255,255,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.color='rgba(255,255,255,0.7)'; this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.color='rgba(255,255,255,0.3)'; this.style.background='transparent'">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 4l8 8M12 4l-8 8"></path>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <!-- Split Panel Content -->
@@ -365,27 +388,46 @@
     clearActionCards() {
       const actionCardsContent = document.getElementById('actionCardsContainer');
       const actionCardsSection = document.getElementById('actionCardsSection');
-      const actionCardsCount = document.getElementById('actionCardsCount');
+      const actionCardsCount   = document.getElementById('actionCardsCount');
       
-      if (actionCardsContent) {
-        actionCardsContent.innerHTML = '';
+      if (actionCardsContent) actionCardsContent.innerHTML = '';
+      if (actionCardsSection) actionCardsSection.style.display = 'none';
+      if (actionCardsCount)   actionCardsCount.textContent = '0 actions';
+      if (window.actionCards) window.actionCards = null;
+    },
+
+    /** Lock language picker once a session is active so it can't be changed mid-call. */
+    lockLanguagePicker() {
+      const picker = document.getElementById('livekitLangPicker');
+      if (picker) {
+        picker.style.opacity = '0.4';
+        picker.style.pointerEvents = 'none';
+        picker.title = 'Language cannot be changed during an active session';
       }
-      
-      // Hide the action cards section
-      if (actionCardsSection) {
-        actionCardsSection.style.display = 'none';
+    },
+
+    /** Unlock language picker after session ends. */
+    unlockLanguagePicker() {
+      const picker = document.getElementById('livekitLangPicker');
+      if (picker) {
+        picker.style.opacity = '';
+        picker.style.pointerEvents = '';
+        picker.title = '';
       }
-      
-      // Reset count
-      if (actionCardsCount) {
-        actionCardsCount.textContent = '0 actions';
-      }
-      
-      // Clear the action cards instance
-      if (window.actionCards) {
-        window.actionCards = null;
-      }
-    }
+    },
+  };
+
+  /** Switch selected language and update button styles. Exposed as a global so inline onclick works. */
+  window.setLiveKitLanguage = function(lang) {
+    const select = document.getElementById('livekitLanguageSelect');
+    if (select) select.value = lang;
+
+    const buttons = document.querySelectorAll('#livekitLangPicker button');
+    buttons.forEach(btn => {
+      const isActive = btn.dataset.lang === lang;
+      btn.style.background = isActive ? 'rgba(16,185,129,0.2)' : 'transparent';
+      btn.style.color      = isActive ? '#34D399' : 'rgba(255,255,255,0.3)';
+    });
   };
   
   })();

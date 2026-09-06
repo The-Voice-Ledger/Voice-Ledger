@@ -40,12 +40,13 @@ export class LiveKitVoiceManager {
   /**
    * Connect to LiveKit room with agent
    */
-  async connect(userId = null, userName = null, userRole = 'user') {
+  async connect(userId = null, userName = null, userRole = 'user', language = 'en') {
     try {
       this.setState('connecting')
-      this.userId = userId || `user_${Date.now()}`
+      this.userId   = userId   || `user_${Date.now()}`
       this.userName = userName || 'Telegram User'
       this.userRole = userRole
+      this.language = language || 'en'
 
       // Request microphone permission for Telegram environment only
       if (window.Telegram?.WebApp) {
@@ -70,10 +71,11 @@ export class LiveKitVoiceManager {
 
       // Get LiveKit token with agent dispatch
       const tokenData = await getLiveKitToken({
-        userId: this.userId,
+        userId:   this.userId,
         userName: this.userName,
         userRole: this.userRole,
-        agentName: 'voice-agent' // Request agent dispatch
+        language: this.language,
+        agentName: 'voice-agent'
       })
 
       // Create and connect to room with Telegram-specific settings

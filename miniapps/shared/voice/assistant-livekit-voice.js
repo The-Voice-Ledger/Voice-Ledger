@@ -113,6 +113,7 @@
           state.isLiveKitStarted = true;
           document.getElementById('livekitStartBtn').style.display = 'none';
           document.getElementById('livekitActiveControls').style.display = 'flex';
+          window.assistantLiveKitPanel?.lockLanguagePicker();
 
           // Auto-unmute microphone when session connects
           if (!state.voiceManager.isRecordingActive()) {
@@ -505,11 +506,16 @@
       // Initialize voice manager
       const vm = await initializeVoiceManager();
 
+      // Read selected language from the UI selector (default English)
+      const langEl = document.getElementById('livekitLanguageSelect');
+      const language = langEl ? langEl.value : 'en';
+
       // Connect to LiveKit room with agent
       await vm.connect(
         state.tg?.initDataUnsafe?.user?.id || 'anonymous',
         state.tg?.initDataUnsafe?.user?.first_name || 'Guest',
-        'user'
+        'user',
+        language
       );
 
       syncAgentStateFromRoom(vm.room) || applyDerivedState(getDefaultUiState());
@@ -842,6 +848,7 @@
       
       // Reset panel UI to initial state
       window.assistantLiveKitPanel?.resetToInitialState();
+      window.assistantLiveKitPanel?.unlockLanguagePicker();
     } finally {
       state.isDisconnecting = false;
     }

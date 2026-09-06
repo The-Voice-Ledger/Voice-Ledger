@@ -26,10 +26,11 @@ async function getJSON(path) {
  */
 async function getLiveKitToken(opts = {}) {
   return postJSON('/api/livekit/token', {
-    user_id: opts.userId || 'anonymous',
+    user_id:   opts.userId   || 'anonymous',
     user_name: opts.userName || 'Guest',
     user_role: opts.userRole || 'user',
-    user_did: opts.userDid || null,
+    user_did:  opts.userDid  || null,
+    language:  opts.language || 'en',
   })
 }
 
