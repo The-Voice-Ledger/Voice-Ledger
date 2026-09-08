@@ -151,6 +151,7 @@ const resources = {
       tools_used: '{{count}} tools used',
       // Financing page
       nav_financing: 'Financing',
+      nav_did: 'DID Verifier',
       fin_subtitle: 'On-chain receivables factoring pool - real-time DeFi metrics for the WAGA financing pool on Base.',
       fin_ask_assistant: 'Ask about financing',
       fin_tvl: 'Total Value Locked',
@@ -392,6 +393,7 @@ const resources = {
       tools_used: '{{count}} መሳሪያዎች ተጠቅመዋል',
       // Financing page
       nav_financing: 'ፋይናንስ',
+      nav_did: 'DID ማረጋገጫ',
       fin_subtitle: 'በ Base ላይ ያለ የ WAGA ፋይናንስ ገንዳ - በቀጥታ DeFi መለኪያዎች።',
       fin_ask_assistant: 'ስለ ፋይናንስ ጠይቅ',
       fin_tvl: 'አጠቃላይ እሴት',

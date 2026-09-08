@@ -10,6 +10,7 @@ import DPPViewer from './pages/DPPViewer'
 import Compliance from './pages/Compliance'
 import Financing from './pages/Financing'
 import Tracking from './pages/Tracking'
+import DidVerifier from './pages/DidVerifier'
 import HowItWorks from './pages/HowItWorks'
 import Platform from './pages/Platform'
 import Admin from './pages/Admin'
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/financing" element={<Financing />} />
           <Route path="/tracking" element={<Tracking />} />
+          <Route path="/did" element={<DidVerifier />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/platform" element={<Platform />} />
           <Route path="/admin" element={<Admin />} />

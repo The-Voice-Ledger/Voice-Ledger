@@ -33,6 +33,7 @@ export default function Navbar() {
     { to: '/tracking',   label: t('nav_tracking') },
     { to: '/compliance', label: t('nav_compliance') },
     { to: '/dpp',        label: t('nav_dpp') },
+    { to: '/did',        label: t('nav_did', 'DID Verifier') },
     ...(isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN')
       ? [{ to: '/admin', label: t('nav_admin', 'Admin') }]
       : []),
