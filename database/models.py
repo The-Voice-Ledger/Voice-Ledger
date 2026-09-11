@@ -876,6 +876,23 @@ class UATIssue(Base):
 # Database engine and session — connection.py is the single source of truth
 from database.connection import engine, SessionLocal
 
+
+class WebhookRegistrationModel(Base):
+    """Persisted webhook subscriptions."""
+    __tablename__ = "webhook_registrations"
+
+    id              = Column(String(32), primary_key=True)          # uuid4().hex
+    url             = Column(String(2048), nullable=False)
+    events          = Column(JSON, nullable=False)                   # List[str]
+    encrypted_secret = Column(Text, nullable=True)                  # Fernet-encrypted
+    description     = Column(String(500), nullable=True)
+    active          = Column(Boolean, default=True, nullable=False, index=True)
+    delivery_count  = Column(Integer, default=0, nullable=False)
+    failure_count   = Column(Integer, default=0, nullable=False)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_triggered_at = Column(DateTime, nullable=True)
+
+
 def init_database():
     """Create all tables in Neon."""
     Base.metadata.create_all(engine)
