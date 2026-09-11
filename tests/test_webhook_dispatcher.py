@@ -505,62 +505,84 @@ class TestDeliver:
 
 
 # ===========================================================================
-# warm_cache / _load_webhooks_from_store — Redis mocked with fakeredis pattern
+# warm_cache / DB persistence — stub _get_db_session
 # ===========================================================================
 
 class TestCachePersistence:
+    """Tests for DB-backed persistence, stubbing _get_db_session."""
 
     def setup_method(self):
         _clear_cache()
 
-    def _make_fake_redis(self, stored: dict = None):
-        """Return a minimal fake Redis-like object backed by a plain dict."""
-        store = {}
-        index = set()
-        if stored:
-            for wid, data in stored.items():
-                store[f"vl:webhooks:{wid}"] = data
-                index.add(wid)
+    def _make_fake_db(self, rows=None):
+        """
+        Return a minimal fake SQLAlchemy-session-like object.
+        rows: list of fake WebhookRegistrationModel-like objects already in the DB.
+        """
+        rows = list(rows or [])
+        added = []
 
-        class FakeRedis:
-            def ping(self): return True
-            def set(self, key, value): store[key] = value
-            def get(self, key): return store.get(key)
-            def sadd(self, key, *vals):
-                for v in vals: index.add(v)
-            def smembers(self, key): return set(index)
-            def srem(self, key, val): index.discard(val)
-            def delete(self, key): store.pop(key, None)
-            def pipeline(self):
-                pipe = MagicMock()
-                cmds = []
-                def _delete(k): cmds.append(("delete", k))
-                def _srem(k, v): cmds.append(("srem", k, v))
-                def _execute():
-                    for cmd in cmds:
-                        if cmd[0] == "delete": store.pop(cmd[1], None)
-                        elif cmd[0] == "srem": index.discard(cmd[2])
-                pipe.delete = _delete
-                pipe.srem = _srem
-                pipe.execute = _execute
-                return pipe
-            def publish(self, channel, msg): pass
+        class FakeQuery:
+            def __init__(self, _model):
+                self._rows = rows
+            def filter_by(self, **kwargs):
+                self._kwargs = kwargs
+                return self
+            def all(self):
+                active = self._kwargs.get("active", True)
+                return [r for r in self._rows if r.active == active]
+            def first(self):
+                wid = self._kwargs.get("id")
+                for r in self._rows:
+                    if r.id == wid:
+                        return r
+                return None
+            def delete(self):
+                wid = self._kwargs.get("id")
+                self._rows[:] = [r for r in self._rows if r.id != wid]
 
-        return FakeRedis(), store, index
+        class FakeSession:
+            def query(self, model):
+                return FakeQuery(model)
+            def add(self, obj):
+                added.append(obj)
+                rows.append(obj)
+            def commit(self): pass
+            def rollback(self): pass
+            def close(self): pass
+
+        return FakeSession(), rows, added
+
+    def _make_row(self, wh, encrypted_secret=None):
+        """Build a fake ORM row from a WebhookRegistration."""
+        from voice.service.webhook_dispatcher import _encrypt_secret
+        row = SimpleNamespace(
+            id               = wh.id,
+            url              = wh.url,
+            events           = wh.events,
+            encrypted_secret = encrypted_secret or (_encrypt_secret(wh.secret) if wh.secret else None),
+            description      = wh.description,
+            active           = wh.active,
+            delivery_count   = wh.delivery_count,
+            failure_count    = wh.failure_count,
+            created_at       = wh.created_at,
+            last_triggered_at = wh.last_triggered_at,
+        )
+        return row
+
+    # ── save + load round-trip ────────────────────────────────────────────
 
     def test_save_and_load_round_trip(self):
         from voice.service.webhook_dispatcher import (
-            WebhookRegistration, _save_webhook, _load_webhooks_from_store,
+            WebhookRegistration, _save_webhook, _load_webhooks_from_db,
         )
-        fake_r, store, index = self._make_fake_redis()
+        wh = WebhookRegistration(url="https://a.com", events=["SHIPPED"], secret="s3cr3t")
 
-        wh = WebhookRegistration(
-            url="https://a.com", events=["SHIPPED"], secret="s3cr3t"
-        )
+        db_session, rows, added = self._make_fake_db()
 
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=fake_r):
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=db_session):
             _save_webhook(wh)
-            result = _load_webhooks_from_store()
+            result = _load_webhooks_from_db()
 
         assert wh.id in result
         loaded = result[wh.id]
@@ -568,68 +590,76 @@ class TestCachePersistence:
         assert loaded.secret == "s3cr3t"    # decrypted on load
         assert loaded.delivery_count == 0
 
-    def test_save_encrypts_secret_in_redis(self):
-        from voice.service.webhook_dispatcher import WebhookRegistration, _save_webhook
-        fake_r, store, index = self._make_fake_redis()
-
-        wh = WebhookRegistration(
-            url="https://a.com", events=["SHIPPED"], secret="topsecret"
+    def test_save_encrypts_secret_in_db(self):
+        """The encrypted_secret stored in the DB must not equal the plaintext."""
+        from voice.service.webhook_dispatcher import (
+            WebhookRegistration, _save_webhook, _decrypt_secret,
         )
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=fake_r):
+        wh = WebhookRegistration(url="https://a.com", events=["SHIPPED"], secret="topsecret")
+
+        db_session, rows, added = self._make_fake_db()
+
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=db_session):
             _save_webhook(wh)
 
-        key = f"vl:webhooks:{wh.id}"
-        raw = json.loads(store[key])
-        assert raw["secret"] != "topsecret"     # must be encrypted token
+        # The row added to the DB should have an encrypted (not plaintext) secret
+        assert len(added) == 1
+        assert added[0].encrypted_secret != "topsecret"
+        assert _decrypt_secret(added[0].encrypted_secret) == "topsecret"
 
     def test_load_skips_corrupt_entries(self):
-        from voice.service.webhook_dispatcher import _load_webhooks_from_store
-        fake_r, store, index = self._make_fake_redis()
-        # Inject a corrupt entry manually
-        store["vl:webhooks:bad"] = "not-valid-json{{{"
-        index.add("bad")
+        """Rows that can't be converted to WebhookRegistration must be silently skipped."""
+        from voice.service.webhook_dispatcher import _load_webhooks_from_db
 
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=fake_r):
-            result = _load_webhooks_from_store()
+        # A row whose attribute access raises — guaranteed to fail _model_to_registration
+        class BrokenRow:
+            id = "bad"
+            active = True
+            @property
+            def url(self):
+                raise ValueError("corrupt data")
 
-        assert "bad" not in result    # corrupt entry silently skipped
+        broken = BrokenRow()
+        db_session, _, _ = self._make_fake_db(rows=[broken])
 
-    def test_warm_cache_loads_from_redis(self):
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=db_session):
+            result = _load_webhooks_from_db()
+
+        assert "bad" not in result
+
+    def test_warm_cache_loads_from_db(self):
         from voice.service.webhook_dispatcher import (
-            WebhookRegistration, _webhooks_cache, warm_cache, _save_webhook,
+            WebhookRegistration, _webhooks_cache, warm_cache,
         )
-        fake_r, store, index = self._make_fake_redis()
         wh = WebhookRegistration(url="https://a.com", events=["DELIVERED"])
+        row = self._make_row(wh)
+        db_session, _, _ = self._make_fake_db(rows=[row])
 
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=fake_r):
-            _save_webhook(wh)
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=db_session):
             _webhooks_cache.clear()
             count = warm_cache()
 
         assert count == 1
         assert wh.id in _webhooks_cache
 
-    def test_delete_webhook_atomic_pipeline(self):
-        """_delete_webhook must remove both the key and the index entry."""
+    def test_delete_webhook_removes_from_db(self):
         from voice.service.webhook_dispatcher import (
             WebhookRegistration, _save_webhook, _delete_webhook,
         )
-        fake_r, store, index = self._make_fake_redis()
         wh = WebhookRegistration(url="https://a.com", events=["SHIPPED"])
+        db_session, rows, _ = self._make_fake_db()
 
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=fake_r):
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=db_session):
             _save_webhook(wh)
-            assert wh.id in index
+            assert len(rows) == 1
             _delete_webhook(wh.id)
-            assert f"vl:webhooks:{wh.id}" not in store
-            assert wh.id not in index
+            assert len(rows) == 0   # removed from DB
 
-    def test_fallback_to_memory_when_redis_unavailable(self):
-        from voice.service.webhook_dispatcher import (
-            register_webhook, list_webhooks,
-        )
-        with patch("voice.service.webhook_dispatcher._get_redis", return_value=None):
-            wh = register_webhook(url="https://a.com", events=["SHIPPED"])
+    def test_fallback_to_memory_when_db_unavailable(self):
+        from voice.service.webhook_dispatcher import register_webhook, list_webhooks
+
+        with patch("voice.service.webhook_dispatcher._get_db_session", return_value=None):
+            register_webhook(url="https://a.com", events=["SHIPPED"])
 
         items = list_webhooks()
         assert any(i["url"] == "https://a.com" for i in items)
