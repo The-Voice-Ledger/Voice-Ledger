@@ -14,40 +14,69 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 def _resolve_db_url(url: str) -> str:
     """
-    Normalize DATABASE_URL to use the correct driver scheme.
+    Normalize DATABASE_URL to use a driver that is actually installed.
 
-    Neon and Railway both issue plain `postgresql://` URLs.  SQLAlchemy 2.x
-    defaults to psycopg2 for that scheme, but deployed envs may only have
-    psycopg v3 (package name `psycopg`) installed.
-
-    Resolution order:
-      1. If URL already has an explicit dialect+driver (e.g. +psycopg2, +psycopg,
-         +asyncpg) — leave it alone.
-      2. Try psycopg v3 first (preferred for new deployments).
-      3. Fall back to psycopg2 if v3 is not installed.
+    Priority:
+      1. sqlite / asyncpg — leave untouched.
+      2. postgresql+psycopg:// (v3 scheme) — use if psycopg is installed,
+         otherwise downgrade to postgresql+psycopg2:// (v2).
+      3. postgresql+psycopg2:// — verify psycopg2 is installed; warn if not.
+      4. bare postgresql:// / postgres:// — pick whichever driver is present.
     """
     if not url:
         return url
 
-    # Already has an explicit driver — respect it
-    if "+psycopg" in url or "+asyncpg" in url or "sqlite" in url:
+    # sqlite and asyncpg never need patching
+    if "sqlite" in url or "+asyncpg" in url:
         return url
 
-    # Plain postgresql:// or postgres:// — pick the available driver
-    try:
-        import psycopg  # noqa: F401  (psycopg v3)
-        return url.replace("postgresql://", "postgresql+psycopg://", 1) \
-                  .replace("postgres://",   "postgresql+psycopg://", 1)
-    except ImportError:
-        pass
+    def _has_psycopg3() -> bool:
+        try:
+            import psycopg  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
-    try:
-        import psycopg2  # noqa: F401
-        return url.replace("postgres://", "postgresql://", 1)
-    except ImportError:
-        pass
+    def _has_psycopg2() -> bool:
+        try:
+            import psycopg2  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
-    return url
+    # Explicit psycopg v3 scheme but package not installed → downgrade to v2
+    if "+psycopg" in url and "+psycopg2" not in url:
+        if not _has_psycopg3():
+            if _has_psycopg2():
+                new_url = url.replace("+psycopg://", "+psycopg2://", 1)
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "psycopg (v3) not installed — downgrading DATABASE_URL "
+                    "from +psycopg:// to +psycopg2://. "
+                    "Install psycopg[binary]>=3.1.0 to remove this warning."
+                )
+                return new_url
+            else:
+                raise ImportError(
+                    "Neither psycopg (v3) nor psycopg2 is installed. "
+                    "Run: pip install psycopg[binary]"
+                )
+        return url  # psycopg v3 is available — use as-is
+
+    # Explicit psycopg2 scheme — nothing to do
+    if "+psycopg2" in url:
+        return url
+
+    # Bare postgresql:// / postgres:// — pick the available driver
+    bare = url.replace("postgres://", "postgresql://", 1)
+    if _has_psycopg3():
+        return bare.replace("postgresql://", "postgresql+psycopg://", 1)
+    if _has_psycopg2():
+        return bare  # SQLAlchemy defaults to psycopg2 for postgresql://
+    raise ImportError(
+        "Neither psycopg (v3) nor psycopg2 is installed. "
+        "Run: pip install psycopg[binary]"
+    )
 
 
 DATABASE_URL = _resolve_db_url(DATABASE_URL)
