@@ -90,7 +90,8 @@ python-telegram-bot>=21.0  # Telegram Bot API
 # -----------------------------
 sqlalchemy[asyncio]>=2.0.23
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
+psycopg[binary]>=3.1.0      
+psycopg2-binary==2.9.9      
 alembic==1.13.1
 
 # -----------------------------
