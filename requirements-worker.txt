@@ -20,7 +20,7 @@ livekit-plugins-deepgram==1.5.6
 livekit-plugins-google==1.5.6
 livekit-plugins-openai==1.5.6
 livekit-plugins-silero==1.5.6
-livekit-plugins-addisai
+livekit-plugins-addisai>=0.1.0   # Amharic / Oromo STT+TTS — needs ADDISAI_API_KEY
 
 # OpenAI (LLM + TTS)
 openai>=1.12.0
@@ -28,7 +28,8 @@ openai>=1.12.0
 # Database (tools query batches/DPP)
 sqlalchemy[asyncio]>=2.0.23
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
+psycopg[binary]>=3.1.0      # psycopg v3 — required when DATABASE_URL uses postgresql+psycopg://
+psycopg2-binary==2.9.9      # psycopg v2 — fallback for postgresql+psycopg2:// or plain postgresql://
 
 # Utilities
 requests>=2.31.0
