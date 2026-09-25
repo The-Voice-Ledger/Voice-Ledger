@@ -83,6 +83,24 @@ class CoffeeBatchTokenManager:
         
         logger.info("CoffeeBatchTokenManager initialized  chain=%s  wallet=%s  contract=%s",
                     self.w3.eth.chain_id, self.account.address, self.contract_address)
+        
+        # Verify wallet is the contract owner — logs a warning if not so we know
+        # before attempting any mint that will revert with OwnableUnauthorizedAccount.
+        try:
+            owner = self.contract.functions.owner().call()
+            if owner.lower() != self.account.address.lower():
+                logger.warning(
+                    "WALLET IS NOT CONTRACT OWNER — minting will revert!  "
+                    "wallet=%s  contract_owner=%s  contract=%s  "
+                    "Fix: call transferOwnership(%s) from the owner account, "
+                    "or update PRIVATE_KEY_SEP in .env to the owner's key.",
+                    self.account.address, owner, self.contract_address,
+                    self.account.address,
+                )
+            else:
+                logger.info("Ownership confirmed  owner=%s", owner)
+        except Exception as e:
+            logger.warning("Could not verify contract ownership: %s", e)
     
     def mint_batch(
         self,
@@ -121,26 +139,60 @@ class CoffeeBatchTokenManager:
             if not ipfs_cid or not (ipfs_cid.startswith('Qm') or ipfs_cid.startswith('bafy')):
                 raise ValueError(f"Invalid IPFS CID: {ipfs_cid}")
             
+            # Pre-mint guard: check if this batch_id is already on-chain.
+            # This catches BatchIdAlreadyExists without wasting gas on a reverted tx.
+            try:
+                existing_token_id = self.contract.functions.getTokenIdByBatchId(batch_id).call()
+                if existing_token_id and existing_token_id != 0:
+                    logger.info(
+                        "Batch %s already has token ID %s on-chain — skipping mint",
+                        batch_id, existing_token_id,
+                    )
+                    return existing_token_id
+            except Exception as pre_check_exc:
+                # getTokenIdByBatchId may revert with BatchIdNotFound — that's fine,
+                # it means the batch doesn't exist yet and we should proceed.
+                logger.debug(
+                    "Pre-mint check for batch %s: %s (proceeding with mint)",
+                    batch_id, pre_check_exc,
+                )
+            
             # Prepare metadata JSON
             metadata_json = json.dumps(metadata, separators=(',', ':'))
             
             # Convert kg to grams for smart contract (uint256 precision)
             quantity_grams = int(quantity_kg * 1000)
             
-            # Build transaction
-            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')  # Use pending nonce
+            # Build transaction — estimate gas dynamically so large metadata
+            # strings don't hit the hardcoded 500k ceiling.
+            nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
             gas_price = self.w3.eth.gas_price
-            
-            tx = self.contract.functions.mintBatch(
+
+            mint_fn = self.contract.functions.mintBatch(
                 Web3.to_checksum_address(recipient),
                 quantity_grams,
                 batch_id,
                 metadata_json,
                 ipfs_cid
-            ).build_transaction({
+            )
+
+            try:
+                estimated_gas = mint_fn.estimate_gas({'from': self.account.address})
+                gas_limit = int(estimated_gas * 1.3)  # 30% buffer for safety
+                logger.debug("Gas estimate for mintBatch: %d  limit: %d", estimated_gas, gas_limit)
+            except Exception as est_exc:
+                # If estimation itself fails the call would revert — log and bail early
+                logger.error(
+                    "Gas estimation failed for mintBatch  batch=%s  error=%s  "
+                    "(tx would revert — not sending)",
+                    batch_id, est_exc,
+                )
+                return None
+
+            tx = mint_fn.build_transaction({
                 'chainId': self.w3.eth.chain_id,
-                'gas': 500000,
-                'gasPrice': int(gas_price * 1.2),  # Add 20% buffer for gas price
+                'gas': gas_limit,
+                'gasPrice': int(gas_price * 1.2),
                 'nonce': nonce,
             })
             
@@ -173,7 +225,73 @@ class CoffeeBatchTokenManager:
                                            e, tx_hash.hex())
                             return None
             else:
-                logger.error("Mint tx reverted  tx=%s", tx_hash.hex())
+                # Fetch the revert reason
+                revert_reason = "unknown"
+                # Decode known custom errors from raw revert data before trying eth_call
+                raw_revert = None
+                try:
+                    raw_revert = self.w3.eth.get_transaction_receipt(tx_hash)
+                except Exception:
+                    pass
+
+                # OwnableUnauthorizedAccount(address) → selector 0x118cdaa7
+                OWNABLE_UNAUTHORIZED = "118cdaa7"
+                # BatchIdAlreadyExists(string) → selector from ABI
+                BATCH_EXISTS = "BatchIdAlreadyExists"
+
+                try:
+                    # Decode from tx receipt logs or raw revert payload
+                    reason_data = ""
+                    if isinstance(raw_revert, dict):
+                        reason_data = str(raw_revert)
+                    # Try eth_call replay
+                    for block_id in (receipt["blockNumber"], "latest"):
+                        try:
+                            self.w3.eth.call(
+                                {
+                                    "to": self.contract.address,
+                                    "from": self.account.address,
+                                    "data": tx["data"],
+                                    "gas": tx.get("gas", 500000),
+                                },
+                                block_identifier=block_id,
+                            )
+                            if block_id == "latest":
+                                revert_reason = (
+                                    "call succeeded at 'latest' — state changed "
+                                    "(likely BatchIdAlreadyExists from prior mint)"
+                                )
+                            break
+                        except Exception as call_exc:
+                            msg = str(call_exc)
+                            if "block not found" in msg or "-32001" in msg or "-32002" in msg:
+                                continue
+                            # Decode known custom error selectors
+                            if OWNABLE_UNAUTHORIZED in msg:
+                                try:
+                                    # Extract address from ABI-encoded error payload
+                                    hex_data = msg.split("0x")[-1].replace("'", "").strip()
+                                    addr_hex = hex_data[-40:]  # last 20 bytes
+                                    revert_reason = (
+                                        f"OwnableUnauthorizedAccount: wallet 0x{addr_hex} "
+                                        f"is not the contract owner. "
+                                        f"Run: check who owns {self.contract_address} on BaseScan "
+                                        f"and call transferOwnership({self.account.address}) from that account."
+                                    )
+                                except Exception:
+                                    revert_reason = (
+                                        "OwnableUnauthorizedAccount — your wallet is not the "
+                                        "contract owner. Check PRIVATE_KEY_SEP in .env."
+                                    )
+                            else:
+                                revert_reason = msg
+                            break
+                except Exception as outer_exc:
+                    revert_reason = str(outer_exc)
+                logger.error(
+                    "Mint tx reverted  tx=%s  batch=%s  reason=%s",
+                    tx_hash.hex(), batch_id, revert_reason,
+                )
                 return None
                 
         except Exception as e:
