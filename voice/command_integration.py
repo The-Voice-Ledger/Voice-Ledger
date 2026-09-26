@@ -896,7 +896,44 @@ def handle_pack_batches(db: Session, entities: dict, user_id: int = None, user_d
                 continue
             
             if not batch.token_id:
-                print(f"⚠️ Warning: Batch {batch_id} has no token_id (not minted yet — verify the batch first)")
+                # Token is None — either never minted, or was cleared after a
+                # failed mintContainer burned it. Attempt recovery re-mint.
+                from database.models import EPCISEvent
+                commission_event = db.query(EPCISEvent).filter(
+                    EPCISEvent.batch_id == batch.id,
+                    EPCISEvent.biz_step == "commissioning",
+                ).first()
+                ipfs_cid = commission_event.ipfs_cid if commission_event else None
+
+                if ipfs_cid:
+                    print(f"⚠️ Batch {batch_id} has no token — attempting recovery re-mint...")
+                    recovery_token_id = manager.remint_batch_recovery(
+                        recipient=holder_address,
+                        quantity_kg=batch.quantity_kg or 0.0,
+                        original_batch_id=batch_id,
+                        metadata={
+                            "variety":           batch.variety or "",
+                            "origin":            batch.origin or "",
+                            "processing_method": batch.processing_method or "",
+                            "quality_grade":     batch.quality_grade or "",
+                        },
+                        ipfs_cid=ipfs_cid,
+                    )
+                    if recovery_token_id:
+                        batch.token_id = recovery_token_id
+                        db.commit()
+                        print(f"✅ Recovery mint succeeded: batch {batch_id} → token {recovery_token_id}")
+                        child_token_ids.append(recovery_token_id)
+                        child_holders.append(holder_address)
+                        total_quantity_kg += batch.quantity_kg or 0.0
+                        continue
+                    else:
+                        print(f"❌ Recovery mint failed for {batch_id} — skipping.")
+                else:
+                    print(
+                        f"⚠️ Batch {batch_id} has no token_id and no IPFS CID for recovery. "
+                        f"Verify the batch first."
+                    )
                 skipped_batches.append(batch_id)
                 continue
 
@@ -908,11 +945,49 @@ def handle_pack_batches(db: Session, entities: dict, user_id: int = None, user_d
                 ).call()
                 if bal == 0:
                     print(
-                        f"⚠️ Warning: Token {batch.token_id} for batch {batch_id} "
-                        f"has balance=0 — it was burned in a prior failed mintContainer. "
-                        f"Clearing stale token_id from DB. "
-                        f"You must create and verify a new batch to get a fresh token."
+                        f"⚠️ Token {batch.token_id} for batch {batch_id} has balance=0. "
+                        f"Attempting recovery re-mint..."
                     )
+                    # Try to recovery-mint with a suffixed batch ID
+                    from database.models import EPCISEvent
+                    commission_event = db.query(EPCISEvent).filter(
+                        EPCISEvent.batch_id == batch.id,
+                        EPCISEvent.biz_step == "commissioning",
+                    ).first()
+                    ipfs_cid = commission_event.ipfs_cid if commission_event else None
+
+                    if ipfs_cid:
+                        recovery_token_id = manager.remint_batch_recovery(
+                            recipient=holder_address,
+                            quantity_kg=batch.quantity_kg or 0.0,
+                            original_batch_id=batch_id,
+                            metadata={
+                                "variety":           batch.variety or "",
+                                "origin":            batch.origin or "",
+                                "processing_method": batch.processing_method or "",
+                                "quality_grade":     batch.quality_grade or "",
+                            },
+                            ipfs_cid=ipfs_cid,
+                        )
+                        if recovery_token_id:
+                            batch.token_id = recovery_token_id
+                            db.commit()
+                            print(f"✅ Recovery mint succeeded: new token ID {recovery_token_id}")
+                            child_token_ids.append(recovery_token_id)
+                            child_holders.append(holder_address)
+                            total_quantity_kg += batch.quantity_kg or 0.0
+                            continue
+                        else:
+                            print(
+                                f"❌ Recovery mint failed for {batch_id}. "
+                                f"Clearing stale token_id from DB. "
+                                f"You must create a new batch to get a fresh token."
+                            )
+                    else:
+                        print(
+                            f"❌ No IPFS CID found for {batch_id} — cannot recovery-mint. "
+                            f"Clearing stale token_id."
+                        )
                     batch.token_id = None
                     db.commit()
                     skipped_batches.append(batch_id)

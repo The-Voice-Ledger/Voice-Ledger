@@ -391,6 +391,27 @@ class CoffeeBatchTokenManager:
             # Convert holders to checksum addresses
             checksum_holders = [Web3.to_checksum_address(h) for h in child_holders]
             
+            # Pre-flight: check if container_id already exists on-chain.
+            # mintContainer burns children THEN checks the container ID —
+            # if it already exists the burn is irreversible but the mint fails.
+            try:
+                existing_container_token = self.contract.functions.getTokenIdByBatchId(
+                    container_id
+                ).call()
+                if existing_container_token and existing_container_token != 0:
+                    logger.info(
+                        "Container %s already has token ID %s on-chain — "
+                        "skipping mintContainer (already minted).",
+                        container_id, existing_container_token,
+                    )
+                    return existing_container_token
+            except Exception as pre_exc:
+                # BatchIdNotFound is expected — container doesn't exist yet, proceed.
+                logger.debug(
+                    "Container %s pre-check: %s (expected — proceeding with mint)",
+                    container_id, pre_exc,
+                )
+
             # Ensure the contract is approved to burn our tokens before estimating gas.
             # We re-check here (not just at init) in case the approval TX from __init__
             # hasn't propagated to the node's simulation state yet.
@@ -414,8 +435,10 @@ class CoffeeBatchTokenManager:
                         if bal == 0:
                             logger.error(
                                 "Token %s has balance=0 for holder %s — "
-                                "it may have been burned already. "
-                                "Cannot pack these batches into a container again.",
+                                "it was burned in a previous (failed) mintContainer attempt. "
+                                "The batch DB record still has token_id set but the token "
+                                "no longer exists on-chain. "
+                                "Cannot pack these batches into a container.",
                                 tid, holder,
                             )
                             return None
@@ -563,7 +586,52 @@ class CoffeeBatchTokenManager:
             logger.exception("Failed to mint container token  id=%s", container_id)
             return None
     
-    def get_batch_metadata(self, token_id: int) -> Optional[Dict[str, Any]]:
+    def remint_batch_recovery(
+        self,
+        recipient: str,
+        quantity_kg: float,
+        original_batch_id: str,
+        metadata: Dict[str, Any],
+        ipfs_cid: str,
+    ) -> Optional[int]:
+        """
+        Re-mint a batch token using a recovery suffix when the original token
+        was burned in a failed mintContainer attempt.
+
+        The contract prevents reusing the same batch_id (BatchIdAlreadyExists),
+        so recovery mints use a suffixed ID: "{batch_id}_R1", "_R2", etc.
+        The DB is updated to store the recovery token ID.
+
+        Returns: new token_id, or None if failed.
+        """
+        for attempt in range(1, 4):  # try _R1, _R2, _R3
+            recovery_id = f"{original_batch_id}_R{attempt}"
+            try:
+                # Check if this recovery ID is already taken
+                existing = self.contract.functions.getTokenIdByBatchId(recovery_id).call()
+                if existing and existing != 0:
+                    logger.info("Recovery ID %s already used (token %s), trying next", recovery_id, existing)
+                    continue
+            except Exception:
+                pass  # BatchIdNotFound — this ID is free, use it
+
+            token_id = self.mint_batch(
+                recipient=recipient,
+                quantity_kg=quantity_kg,
+                batch_id=recovery_id,
+                metadata={**metadata, "recovery_of": original_batch_id, "recovery_attempt": attempt},
+                ipfs_cid=ipfs_cid,
+            )
+            if token_id:
+                logger.info(
+                    "Recovery mint successful: %s → token %s (recovery_id=%s)",
+                    original_batch_id, token_id, recovery_id,
+                )
+                return token_id
+            logger.warning("Recovery mint failed for %s, trying next suffix", recovery_id)
+
+        logger.error("All recovery mint attempts failed for %s", original_batch_id)
+        return None
         """
         Query batch metadata from smart contract.
         

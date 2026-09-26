@@ -3970,7 +3970,13 @@ class ToolRegistry:
             cooperative_wallet = (
                 os.getenv("COOPERATIVE_WALLET_ADDRESS") or os.getenv("WALLET_ADDRESS_SEP")
             )
-            if cooperative_wallet and not batch.token_id:
+            if not cooperative_wallet:
+                logger.warning(
+                    "Skipping token mint for batch %s — neither COOPERATIVE_WALLET_ADDRESS "
+                    "nor WALLET_ADDRESS_SEP is set. Set one of these to enable minting.",
+                    batch.batch_id,
+                )
+            elif not batch.token_id:
                 commission_event = (
                     db.query(EPCISEvent)
                     .filter(EPCISEvent.batch_id == batch.id,

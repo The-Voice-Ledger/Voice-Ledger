@@ -426,7 +426,14 @@ async def _process_verification(
             # Get cooperative wallet address (custodian)
             cooperative_wallet = os.getenv('COOPERATIVE_WALLET_ADDRESS') or os.getenv('WALLET_ADDRESS_SEP')
             
-            if cooperative_wallet:
+            if not cooperative_wallet:
+                logger.warning(
+                    "Skipping token mint for batch %s — neither COOPERATIVE_WALLET_ADDRESS "
+                    "nor WALLET_ADDRESS_SEP is set in environment. "
+                    "Set one of these to enable on-chain token minting.",
+                    batch.batch_id,
+                )
+            else:
                 # Get IPFS CID from commission event
                 from database.models import EPCISEvent
                 commission_event = db.query(EPCISEvent).filter(
