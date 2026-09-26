@@ -878,39 +878,65 @@ def handle_pack_batches(db: Session, entities: dict, user_id: int = None, user_d
         # ========== PHASE 2: Mint Container Token ==========
         # Get child token IDs and holders from database
         from database.crud import get_batch_by_batch_id
-        from blockchain.token_manager import mint_container_token
+        from blockchain.token_manager import mint_container_token, get_token_manager
         
         child_token_ids = []
         child_holders = []
         total_quantity_kg = 0.0
         
+        manager = get_token_manager()
+        holder_address = manager.account.address
+
+        skipped_batches = []
         for batch_id in batch_ids:
             batch = get_batch_by_batch_id(db, batch_id)
             if not batch:
                 print(f"⚠️ Warning: Batch {batch_id} not found in database")
+                skipped_batches.append(batch_id)
                 continue
             
             if not batch.token_id:
-                print(f"⚠️ Warning: Batch {batch_id} has no token_id (not minted yet)")
+                print(f"⚠️ Warning: Batch {batch_id} has no token_id (not minted yet — verify the batch first)")
+                skipped_batches.append(batch_id)
                 continue
-            
-            # Get holder address (use cooperative master wallet)
-            # All tokens are minted to the cooperative master wallet
-            from blockchain.token_manager import get_token_manager
-            manager = get_token_manager()
-            holder_address = manager.account.address
-            
+
+            # Verify the token still exists on-chain before attempting to burn it.
+            # A previous failed mintContainer may have burned the token already.
+            try:
+                bal = manager.contract.functions.balanceOf(
+                    holder_address, int(batch.token_id)
+                ).call()
+                if bal == 0:
+                    print(
+                        f"⚠️ Warning: Token {batch.token_id} for batch {batch_id} "
+                        f"has balance=0 — it was burned in a prior failed mintContainer. "
+                        f"Clearing stale token_id from DB. "
+                        f"You must create and verify a new batch to get a fresh token."
+                    )
+                    batch.token_id = None
+                    db.commit()
+                    skipped_batches.append(batch_id)
+                    continue
+            except Exception as bal_exc:
+                print(f"⚠️ Could not verify token balance for {batch_id}: {bal_exc}")
+                skipped_batches.append(batch_id)
+                continue
+
             child_token_ids.append(batch.token_id)
             child_holders.append(holder_address)
             total_quantity_kg += batch.quantity_kg or 0.0
+
+        if skipped_batches:
+            print(
+                f"⚠️ Skipped {len(skipped_batches)} batch(es) with no valid on-chain token: "
+                f"{skipped_batches}. These batches need to be re-verified to get new tokens."
+            )
         
         # Mint container token on blockchain
         container_token_id = None
         if len(child_token_ids) >= 2:
-            # Get recipient (use cooperative master wallet)
-            from blockchain.token_manager import get_token_manager
-            manager = get_token_manager()
-            recipient_address = manager.account.address
+            # recipient = same cooperative master wallet
+            recipient_address = holder_address
             
             # Build metadata
             metadata = {

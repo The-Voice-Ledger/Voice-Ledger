@@ -101,6 +101,45 @@ class CoffeeBatchTokenManager:
                 logger.info("Ownership confirmed  owner=%s", owner)
         except Exception as e:
             logger.warning("Could not verify contract ownership: %s", e)
+        
+        # Ensure the contract is approved to burn tokens held by this wallet.
+        # mintContainer burns child tokens via _burnFrom which requires
+        # isApprovedForAll(wallet, contract) == True.
+        # This is a one-time setup; the call is skipped if already approved.
+        try:
+            already_approved = self.contract.functions.isApprovedForAll(
+                self.account.address,
+                Web3.to_checksum_address(self.contract_address),
+            ).call()
+            if not already_approved:
+                logger.info(
+                    "Setting approval: wallet %s → contract %s (needed for mintContainer burns)",
+                    self.account.address, self.contract_address,
+                )
+                nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
+                tx = self.contract.functions.setApprovalForAll(
+                    Web3.to_checksum_address(self.contract_address), True
+                ).build_transaction({
+                    'chainId': self.w3.eth.chain_id,
+                    'gas': 60000,
+                    'gasPrice': int(self.w3.eth.gas_price * 1.2),
+                    'nonce': nonce,
+                })
+                signed = self.w3.eth.account.sign_transaction(tx, self.private_key)
+                tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
+                receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+                if receipt['status'] == 1:
+                    logger.info("setApprovalForAll confirmed  tx=%s", tx_hash.hex())
+                    # Wait 1s for the node to index the new approval state
+                    # before any subsequent estimate_gas calls use it.
+                    import time as _time
+                    _time.sleep(1)
+                else:
+                    logger.warning("setApprovalForAll reverted  tx=%s", tx_hash.hex())
+            else:
+                logger.debug("Contract already approved to burn tokens for wallet %s", self.account.address)
+        except Exception as e:
+            logger.warning("Could not set approval for contract burns: %s", e)
     
     def mint_batch(
         self,
@@ -352,11 +391,69 @@ class CoffeeBatchTokenManager:
             # Convert holders to checksum addresses
             checksum_holders = [Web3.to_checksum_address(h) for h in child_holders]
             
-            # Build transaction
+            # Ensure the contract is approved to burn our tokens before estimating gas.
+            # We re-check here (not just at init) in case the approval TX from __init__
+            # hasn't propagated to the node's simulation state yet.
+            try:
+                approved = self.contract.functions.isApprovedForAll(
+                    self.account.address,
+                    Web3.to_checksum_address(self.contract_address),
+                ).call()
+                logger.info(
+                    "Approval check: isApprovedForAll(%s, %s) = %s",
+                    self.account.address, self.contract_address, approved,
+                )
+
+                # Also verify each child token still has a balance — tokens
+                # burned in a previous attempt will have balance=0 and will
+                # cause ERC1155MissingApprovalForAll or InsufficientBalance.
+                for tid, holder in zip(child_token_ids, checksum_holders):
+                    try:
+                        bal = self.contract.functions.balanceOf(holder, tid).call()
+                        logger.info("  token %s  holder %s  balance=%s", tid, holder, bal)
+                        if bal == 0:
+                            logger.error(
+                                "Token %s has balance=0 for holder %s — "
+                                "it may have been burned already. "
+                                "Cannot pack these batches into a container again.",
+                                tid, holder,
+                            )
+                            return None
+                    except Exception as bal_exc:
+                        logger.warning("Could not check balance for token %s: %s", tid, bal_exc)
+
+                if not approved:
+                    logger.info(
+                        "Approval not yet active — sending setApprovalForAll before mintContainer"
+                    )
+                    import time as _time
+                    nonce_ap = self.w3.eth.get_transaction_count(self.account.address, 'pending')
+                    tx_ap = self.contract.functions.setApprovalForAll(
+                        Web3.to_checksum_address(self.contract_address), True
+                    ).build_transaction({
+                        'chainId': self.w3.eth.chain_id,
+                        'gas': 60000,
+                        'gasPrice': int(self.w3.eth.gas_price * 1.2),
+                        'nonce': nonce_ap,
+                    })
+                    signed_ap = self.w3.eth.account.sign_transaction(tx_ap, self.private_key)
+                    tx_hash_ap = self.w3.eth.send_raw_transaction(signed_ap.raw_transaction)
+                    receipt_ap = self.w3.eth.wait_for_transaction_receipt(tx_hash_ap, timeout=60)
+                    if receipt_ap['status'] == 1:
+                        logger.info("setApprovalForAll confirmed (pre-mint)  tx=%s", tx_hash_ap.hex())
+                        # Give the node 1 second to index the new state before estimate_gas
+                        _time.sleep(1)
+                    else:
+                        logger.warning("setApprovalForAll reverted (pre-mint)  tx=%s", tx_hash_ap.hex())
+            except Exception as ap_exc:
+                logger.warning("Pre-mint approval check failed: %s", ap_exc)
+
+            # Build transaction — estimate gas dynamically (container minting
+            # burns N child tokens + stores metadata, so gas scales with inputs)
             nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
             gas_price = self.w3.eth.gas_price
-            
-            tx = self.contract.functions.mintContainer(
+
+            mint_fn = self.contract.functions.mintContainer(
                 Web3.to_checksum_address(recipient),
                 quantity_grams,
                 container_id,
@@ -364,9 +461,26 @@ class CoffeeBatchTokenManager:
                 ipfs_cid,
                 child_token_ids,
                 checksum_holders
-            ).build_transaction({
+            )
+
+            try:
+                estimated_gas = mint_fn.estimate_gas({'from': self.account.address})
+                gas_limit = int(estimated_gas * 1.3)
+                logger.debug(
+                    "Gas estimate for mintContainer: %d  limit: %d  children: %d",
+                    estimated_gas, gas_limit, len(child_token_ids),
+                )
+            except Exception as est_exc:
+                logger.error(
+                    "Gas estimation failed for mintContainer  id=%s  children=%s  error=%s  "
+                    "(tx would revert — not sending)",
+                    container_id, child_token_ids, est_exc,
+                )
+                return None
+
+            tx = mint_fn.build_transaction({
                 'chainId': self.w3.eth.chain_id,
-                'gas': 800000,  # Higher gas for container (burns + mint)
+                'gas': gas_limit,
                 'gasPrice': int(gas_price * 1.2),
                 'nonce': nonce,
             })
@@ -375,7 +489,8 @@ class CoffeeBatchTokenManager:
             signed_tx = self.w3.eth.account.sign_transaction(tx, self.private_key)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
             
-            logger.info("Container mint tx sent: %s - burning %d child tokens", tx_hash.hex(), len(child_token_ids))
+            logger.info("Container mint tx sent: %s - burning %d child tokens %s", 
+                        tx_hash.hex(), len(child_token_ids), child_token_ids)
             
             # Wait for receipt (60 second timeout for more complex tx)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
@@ -406,7 +521,42 @@ class CoffeeBatchTokenManager:
                                            e, tx_hash.hex())
                             return None
             else:
-                logger.error("Container mint tx reverted  tx=%s", tx_hash.hex())
+                revert_reason = "unknown"
+                try:
+                    for block_id in (receipt["blockNumber"], "latest"):
+                        try:
+                            self.w3.eth.call(
+                                {
+                                    "to": self.contract.address,
+                                    "from": self.account.address,
+                                    "data": tx["data"],
+                                    "gas": tx.get("gas", gas_limit),
+                                },
+                                block_identifier=block_id,
+                            )
+                            if block_id == "latest":
+                                revert_reason = (
+                                    "call succeeded at 'latest' — state changed "
+                                    "(child tokens may already be burned)"
+                                )
+                            break
+                        except Exception as call_exc:
+                            msg = str(call_exc)
+                            if "block not found" in msg or "-32001" in msg or "-32002" in msg:
+                                continue
+                            if "118cdaa7" in msg:
+                                revert_reason = (
+                                    "OwnableUnauthorizedAccount — wallet is not the contract owner"
+                                )
+                            else:
+                                revert_reason = msg
+                            break
+                except Exception as outer_exc:
+                    revert_reason = str(outer_exc)
+                logger.error(
+                    "Container mint tx reverted  tx=%s  id=%s  children=%s  reason=%s",
+                    tx_hash.hex(), container_id, child_token_ids, revert_reason,
+                )
                 return None
                 
         except Exception as e:
