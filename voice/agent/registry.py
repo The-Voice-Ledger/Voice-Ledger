@@ -3885,41 +3885,58 @@ class ToolRegistry:
         self, db: Session, args: Dict[str, Any],
         user_id: int = None, user_did: str = None
     ) -> Tuple[str, Dict[str, Any]]:
-        """Verify a coffee batch (cooperative managers only)."""
-        from database.models import CoffeeBatch, UserIdentity
+        """
+        Verify a coffee batch via its QR verification token (VRF-...).
+
+        """
+        from database.models import CoffeeBatch, Organization, UserIdentity
         from datetime import datetime
 
-        # Validate user role
+        # ── 0. Resolve token ────────────────────────────────────────────────
+        token = (args.get("verification_token") or args.get("token") or "").strip()
+        token = token.replace("verify_", "")   # tolerate full deep-link paste
+        if not token:
+            return (
+                "Please provide the verification token (VRF-...) from the batch QR code.",
+                {"error": "no_token"},
+            )
+
+        # ── 1. Auth — same pattern as all other registry tools ─────────────
         user = db.query(UserIdentity).filter_by(id=user_id).first()
         if not user:
             return ("User not found. Please register first.", {"error": "user_not_found"})
-        if user.role not in ("COOPERATIVE_MANAGER", "ADMIN"):
+        if not user.is_approved:
+            return ("Your account is pending admin approval.", {"error": "pending_approval"})
+        if user.role not in ("COOPERATIVE_MANAGER", "ADMIN", "EXPORTER"):
             return (
                 f"Only cooperative managers can verify batches. Your role is {user.role}.",
-                {"error": "role_not_cooperative_manager"},
+                {"error": "insufficient_permissions"},
             )
 
-        batch_id = args.get("batch_id")
-        if not batch_id:
-            return ("Please specify a batch ID to verify.", {"error": "no_batch_id"})
-
-        # Look up batch
-        from database.crud import get_batch_by_id_or_gtin
-        batch = get_batch_by_id_or_gtin(db, batch_id)
+        # ── 2. Batch lookup ─────────────────────────────────────────────────
+        batch = db.query(CoffeeBatch).filter_by(verification_token=token).first()
         if not batch:
-            return (f"Batch '{batch_id}' not found.", {"error": "batch_not_found"})
-
-        if batch.status == "VERIFIED":
+            return (
+                f"Token '{token}' not found. Check the QR code or ask the farmer to regenerate it.",
+                {"error": "token_not_found"},
+            )
+        if batch.verification_used:
             return (
                 f"Batch {batch.batch_id} is already verified "
-                f"(verified at {batch.verified_at}).",
+                f"({batch.verified_at.strftime('%b %d, %Y %H:%M') if batch.verified_at else 'N/A'}).",
                 {"error": "already_verified", "batch_id": batch.batch_id},
             )
+        if batch.verification_expires_at and batch.verification_expires_at < datetime.utcnow():
+            return (
+                f"Token expired at {batch.verification_expires_at.strftime('%b %d, %Y %H:%M')}. "
+                "Ask the farmer to generate a new one.",
+                {"error": "token_expired"},
+            )
 
-        # Perform verification
         verified_quantity = args.get("verified_quantity_kg") or batch.quantity_kg
-        quality_notes = args.get("quality_notes")
+        quality_notes = args.get("quality_notes") or ""
 
+        # ── 3. DB — mark VERIFIED + quality data ────────────────────────────
         batch.status = "VERIFIED"
         batch.verified_quantity = verified_quantity
         batch.verification_notes = quality_notes
@@ -3928,21 +3945,75 @@ class ToolRegistry:
         batch.verified_at = datetime.utcnow()
         batch.verification_used = True
 
-        # Persist quality assessment data if provided
-        if args.get("cupping_score") is not None:
-            batch.cupping_score = float(args["cupping_score"])
-        if args.get("moisture_pct") is not None:
-            batch.moisture_pct = float(args["moisture_pct"])
-        if args.get("screen_size"):
-            batch.screen_size = str(args["screen_size"])
-        if args.get("defect_count") is not None:
-            batch.defect_count = int(args["defect_count"])
-        if args.get("defect_category"):
-            batch.defect_category = str(args["defect_category"])
+        for field, cast in [
+            ("cupping_score",   float),
+            ("moisture_pct",    float),
+            ("defect_count",    int),
+        ]:
+            if args.get(field) is not None:
+                setattr(batch, field, cast(args[field]))
+        for field in ("screen_size", "defect_category"):
+            if args.get(field):
+                setattr(batch, field, str(args[field]))
         if args.get("sensory_notes"):
             batch.sensory_notes = args["sensory_notes"]
 
-        # Try to issue verification credential
+        db.commit()
+
+        # ── 4. Mint ERC-1155 token ───────────────────────────────────────────
+        token_id = None
+        try:
+            import os
+            from blockchain.token_manager import mint_batch_token
+            from database.models import EPCISEvent
+
+            cooperative_wallet = (
+                os.getenv("COOPERATIVE_WALLET_ADDRESS") or os.getenv("WALLET_ADDRESS_SEP")
+            )
+            if cooperative_wallet and not batch.token_id:
+                commission_event = (
+                    db.query(EPCISEvent)
+                    .filter(EPCISEvent.batch_id == batch.id,
+                            EPCISEvent.biz_step == "commissioning")
+                    .first()
+                )
+                if commission_event and commission_event.ipfs_cid:
+                    org = (
+                        db.query(Organization).filter_by(id=user.organization_id).first()
+                        if user.organization_id else None
+                    )
+                    token_id = mint_batch_token(
+                        recipient=cooperative_wallet,
+                        quantity_kg=verified_quantity,
+                        batch_id=batch.batch_id,
+                        metadata={
+                            "variety":           batch.variety or "",
+                            "origin":            batch.origin or "",
+                            "processing_method": batch.processing_method or "",
+                            "quality_grade":     batch.quality_grade or "",
+                            "farmer_did":        batch.created_by_did or "",
+                            "gtin":              batch.gtin or "",
+                            "gln":               batch.gln or "",
+                            "verified_by":       user_did or user.did,
+                            "verification_date": datetime.utcnow().isoformat(),
+                        },
+                        ipfs_cid=commission_event.ipfs_cid,
+                    )
+                    if token_id:
+                        batch.token_id = token_id
+                        db.commit()
+                        logger.info("Token minted for batch %s: ID %s", batch.batch_id, token_id)
+                    else:
+                        logger.warning("Token minting returned None for batch %s", batch.batch_id)
+                else:
+                    logger.warning("No commission event IPFS CID for batch %s", batch.batch_id)
+            elif batch.token_id:
+                logger.info("Skipping mint — token %s already exists for batch %s",
+                            batch.token_id, batch.batch_id)
+        except Exception as e:
+            logger.error("Token minting failed for batch %s: %s", batch.batch_id, e)
+
+        # ── 5. W3C Verifiable Credential ────────────────────────────────────
         credential_issued = False
         if user.organization_id and batch.created_by_did:
             try:
@@ -3957,24 +4028,68 @@ class ToolRegistry:
                     origin=batch.origin,
                     quality_notes=quality_notes,
                     verifier_did=user_did or user.did,
-                    verifier_name=user.telegram_first_name,
+                    verifier_name=user.telegram_first_name or "Manager",
                     has_photo_evidence=False,
                 )
                 credential_issued = True
+                logger.info("Verification credential issued for batch %s", batch.batch_id)
             except Exception as e:
-                logger.warning(f"Credential issuance failed (non-fatal): {e}")
+                logger.error("Credential issuance failed for batch %s: %s", batch.batch_id, e)
 
-        db.flush()  # Stage changes (get_db context auto-commits)
+        # ── 6. EPCIS verification event ──────────────────────────────────────
+        org = (
+            db.query(Organization).filter_by(id=user.organization_id).first()
+            if user.organization_id else None
+        )
+        if org and org.did and org.name:
+            try:
+                from voice.verification.verification_events import create_verification_event
+                create_verification_event(
+                    batch_id=batch.batch_id,
+                    verifier_did=user_did or user.did,
+                    verifier_name=user.telegram_first_name or "Manager",
+                    organization_did=org.did,
+                    organization_name=org.name,
+                    verified_quantity_kg=verified_quantity,
+                    claimed_quantity_kg=batch.quantity_kg,
+                    quality_notes=quality_notes,
+                    location=batch.origin or "",
+                    has_photo_evidence=False,
+                )
+                logger.info("Verification EPCIS event created for batch %s", batch.batch_id)
+            except Exception as e:
+                logger.error("Verification event failed for batch %s: %s", batch.batch_id, e)
+
+        # ── 7. Build response ────────────────────────────────────────────────
+        farmer_name = "Unknown"
+        try:
+            if batch.farmer:
+                farmer_name = batch.farmer.name or "Unknown"
+        except Exception:
+            pass
+
+        msg = (
+            f"✅ Verification Complete\n\n"
+            f"Batch ID: {batch.batch_id}\n"
+            f"Farmer: {farmer_name}\n"
+            f"Verified Quantity: {verified_quantity} kg\n"
+            f"Verified At: {batch.verified_at.strftime('%b %d, %Y %H:%M')}"
+        )
+        if token_id:
+            msg += f"\nToken ID: {token_id}"
+        if credential_issued:
+            msg += "\nVerifiable credential issued."
 
         return (
-            f"Batch {batch.batch_id} verified: {verified_quantity} kg. "
-            f"{'Credential issued.' if credential_issued else ''}",
+            msg,
             {
-                "batch_id": batch.batch_id,
+                "batch_id":             batch.batch_id,
                 "verified_quantity_kg": verified_quantity,
-                "quality_notes": quality_notes,
-                "credential_issued": credential_issued,
-                "verified_by": user.telegram_first_name or user.did,
+                "quality_notes":        quality_notes,
+                "token_id":             batch.token_id,
+                "token_minted":         bool(token_id),
+                "credential_issued":    credential_issued,
+                "verified_by":          user.telegram_first_name or user.did,
             },
         )
 

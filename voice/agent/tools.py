@@ -700,30 +700,37 @@ VERIFY_BATCH = {
     "function": {
         "name": "verify_batch",
         "description": (
-            "Verify a coffee batch. Only COOPERATIVE_MANAGER role users can "
-            "verify batches. Updates batch status to VERIFIED and issues a "
-            "verification credential. Use when manager says 'verify batch', "
-            "'approve batch', 'I checked this batch', 'confirm quality'."
+            "Verify a coffee batch using its verification token (VRF-...) from "
+            "the batch QR code. Only COOPERATIVE_MANAGER or ADMIN roles. "
+            "Sets status to VERIFIED, mints an ERC-1155 token on Base Sepolia, "
+            "and issues a W3C Verifiable Credential — identical to scanning the "
+            "Telegram QR deep-link. "
+            "Use when manager says 'verify batch VRF-...', 'approve this batch', "
+            "'I scanned the token', 'confirm this batch'."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "batch_id": {
+                "verification_token": {
                     "type": "string",
-                    "description": "Batch ID to verify",
+                    "description": (
+                        "Verification token from the batch QR code. "
+                        "Format: VRF-XXXXXXXX-YYYYYYYY (e.g. VRF-MVZ458X6-65B017E4). "
+                        "The manager scans this from the farmer's QR code or reads it aloud."
+                    ),
                 },
                 "verified_quantity_kg": {
                     "type": "number",
                     "description": (
-                        "Actual quantity verified in kg. "
+                        "Actual quantity verified in kg after physical inspection. "
                         "If not provided, uses the claimed quantity."
                     ),
                 },
                 "quality_notes": {
                     "type": "string",
                     "description": (
-                        "Quality assessment notes - grade, moisture content, "
-                        "defects, overall condition"
+                        "Quality assessment notes — grade, moisture content, "
+                        "defects, overall condition."
                     ),
                 },
                 "cupping_score": {
@@ -771,7 +778,7 @@ VERIFY_BATCH = {
                     ),
                 },
             },
-            "required": ["batch_id"],
+            "required": ["verification_token"],
         },
     },
 }

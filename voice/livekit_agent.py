@@ -1004,20 +1004,22 @@ async def list_pending_verifications(
 
 
 @function_tool(description=(
-    "Verify a coffee batch. Only COOPERATIVE_MANAGER or ADMIN roles. "
-    "Sets batch status to VERIFIED and issues a verifiable credential."
+    "Verify a coffee batch using its verification token (VRF-...) from the QR code. "
+    "Only COOPERATIVE_MANAGER or ADMIN roles. "
+    "Accepts the same VRF-... token as the Telegram QR deep-link. "
+    "Sets batch status to VERIFIED, mints an ERC-1155 token, and issues a W3C credential."
 ))
 async def verify_batch(
     ctx: RunContext,
-    batch_id: Annotated[str, "Batch ID to verify"],
-    verified_quantity_kg: Annotated[float | None, "Verified weight (defaults to claimed)"] = None,
+    verification_token: Annotated[str, "Verification token from the batch QR code, e.g. VRF-MVZ458X6-65B017E4"],
+    verified_quantity_kg: Annotated[float | None, "Verified weight in kg (defaults to claimed quantity)"] = None,
     quality_notes: Annotated[str | None, "Quality assessment notes"] = None,
-    cupping_score: Annotated[float | None, "Cupping score (0-100)"] = None,
-    moisture_pct: Annotated[float | None, "Moisture percentage"] = None,
-    screen_size: Annotated[str | None, "Screen size"] = None,
-    defect_count: Annotated[int | None, "Number of defects"] = None,
+    cupping_score: Annotated[float | None, "SCA cupping score (0-100)"] = None,
+    moisture_pct: Annotated[float | None, "Moisture percentage, ideal 10-12%"] = None,
+    screen_size: Annotated[str | None, "Screen size e.g. '15+', '14-16'"] = None,
+    defect_count: Annotated[int | None, "Total defect count per 350g sample"] = None,
 ) -> str:
-    args = {"batch_id": batch_id}
+    args = {"verification_token": verification_token}
     if verified_quantity_kg is not None:
         args["verified_quantity_kg"] = verified_quantity_kg
     if quality_notes:
@@ -1502,7 +1504,9 @@ DIGITAL PRODUCT PASSPORTS
 
 VERIFICATION
 • List batches pending verification (list_pending_verifications)
-• Verify a batch (verify_batch) — cooperative managers / admin
+• Verify a batch using its QR token (verify_batch) — cooperative managers / admin
+  Token format: VRF-XXXXXXXX-YYYYYYYY (printed on the batch QR code)
+  Mints ERC-1155 token + issues W3C credential + creates EPCIS event
 
 BLOCKCHAIN
 • Check blockchain anchor status (check_blockchain_anchor)
